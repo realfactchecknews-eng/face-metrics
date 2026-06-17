@@ -20,13 +20,13 @@ const MESH_GROUPS = [
 ];
 
 const FACTS = [
-  "Positive canthal tilt → hunter eyes. The most sought-after eye shape in looksmaxxing — signals dominance and sexual dimorphism.",
-  "fWHR 1.9–2.1: optimal facial width-to-height ratio. Correlates with perceived dominance and masculine structure.",
+  "Positive canthal tilt -> hunter eyes. The most sought-after eye shape in looksmaxxing -- signals dominance and sexual dimorphism.",
+  "fWHR 1.9-2.1: optimal facial width-to-height ratio. Correlates with perceived dominance and masculine structure.",
   "Facial symmetry above 90% is present in fewer than 4% of the global population. Every percentage point counts.",
-  "Ideal gonial angle 120–125° defines a sharp, well-defined mandible. Too acute looks harsh; too obtuse — recessed.",
+  "Ideal gonial angle 120-125 degrees defines a sharp, well-defined mandible. Too acute looks harsh; too obtuse -- recessed.",
   "Forward maxillary projection creates midface harmony, optimal lip support, and prevents the hollow under-eye look.",
-  "Bizygomatic-to-bigonial taper ratio 1.2–1.35 signals superior facial structure — wide cheekbones, tapered jaw.",
-  "Interpupillary distance 62–65mm is the ideal orbital spacing. Too wide or too narrow alters face perception significantly.",
+  "Bizygomatic-to-bigonial taper ratio 1.2-1.35 signals superior facial structure -- wide cheekbones, tapered jaw.",
+  "Interpupillary distance 62-65mm is the ideal orbital spacing. Too wide or too narrow alters face perception significantly.",
 ];
 
 const AI_PHASES = [
@@ -44,8 +44,8 @@ const AI_PHASES = [
 ];
 
 const HUD_TOKENS = [
-  "LM:468","SYM:0.918","fWHR:1.847","CANT:+2.1°","NPC:0.726",
-  "CBR:1.314","IPD:63.2mm","PSL:pending","GAN:124.3°","NLA:91°",
+  "LM:468","SYM:0.918","fWHR:1.847","CANT:+2.1deg","NPC:0.726",
+  "CBR:1.314","IPD:63.2mm","PSL:pending","GAN:124.3deg","NLA:91deg",
   "MSR:0.974","malar+","0xF2A4B1","0xA3C788","0xD1B9","0x8E2F4C",
 ];
 
@@ -77,18 +77,18 @@ let factIdx          = 0;
 let _hudRAF          = null;
 let _hudPhaseTimer   = null;
 
-// ── Landing sequence ───────────────────────────────────────────────────
+// -- Landing sequence ---------------------------------------------------
 function startLanding() {
   const el = document.getElementById("landingSection");
   if (!el) return;
   el.classList.add("landing-visible");
   setTimeout(countUpStats, 200);
-  setTimeout(() => {
+  setTimeout(function() {
     typeWriter(document.getElementById("landQuote"), "“Every measurement tells a story.”", 38);
   }, 500);
-  setTimeout(() => {
+  setTimeout(function() {
     showFact(0);
-    factTimer = setInterval(() => {
+    factTimer = setInterval(function() {
       factIdx = (factIdx + 1) % FACTS.length;
       showFact(factIdx);
     }, 4200);
@@ -96,15 +96,15 @@ function startLanding() {
 }
 
 function countUpStats() {
-  document.querySelectorAll(".lst-num[data-target]").forEach(el => {
-    const target    = parseFloat(el.dataset.target);
-    const isDecimal = el.dataset.decimal === "1";
-    const suffix    = el.dataset.suffix || "";
-    const duration  = 1500;
-    const t0        = performance.now();
+  document.querySelectorAll(".lst-num[data-target]").forEach(function(el) {
+    var target    = parseFloat(el.dataset.target);
+    var isDecimal = el.dataset.decimal === "1";
+    var suffix    = el.dataset.suffix || "";
+    var duration  = 1500;
+    var t0        = performance.now();
     function tick(now) {
-      const p = Math.min((now - t0) / duration, 1);
-      const e = 1 - Math.pow(1 - p, 3);
+      var p = Math.min((now - t0) / duration, 1);
+      var e = 1 - Math.pow(1 - p, 3);
       el.textContent = isDecimal
         ? (e * target).toFixed(3) + suffix
         : Math.round(e * target) + suffix;
@@ -117,37 +117,37 @@ function countUpStats() {
 
 function typeWriter(el, text, speed) {
   if (!el) return;
-  let i = 0; el.textContent = "";
+  var i = 0; el.textContent = "";
   (function tick() {
     if (i < text.length) { el.textContent += text[i++]; setTimeout(tick, speed); }
   })();
 }
 
 function showFact(idx) {
-  const el = document.getElementById("landFact");
+  var el = document.getElementById("landFact");
   if (!el) return;
   el.classList.remove("fact-in");
-  setTimeout(() => { el.textContent = FACTS[idx]; el.classList.add("fact-in"); }, 320);
+  setTimeout(function() { el.textContent = FACTS[idx]; el.classList.add("fact-in"); }, 320);
 }
 
 function transitionToAnalysis() {
   if (factTimer) clearInterval(factTimer);
-  const el = document.getElementById("landingSection");
+  var el = document.getElementById("landingSection");
   if (!el) return;
   el.classList.add("landing-exit");
-  el.addEventListener("transitionend", () => {
+  el.addEventListener("transitionend", function() {
     el.remove();
     document.body.classList.add("post-landing");
   }, { once: true });
 }
 
-// ── Bootstrap ────────────────────────────────────────────────────────
-window.addEventListener("DOMContentLoaded", () => {
-  const overlay = document.getElementById("introOverlay");
+// -- Bootstrap ----------------------------------------------------------
+window.addEventListener("DOMContentLoaded", function() {
+  var overlay = document.getElementById("introOverlay");
   if (overlay) {
-    setTimeout(() => {
+    setTimeout(function() {
       overlay.classList.add("intro-exit");
-      overlay.addEventListener("transitionend", () => {
+      overlay.addEventListener("transitionend", function() {
         overlay.remove();
         startLanding();
       }, { once: true });
@@ -155,19 +155,19 @@ window.addEventListener("DOMContentLoaded", () => {
   } else {
     startLanding();
   }
-  const beginBtn = document.getElementById("beginBtn");
+  var beginBtn = document.getElementById("beginBtn");
   if (beginBtn) beginBtn.addEventListener("click", transitionToAnalysis);
 });
 
-// ── Upload: front photo ───────────────────────────────────────────────
-chooseFileBtn.addEventListener("click", e => { e.stopPropagation(); fileInput.click(); });
-fileInput.addEventListener("change", e => { if (e.target.files[0]) loadFrontFile(e.target.files[0]); });
-frontArea.addEventListener("click", () => { if (!frontImg) fileInput.click(); });
-["dragover","dragenter"].forEach(evt => frontArea.addEventListener(evt, e => { e.preventDefault(); frontArea.classList.add("dragover"); }));
-["dragleave","drop"].forEach(evt    => frontArea.addEventListener(evt, e => { e.preventDefault(); frontArea.classList.remove("dragover"); }));
-frontArea.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) loadFrontFile(f); });
+// -- Upload: front photo -----------------------------------------------
+chooseFileBtn.addEventListener("click", function(e) { e.stopPropagation(); fileInput.click(); });
+fileInput.addEventListener("change", function(e) { if (e.target.files[0]) loadFrontFile(e.target.files[0]); });
+frontArea.addEventListener("click", function() { if (!frontImg) fileInput.click(); });
+["dragover","dragenter"].forEach(function(evt) { frontArea.addEventListener(evt, function(e) { e.preventDefault(); frontArea.classList.add("dragover"); }); });
+["dragleave","drop"].forEach(function(evt) { frontArea.addEventListener(evt, function(e) { e.preventDefault(); frontArea.classList.remove("dragover"); }); });
+frontArea.addEventListener("drop", function(e) { var f = e.dataTransfer.files[0]; if (f) loadFrontFile(f); });
 
-document.getElementById("frontRemove").addEventListener("click", e => {
+document.getElementById("frontRemove").addEventListener("click", function(e) {
   e.stopPropagation();
   frontImg = null;
   document.getElementById("frontThumb").classList.add("hidden");
@@ -178,10 +178,10 @@ document.getElementById("frontRemove").addEventListener("click", e => {
 
 function loadFrontFile(file) {
   if (!file.type.startsWith("image/")) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var img = new Image();
+    img.onload = function() {
       frontImg = img;
       document.getElementById("frontThumbImg").src = ev.target.result;
       document.getElementById("frontPlaceholder").classList.add("hidden");
@@ -193,15 +193,15 @@ function loadFrontFile(file) {
   reader.readAsDataURL(file);
 }
 
-// ── Upload: side profile photo ─────────────────────────────────────────
-chooseSideBtn.addEventListener("click", e => { e.stopPropagation(); sideInput.click(); });
-sideInput.addEventListener("change", e => { if (e.target.files[0]) loadSideFile(e.target.files[0]); });
-sideArea.addEventListener("click", () => { if (!sideImg) sideInput.click(); });
-["dragover","dragenter"].forEach(evt => sideArea.addEventListener(evt, e => { e.preventDefault(); sideArea.classList.add("dragover"); }));
-["dragleave","drop"].forEach(evt    => sideArea.addEventListener(evt, e => { e.preventDefault(); sideArea.classList.remove("dragover"); }));
-sideArea.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) loadSideFile(f); });
+// -- Upload: side profile photo ----------------------------------------
+chooseSideBtn.addEventListener("click", function(e) { e.stopPropagation(); sideInput.click(); });
+sideInput.addEventListener("change", function(e) { if (e.target.files[0]) loadSideFile(e.target.files[0]); });
+sideArea.addEventListener("click", function() { if (!sideImg) sideInput.click(); });
+["dragover","dragenter"].forEach(function(evt) { sideArea.addEventListener(evt, function(e) { e.preventDefault(); sideArea.classList.add("dragover"); }); });
+["dragleave","drop"].forEach(function(evt) { sideArea.addEventListener(evt, function(e) { e.preventDefault(); sideArea.classList.remove("dragover"); }); });
+sideArea.addEventListener("drop", function(e) { var f = e.dataTransfer.files[0]; if (f) loadSideFile(f); });
 
-document.getElementById("sideRemove").addEventListener("click", e => {
+document.getElementById("sideRemove").addEventListener("click", function(e) {
   e.stopPropagation();
   sideImg = null;
   document.getElementById("sideThumb").classList.add("hidden");
@@ -211,10 +211,10 @@ document.getElementById("sideRemove").addEventListener("click", e => {
 
 function loadSideFile(file) {
   if (!file.type.startsWith("image/")) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var img = new Image();
+    img.onload = function() {
       sideImg = img;
       document.getElementById("sideThumbImg").src = ev.target.result;
       document.getElementById("sidePlaceholder").classList.add("hidden");
@@ -225,8 +225,8 @@ function loadSideFile(file) {
   reader.readAsDataURL(file);
 }
 
-// ── Analyze ───────────────────────────────────────────────────────────
-analyzeBtn.addEventListener("click", () => {
+// -- Analyze -----------------------------------------------------------
+analyzeBtn.addEventListener("click", function() {
   if (!frontImg) return;
   errorBox.classList.add("hidden");
   resultsDiv.classList.add("hidden");
@@ -236,7 +236,7 @@ analyzeBtn.addEventListener("click", () => {
   processImage(frontImg, sideImg);
 });
 
-resetBtn.addEventListener("click", () => {
+resetBtn.addEventListener("click", function() {
   uploadSection.classList.remove("hidden");
   analysisView.classList.add("hidden");
   resultsDiv.classList.add("hidden");
@@ -259,14 +259,14 @@ function showError(msg) {
   analysisView.classList.remove("hidden");
 }
 
-// ── AI HUD animation ──────────────────────────────────────────────────
+// -- AI HUD animation --------------------------------------------------
 function startAIHUD(hasSide) {
-  const card      = document.getElementById("aiLoading");
-  const phaseEl   = document.getElementById("hudPhase");
-  const fillEl    = document.getElementById("hudBarFill");
-  const pctEl     = document.getElementById("hudBarPct");
-  const streamEl  = document.getElementById("hudStream");
-  const sideLabel = document.getElementById("hudSideLabel");
+  var card      = document.getElementById("aiLoading");
+  var phaseEl   = document.getElementById("hudPhase");
+  var fillEl    = document.getElementById("hudBarFill");
+  var pctEl     = document.getElementById("hudBarPct");
+  var streamEl  = document.getElementById("hudStream");
+  var sideLabel = document.getElementById("hudSideLabel");
 
   card.classList.remove("hidden");
   streamEl.innerHTML = "";
@@ -277,28 +277,28 @@ function startAIHUD(hasSide) {
   fillEl.style.width = "0%";
   pctEl.textContent = "0%";
 
-  const t0 = performance.now();
-  const TOTAL = 22000;
+  var t0 = performance.now();
+  var TOTAL = 22000;
 
   function tickBar(now) {
-    const t   = Math.min((now - t0) / TOTAL, 1);
-    const pct = Math.round(t < 0.72 ? (t / 0.72) * 84 : 84 + ((t - 0.72) / 0.28) * 8);
+    var t   = Math.min((now - t0) / TOTAL, 1);
+    var pct = Math.round(t < 0.72 ? (t / 0.72) * 84 : 84 + ((t - 0.72) / 0.28) * 8);
     fillEl.style.transition = "width .8s linear";
     fillEl.style.width = pct + "%";
     pctEl.textContent  = pct + "%";
     if (pct < 92) _hudRAF = requestAnimationFrame(tickBar);
   }
-  requestAnimationFrame(() => requestAnimationFrame(tickBar));
+  requestAnimationFrame(function() { requestAnimationFrame(tickBar); });
 
-  let phaseIdx = 0;
+  var phaseIdx = 0;
   function nextPhase() {
     phaseEl.style.opacity = "0";
-    setTimeout(() => {
+    setTimeout(function() {
       phaseEl.textContent   = AI_PHASES[phaseIdx % AI_PHASES.length];
       phaseEl.style.opacity = "1";
-      const line = document.createElement("span");
+      var line = document.createElement("span");
       line.className = "hud-stream-line" + (Math.random() > 0.5 ? " hl" : "");
-      const tok  = HUD_TOKENS[phaseIdx % HUD_TOKENS.length];
+      var tok  = HUD_TOKENS[phaseIdx % HUD_TOKENS.length];
       line.textContent = "[" + String(phaseIdx + 1).padStart(2, "0") + "] " + AI_PHASES[phaseIdx % AI_PHASES.length] + "  " + tok;
       streamEl.appendChild(line);
       while (streamEl.children.length > 3) streamEl.removeChild(streamEl.firstChild);
@@ -314,30 +314,70 @@ function startAIHUD(hasSide) {
 function stopAIHUD() {
   if (_hudRAF)        { cancelAnimationFrame(_hudRAF); _hudRAF = null; }
   if (_hudPhaseTimer) { clearTimeout(_hudPhaseTimer); _hudPhaseTimer = null; }
-  const fillEl = document.getElementById("hudBarFill");
-  const pctEl  = document.getElementById("hudBarPct");
+  var fillEl = document.getElementById("hudBarFill");
+  var pctEl  = document.getElementById("hudBarPct");
   if (fillEl) { fillEl.style.transition = "width .3s ease"; fillEl.style.width = "100%"; }
   if (pctEl)  pctEl.textContent = "100%";
-  setTimeout(() => {
-    const card = document.getElementById("aiLoading");
+  setTimeout(function() {
+    var card = document.getElementById("aiLoading");
     if (card) card.classList.add("hidden");
   }, 380);
 }
 
-// ── FaceMesh ───────────────────────────────────────────────────────────
+// -- FaceMesh ----------------------------------------------------------
 function initFaceMesh() {
   if (faceMesh) return faceMesh;
   faceMesh = new FaceMesh({
-    locateFile: (f) => "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/" + f,
+    locateFile: function(f) { return "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/" + f; },
   });
   faceMesh.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.5 });
   return faceMesh;
 }
 
-// ── Process image ───────────────────────────────────────────────────
+// -- Face metrics ------------------------------------------------------
+function _dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function computeFaceMetrics(lm) {
+  var cheekboneWidth = _dist(lm[234], lm[454]);
+  var jawWidth       = _dist(lm[58],  lm[288]);
+  var foreheadWidth  = _dist(lm[21],  lm[251]);
+  var faceHeight     = _dist(lm[10],  lm[152]);
+
+  // fWHR: bizygomatic / (glabella to upper lip)
+  var fwhrH = _dist(lm[9], lm[13]);
+  var widthHeightRatio = fwhrH > 0 ? cheekboneWidth / fwhrH : 1.8;
+
+  // Symmetry: compare left/right halves from bizygomatic midpoint
+  var cx      = (lm[234].x + lm[454].x) / 2;
+  var cbLeft  = Math.abs(lm[234].x - cx);
+  var cbRight = Math.abs(lm[454].x - cx);
+  var cbSym   = cbLeft > 0 && cbRight > 0 ? Math.min(cbLeft, cbRight) / Math.max(cbLeft, cbRight) : 1;
+  var jawLeft  = Math.abs(lm[58].x  - cx);
+  var jawRight = Math.abs(lm[288].x - cx);
+  var jawSym   = jawLeft > 0 && jawRight > 0 ? Math.min(jawLeft, jawRight) / Math.max(jawLeft, jawRight) : 1;
+  var symmetryScore = (cbSym + jawSym) / 2;
+
+  return { cheekboneWidth: cheekboneWidth, jawWidth: jawWidth, foreheadWidth: foreheadWidth, faceHeight: faceHeight, widthHeightRatio: widthHeightRatio, symmetryScore: symmetryScore };
+}
+
+function classifyFaceShape(metrics) {
+  var cbJaw  = metrics.cheekboneWidth / (metrics.jawWidth      || 1);
+  var cbFore = metrics.cheekboneWidth / (metrics.foreheadWidth || 1);
+  var ratio  = metrics.faceHeight     / (metrics.cheekboneWidth || 1);
+  var shape;
+  if      (ratio  > 1.75)                               shape = "oblong";
+  else if (cbJaw  < 1.05 && cbFore < 1.05)              shape = "square";
+  else if (metrics.foreheadWidth > metrics.cheekboneWidth * 1.1) shape = "heart";
+  else if (cbJaw  > 1.3  && cbFore > 1.15)              shape = "diamond";
+  else if (cbJaw  > 1.2)                                shape = "oval";
+  else                                                  shape = "round";
+  return { shape: shape };
+}
+
+// -- Process image -----------------------------------------------------
 async function processImage(img, sideImage) {
   try {
-    const mesh = initFaceMesh();
+    var mesh = initFaceMesh();
     canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
 
@@ -355,17 +395,17 @@ async function processImage(img, sideImage) {
       cleanSideCanvas = null;
     }
 
-    mesh.onResults(results => {
+    mesh.onResults(function(results) {
       loadingCard.classList.add("hidden");
       if (!results.multiFaceLandmarks || !results.multiFaceLandmarks.length) {
-        showError("Не удалось распознать лицо. Попробуйте другое фото — лицо должно быть направлено в камеру и хорошо освещено."); return;
+        showError("He удалось распознать лицо. Попробуйте другое фото -- лицо должно быть направлено в камеру и хорошо освещено."); return;
       }
-      const raw = results.multiFaceLandmarks[0];
-      const w   = canvas.width, h = canvas.height;
-      const lm  = raw.map(p => ({ x: p.x * w, y: p.y * h }));
-      const metrics   = computeFaceMetrics(lm);
-      const shapeInfo = classifyFaceShape(metrics);
-      runFaceAnimation(lm, metrics, () => {
+      var raw = results.multiFaceLandmarks[0];
+      var w   = canvas.width, h = canvas.height;
+      var lm  = raw.map(function(p) { return { x: p.x * w, y: p.y * h }; });
+      var metrics   = computeFaceMetrics(lm);
+      var shapeInfo = classifyFaceShape(metrics);
+      runFaceAnimation(lm, metrics, function() {
         resultsDiv.classList.remove("hidden");
         callAI(metrics, shapeInfo);
       });
@@ -378,16 +418,16 @@ async function processImage(img, sideImage) {
   }
 }
 
-// ── Face animation ───────────────────────────────────────────────────
+// -- Face animation ----------------------------------------------------
 function runFaceAnimation(lm, metrics, onComplete) {
-  animateScan(lm, metrics, 1400, () => setTimeout(onComplete, 400));
+  animateScan(lm, metrics, 1400, function() { setTimeout(onComplete, 400); });
 }
 
 function animateScan(lm, metrics, duration, onComplete) {
-  const t0 = performance.now();
+  var t0 = performance.now();
   function frame(now) {
-    const progress = Math.min((now - t0) / duration, 1);
-    const scanY    = progress * canvas.height;
+    var progress = Math.min((now - t0) / duration, 1);
+    var scanY    = progress * canvas.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(cleanImageCanvas, 0, 0);
     ctx.fillStyle = "rgba(0,0,0,0.45)";
@@ -406,7 +446,7 @@ function animateScan(lm, metrics, duration, onComplete) {
 function drawScanLine(y) {
   if (y <= 0 || y >= canvas.height) return;
   ctx.save();
-  const grad = ctx.createLinearGradient(0, Math.max(0, y - 60), 0, y);
+  var grad = ctx.createLinearGradient(0, Math.max(0, y - 60), 0, y);
   grad.addColorStop(0, "rgba(196,164,107,0)"); grad.addColorStop(1, "rgba(196,164,107,0.18)");
   ctx.fillStyle = grad; ctx.fillRect(0, Math.max(0, y - 60), canvas.width, 62);
   ctx.shadowColor = "#c4a46b"; ctx.shadowBlur = 16;
@@ -418,18 +458,18 @@ function drawScanLine(y) {
 
 function drawMeshUpTo(lm, scanY) {
   ctx.save(); ctx.shadowColor = "rgba(196,164,107,.55)"; ctx.shadowBlur = 5;
-  MESH_GROUPS.forEach(({ conns, alpha, lw }) => {
-    ctx.strokeStyle = "rgba(196,164,107," + alpha + ")";
-    ctx.lineWidth   = Math.max(.4, canvas.width / 1200 * lw);
-    conns.forEach(([a, b]) => {
-      const pa = lm[a], pb = lm[b];
+  MESH_GROUPS.forEach(function(g) {
+    ctx.strokeStyle = "rgba(196,164,107," + g.alpha + ")";
+    ctx.lineWidth   = Math.max(.4, canvas.width / 1200 * g.lw);
+    g.conns.forEach(function(pair) {
+      var pa = lm[pair[0]], pb = lm[pair[1]];
       if (!pa || !pb || pa.y >= scanY || pb.y >= scanY) return;
       ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
     });
   });
-  const dotR = Math.max(1, canvas.width / 700);
+  var dotR = Math.max(1, canvas.width / 700);
   ctx.fillStyle = "rgba(196,164,107,.55)"; ctx.shadowBlur = 6;
-  for (let i = 0; i < lm.length; i += 4) {
+  for (var i = 0; i < lm.length; i += 4) {
     if (lm[i] && lm[i].y < scanY) { ctx.beginPath(); ctx.arc(lm[i].x, lm[i].y, dotR, 0, Math.PI*2); ctx.fill(); }
   }
   ctx.restore();
@@ -437,17 +477,17 @@ function drawMeshUpTo(lm, scanY) {
 
 function drawFullMesh(lm) {
   ctx.save(); ctx.shadowColor = "rgba(196,164,107,.5)"; ctx.shadowBlur = 5;
-  MESH_GROUPS.forEach(({ conns, alpha, lw }) => {
-    ctx.strokeStyle = "rgba(196,164,107," + alpha + ")";
-    ctx.lineWidth   = Math.max(.4, canvas.width / 1200 * lw);
-    conns.forEach(([a, b]) => {
-      const pa = lm[a], pb = lm[b]; if (!pa || !pb) return;
+  MESH_GROUPS.forEach(function(g) {
+    ctx.strokeStyle = "rgba(196,164,107," + g.alpha + ")";
+    ctx.lineWidth   = Math.max(.4, canvas.width / 1200 * g.lw);
+    g.conns.forEach(function(pair) {
+      var pa = lm[pair[0]], pb = lm[pair[1]]; if (!pa || !pb) return;
       ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
     });
   });
-  const dotR = Math.max(1, canvas.width / 700);
+  var dotR = Math.max(1, canvas.width / 700);
   ctx.fillStyle = "rgba(196,164,107,.5)"; ctx.shadowBlur = 6;
-  for (let i = 0; i < lm.length; i += 4) {
+  for (var i = 0; i < lm.length; i += 4) {
     if (!lm[i]) continue;
     ctx.beginPath(); ctx.arc(lm[i].x, lm[i].y, dotR, 0, Math.PI*2); ctx.fill();
   }
@@ -455,12 +495,12 @@ function drawFullMesh(lm) {
 }
 
 function animateMeasurements(lm, metrics, onComplete) {
-  const snap = document.createElement("canvas");
+  var snap = document.createElement("canvas");
   snap.width = canvas.width; snap.height = canvas.height;
   snap.getContext("2d").drawImage(canvas, 0, 0);
-  const t0 = performance.now(), dur = 550;
+  var t0 = performance.now(), dur = 550;
   function frame(now) {
-    const alpha = Math.min((now - t0) / dur, 1);
+    var alpha = Math.min((now - t0) / dur, 1);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(snap, 0, 0);
     ctx.globalAlpha = alpha;
@@ -472,58 +512,57 @@ function animateMeasurements(lm, metrics, onComplete) {
 }
 
 function drawMeasurementLabels(lm, metrics) {
-  const p   = i => lm[i];
-  const fs  = Math.max(10, Math.round(canvas.width * .018));
-  const lw  = Math.max(.5, canvas.width / 1400);
-  const pad = canvas.width * .018;
+  var fs  = Math.max(10, Math.round(canvas.width * .018));
+  var lw  = Math.max(.5, canvas.width / 1400);
+  var pad = canvas.width * .018;
   ctx.save();
   ctx.font = fs + "px 'SF Mono','Cascadia Code',Consolas,monospace";
   ctx.fillStyle = "#c4a46b"; ctx.strokeStyle = "rgba(196,164,107,.6)";
   ctx.lineWidth = lw; ctx.shadowColor = "rgba(196,164,107,.9)"; ctx.shadowBlur = 10;
   ctx.textBaseline = "middle";
-  const sym  = Math.round(metrics.symmetryScore * 100);
-  const fwhr = metrics.widthHeightRatio.toFixed(2);
-  const lcb = p(234), rcb = p(454), ljaw = p(58), rjaw = p(288), fore = p(10);
+  var sym  = Math.round(metrics.symmetryScore * 100);
+  var fwhr = metrics.widthHeightRatio.toFixed(2);
+  var lcb = lm[234], rcb = lm[454], ljaw = lm[58], rjaw = lm[288], fore = lm[10];
   ctx.textAlign = "center";
   ctx.fillText("fWHR  " + fwhr, canvas.width / 2, Math.max(fore.y - fs * 2.5, fs * 1.6));
-  const cbY = (lcb.y + rcb.y) / 2;
+  var cbY = (lcb.y + rcb.y) / 2;
   ctx.beginPath(); ctx.moveTo(lcb.x - pad, cbY); ctx.lineTo(rcb.x + pad, cbY); ctx.stroke();
-  [[lcb.x - pad, cbY],[rcb.x + pad, cbY]].forEach(([bx,by]) => { ctx.beginPath(); ctx.moveTo(bx, by-4); ctx.lineTo(bx, by+4); ctx.stroke(); });
+  [[lcb.x - pad, cbY],[rcb.x + pad, cbY]].forEach(function(pt) { ctx.beginPath(); ctx.moveTo(pt[0], pt[1]-4); ctx.lineTo(pt[0], pt[1]+4); ctx.stroke(); });
   ctx.fillText("BIZYGOMATIC", (lcb.x + rcb.x) / 2, cbY - fs * 1.3);
-  const jawMidY = Math.min(Math.max(ljaw.y, rjaw.y) + fs * 1.6, canvas.height - fs);
+  var jawMidY = Math.min(Math.max(ljaw.y, rjaw.y) + fs * 1.6, canvas.height - fs);
   ctx.fillText("SYM  " + sym + "%", (ljaw.x + rjaw.x) / 2, jawMidY);
   ctx.restore();
 }
 
-// ── AI call ──────────────────────────────────────────────────────────
+// -- AI call -----------------------------------------------------------
 async function callAI(metrics, shapeInfo) {
-  const aiReport    = document.getElementById("aiReport");
-  const aiError     = document.getElementById("aiError");
-  const aiErrorText = document.getElementById("aiErrorText");
-  const hasSide     = !!cleanSideCanvas;
+  var aiReport    = document.getElementById("aiReport");
+  var aiError     = document.getElementById("aiError");
+  var aiErrorText = document.getElementById("aiErrorText");
+  var hasSide     = !!cleanSideCanvas;
 
   startAIHUD(hasSide);
   aiReport.classList.add("hidden");
   aiError.classList.add("hidden");
 
-  const sym        = Math.round(metrics.symmetryScore * 100);
-  const fwhr       = metrics.widthHeightRatio.toFixed(2);
-  const cbJawRatio = (metrics.cheekboneWidth / metrics.jawWidth).toFixed(2);
+  var sym        = Math.round(metrics.symmetryScore * 100);
+  var fwhr       = metrics.widthHeightRatio.toFixed(2);
+  var cbJawRatio = (metrics.cheekboneWidth / metrics.jawWidth).toFixed(2);
 
-  const jawInstruction = hasSide
+  var jawInstruction = hasSide
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
-    : "CRITICAL: Only frontal view available — no side profile provided. For ДЖОУЛАЙН_MANDIBLE: score only what is visible frontally (bigonial width, taper, chin width from front). Add the note '— side view not provided, frontal estimate only.' Do NOT assign a jaw score above 6.0/10 based on frontal alone.";
+    : "CRITICAL: Only frontal view available -- no side profile provided. For DJOULAIN_MANDIBLE: score only what is visible frontally (bigonial width, taper, chin width from front). Add the note '-- side view not provided, frontal estimate only.' Do NOT assign a jaw score above 6.0/10 based on frontal alone.";
 
-  const prompt = "You are a brutally honest looksmaxxing analyst. Analyze this face photo in detail. Use looksmaxxing terminology in English, but write all explanatory text in Russian. Be direct and specific — no sugarcoating.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общий PSL рейтинг. Честный вердикт с указанием на сильные и слабые стороны. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Детальный анализ: facial symmetry %, orbital tilt, mandibular deviation, влияние на внешность.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125°), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\n1. [Softmax: конкретный совет]\n2. [Softmax: конкретный совет]\n3. [Softmax: конкретный совет]\n4. [Hardmax: процедура + обоснование]\n5. [Hardmax: процедура + обоснование]";
+  var prompt = "You are a brutally honest looksmaxxing analyst. Analyze this face photo in detail. Use looksmaxxing terminology in English, but write all explanatory text in Russian. Be direct and specific -- no sugarcoating.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общий PSL рейтинг. Честный вердикт с указанием на сильные и слабые стороны. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Детальный анализ: facial symmetry %, orbital tilt, mandibular deviation, влияние на внешность.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\n1. [Softmax: конкретный совет]\n2. [Softmax: конкретный совет]\n3. [Softmax: конкретный совет]\n4. [Hardmax: процедура + обоснование]\n5. [Hardmax: процедура + обоснование]";
 
   try {
-    const res = await fetch(WORKER_URL, {
+    var res = await fetch(WORKER_URL, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ prompt, image: canvasToBase64() })
+      body:    JSON.stringify({ prompt: prompt, image: canvasToBase64() })
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
+    var data = await res.json();
     stopAIHUD();
     renderAIReport(data.text || "Пустой ответ.");
     aiReport.classList.remove("hidden");
@@ -534,15 +573,15 @@ async function callAI(metrics, shapeInfo) {
   }
 }
 
-// ── Image helpers ──────────────────────────────────────────────────
+// -- Image helpers -----------------------------------------------------
 function canvasToBase64(maxSize) {
   maxSize = maxSize || 900;
   if (cleanSideCanvas) {
     return compositeToBase64(cleanImageCanvas || canvas, cleanSideCanvas, maxSize);
   }
-  const src   = cleanImageCanvas || canvas;
-  const scale = Math.min(1, maxSize / Math.max(src.width, src.height));
-  const off   = document.createElement("canvas");
+  var src   = cleanImageCanvas || canvas;
+  var scale = Math.min(1, maxSize / Math.max(src.width, src.height));
+  var off   = document.createElement("canvas");
   off.width   = Math.round(src.width  * scale);
   off.height  = Math.round(src.height * scale);
   off.getContext("2d").drawImage(src, 0, 0, off.width, off.height);
@@ -551,33 +590,33 @@ function canvasToBase64(maxSize) {
 
 function compositeToBase64(frontCvs, sideCvs, maxW) {
   maxW = maxW || 900;
-  const h      = Math.max(frontCvs.height, sideCvs.height);
-  const totalW = frontCvs.width + sideCvs.width + 4;
-  const scale  = Math.min(1, maxW / totalW);
-  const out    = document.createElement("canvas");
-  out.width    = Math.round(totalW * scale);
-  out.height   = Math.round(h      * scale);
-  const c = out.getContext("2d");
+  var h      = Math.max(frontCvs.height, sideCvs.height);
+  var totalW = frontCvs.width + sideCvs.width + 4;
+  var scale  = Math.min(1, maxW / totalW);
+  var out    = document.createElement("canvas");
+  out.width  = Math.round(totalW * scale);
+  out.height = Math.round(h      * scale);
+  var c = out.getContext("2d");
   c.fillStyle = "#000";
   c.fillRect(0, 0, out.width, out.height);
-  const fw = Math.round(frontCvs.width  * scale);
-  const fh = Math.round(frontCvs.height * scale);
+  var fw = Math.round(frontCvs.width  * scale);
+  var fh = Math.round(frontCvs.height * scale);
   c.drawImage(frontCvs, 0, Math.round((out.height - fh) / 2), fw, fh);
   c.strokeStyle = "rgba(196,164,107,.5)";
   c.lineWidth = 1;
   c.beginPath(); c.moveTo(fw + 2, 0); c.lineTo(fw + 2, out.height); c.stroke();
-  const sw = Math.round(sideCvs.width  * scale);
-  const sh = Math.round(sideCvs.height * scale);
+  var sw = Math.round(sideCvs.width  * scale);
+  var sh = Math.round(sideCvs.height * scale);
   c.drawImage(sideCvs, fw + 4, Math.round((out.height - sh) / 2), sw, sh);
   return out.toDataURL("image/jpeg", .75).split(",")[1];
 }
 
-// ── Report rendering ────────────────────────────────────────────────
+// -- Report rendering --------------------------------------------------
 function parseAIReport(text) {
-  const result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
-  const overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
+  var result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
+  var overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
   if (overallM) { result.overall = parseFloat(overallM[1]); result.overallDesc = overallM[2].trim(); }
-  const cats = [
+  var cats = [
     { key:"СИММЕТРИЯ",          label:"Симметрия" },
     { key:"ГЛАЗА_CANTHAL_TILT", label:"Canthal Tilt / Eyes" },
     { key:"МИДФЕЙС_MAXILLA",    label:"Midface / Maxilla" },
@@ -588,36 +627,36 @@ function parseAIReport(text) {
     { key:"ГРУМИНГ_STYLE",      label:"Grooming / Style" },
   ];
   cats.forEach(function(cat) {
-    const esc = cat.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const m   = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)"));
+    var esc = cat.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    var m   = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)"));
     if (m) result.categories.push({ label: cat.label, score: parseFloat(m[1]), text: m[2].trim() });
   });
-  const recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
+  var recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
   if (recsM) result.recommendations = recsM[1].split("\n").map(function(l){ return l.replace(/^\d+\.\s*/,"").trim(); }).filter(Boolean);
   return result;
 }
 
 function renderAIReport(text) {
-  const parsed  = parseAIReport(text);
-  const scoreEl = document.getElementById("overallScoreNum");
+  var parsed  = parseAIReport(text);
+  var scoreEl = document.getElementById("overallScoreNum");
   document.getElementById("overallDesc").textContent = parsed.overallDesc;
   if (parsed.overall !== null) animateCount(scoreEl, parsed.overall, 1600);
-  else scoreEl.textContent = "—";
+  else scoreEl.textContent = "--";
 
-  const catContainer = document.getElementById("categoryScores");
+  var catContainer = document.getElementById("categoryScores");
   catContainer.innerHTML = "";
   if (parsed.categories.length > 0) {
-    const eyebrow = document.createElement("span");
+    var eyebrow = document.createElement("span");
     eyebrow.className = "eyebrow"; eyebrow.textContent = "ДЕТАЛЬНЫЙ АНАЛИЗ";
     catContainer.appendChild(eyebrow);
     parsed.categories.forEach(function(cat, idx) {
-      const row = document.createElement("div"); row.className = "score-row";
-      const header = document.createElement("div"); header.className = "score-row-header";
+      var row = document.createElement("div"); row.className = "score-row";
+      var header = document.createElement("div"); header.className = "score-row-header";
       header.innerHTML = "<span class=\"score-name\">" + cat.label + "</span><span class=\"score-val\">" + cat.score.toFixed(1) + "<span style=\"color:var(--text-dim);font-size:.75em\">/10</span></span>";
-      const track = document.createElement("div"); track.className = "score-bar-track";
-      const fill  = document.createElement("div"); fill.className  = "score-bar-fill"; fill.style.width = "0%";
+      var track = document.createElement("div"); track.className = "score-bar-track";
+      var fill  = document.createElement("div"); fill.className  = "score-bar-fill"; fill.style.width = "0%";
       track.appendChild(fill);
-      const desc = document.createElement("p"); desc.className = "score-text"; desc.textContent = cat.text;
+      var desc = document.createElement("p"); desc.className = "score-text"; desc.textContent = cat.text;
       row.appendChild(header); row.appendChild(track); row.appendChild(desc);
       catContainer.appendChild(row);
       setTimeout(function() {
@@ -626,26 +665,26 @@ function renderAIReport(text) {
       }, idx * 90 + 150);
     });
   } else {
-    const pre = document.createElement("pre");
+    var pre = document.createElement("pre");
     pre.style.cssText = "white-space:pre-wrap;font-size:.85rem;color:var(--text-dim);line-height:1.7;font-family:inherit;";
     pre.textContent = text; catContainer.appendChild(pre);
   }
 
-  const aiRecs = document.getElementById("aiRecs"), recsList = document.getElementById("recsList");
+  var aiRecs = document.getElementById("aiRecs"), recsList = document.getElementById("recsList");
   recsList.innerHTML = "";
   if (parsed.recommendations.length > 0) {
     parsed.recommendations.forEach(function(rec) {
-      const li = document.createElement("li"); li.textContent = rec; recsList.appendChild(li);
+      var li = document.createElement("li"); li.textContent = rec; recsList.appendChild(li);
     });
     aiRecs.classList.remove("hidden");
   }
 }
 
 function animateCount(el, target, duration) {
-  const t0 = performance.now();
+  var t0 = performance.now();
   function tick(now) {
-    const p = Math.min((now - t0) / duration, 1);
-    const e = 1 - Math.pow(1 - p, 3);
+    var p = Math.min((now - t0) / duration, 1);
+    var e = 1 - Math.pow(1 - p, 3);
     el.textContent = (e * target).toFixed(1);
     if (p < 1) requestAnimationFrame(tick); else el.textContent = target.toFixed(1);
   }
