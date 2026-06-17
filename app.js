@@ -1,7 +1,7 @@
 const WORKER_URL = "https://face-metrics-ai.realfactchecknews.workers.dev";
 
 // MediaPipe Face Mesh connection groups
-const FACE_OVAL  = [[10,338],[338,297],[297,332],[332,284],[284,251],[251,389],[389,356],[356,454],[454,323],[323,361],[361,288],[288,397],[397,365],[365,379],[379,378],[378,400],[400,377],[377,152],[152,148],[148,176],[176,149],[149,150],[150,136],[136,172],[172,58],[58,132],[132,93],[93,234],[234,127],[127,162],[162,21],[21,54],[54,103],[103,67],[67,109],[109,10]]];
+const FACE_OVAL  = [[10,338],[338,297],[297,332],[332,284],[284,251],[251,389],[389,356],[356,454],[454,323],[323,361],[361,288],[288,397],[397,365],[365,379],[379,378],[378,400],[400,377],[377,152],[152,148],[148,176],[176,149],[149,150],[150,136],[136,172],[172,58],[58,132],[132,93],[93,234],[234,127],[127,162],[162,21],[21,54],[54,103],[103,67],[67,109],[109,10]];
 const LEFT_EYE   = [[263,249],[249,390],[390,373],[373,374],[374,380],[380,381],[381,382],[382,362],[362,398],[398,384],[384,385],[385,386],[386,387],[387,388],[388,466],[466,263]];
 const RIGHT_EYE  = [[33,7],[7,163],[163,144],[144,145],[145,153],[153,154],[154,155],[155,133],[133,173],[173,157],[157,158],[158,159],[159,160],[160,161],[161,246],[246,33]];
 const LEFT_BROW  = [[276,283],[283,282],[282,295],[295,285],[300,293],[293,334],[334,296],[296,336]];
@@ -77,7 +77,7 @@ let factIdx          = 0;
 let _hudRAF          = null;
 let _hudPhaseTimer   = null;
 
-// ── Landing sequence ─────────────────────────────────────────────────────
+// ── Landing sequence ───────────────────────────────────────────────────
 function startLanding() {
   const el = document.getElementById("landingSection");
   if (!el) return;
@@ -141,7 +141,7 @@ function transitionToAnalysis() {
   }, { once: true });
 }
 
-// ── Bootstrap ──────────────────────────────────────────────────────────
+// ── Bootstrap ────────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
   const overlay = document.getElementById("introOverlay");
   if (overlay) {
@@ -159,7 +159,7 @@ window.addEventListener("DOMContentLoaded", () => {
   if (beginBtn) beginBtn.addEventListener("click", transitionToAnalysis);
 });
 
-// ── Upload: front photo ────────────────────────────────────────────────
+// ── Upload: front photo ───────────────────────────────────────────────
 chooseFileBtn.addEventListener("click", e => { e.stopPropagation(); fileInput.click(); });
 fileInput.addEventListener("change", e => { if (e.target.files[0]) loadFrontFile(e.target.files[0]); });
 frontArea.addEventListener("click", () => { if (!frontImg) fileInput.click(); });
@@ -193,7 +193,7 @@ function loadFrontFile(file) {
   reader.readAsDataURL(file);
 }
 
-// ── Upload: side profile photo ───────────────────────────────────────────
+// ── Upload: side profile photo ─────────────────────────────────────────
 chooseSideBtn.addEventListener("click", e => { e.stopPropagation(); sideInput.click(); });
 sideInput.addEventListener("change", e => { if (e.target.files[0]) loadSideFile(e.target.files[0]); });
 sideArea.addEventListener("click", () => { if (!sideImg) sideInput.click(); });
@@ -225,7 +225,7 @@ function loadSideFile(file) {
   reader.readAsDataURL(file);
 }
 
-// ── Analyze ──────────────────────────────────────────────────────────────
+// ── Analyze ───────────────────────────────────────────────────────────
 analyzeBtn.addEventListener("click", () => {
   if (!frontImg) return;
   errorBox.classList.add("hidden");
@@ -259,7 +259,7 @@ function showError(msg) {
   analysisView.classList.remove("hidden");
 }
 
-// ── AI HUD animation ────────────────────────────────────────────────────
+// ── AI HUD animation ──────────────────────────────────────────────────
 function startAIHUD(hasSide) {
   const card      = document.getElementById("aiLoading");
   const phaseEl   = document.getElementById("hudPhase");
@@ -294,12 +294,12 @@ function startAIHUD(hasSide) {
   function nextPhase() {
     phaseEl.style.opacity = "0";
     setTimeout(() => {
-      phaseEl.textContent  = AI_PHASES[phaseIdx % AI_PHASES.length];
+      phaseEl.textContent   = AI_PHASES[phaseIdx % AI_PHASES.length];
       phaseEl.style.opacity = "1";
       const line = document.createElement("span");
       line.className = "hud-stream-line" + (Math.random() > 0.5 ? " hl" : "");
       const tok  = HUD_TOKENS[phaseIdx % HUD_TOKENS.length];
-      line.textContent = `[${String(phaseIdx + 1).padStart(2, "0")}] ${AI_PHASES[phaseIdx % AI_PHASES.length]}  ${tok}`;
+      line.textContent = "[" + String(phaseIdx + 1).padStart(2, "0") + "] " + AI_PHASES[phaseIdx % AI_PHASES.length] + "  " + tok;
       streamEl.appendChild(line);
       while (streamEl.children.length > 3) streamEl.removeChild(streamEl.firstChild);
       phaseIdx++;
@@ -324,17 +324,17 @@ function stopAIHUD() {
   }, 380);
 }
 
-// ── FaceMesh ─────────────────────────────────────────────────────────────
+// ── FaceMesh ───────────────────────────────────────────────────────────
 function initFaceMesh() {
   if (faceMesh) return faceMesh;
   faceMesh = new FaceMesh({
-    locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`,
+    locateFile: (f) => "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/" + f,
   });
   faceMesh.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.5 });
   return faceMesh;
 }
 
-// ── Process image ─────────────────────────────────────────────────────
+// ── Process image ───────────────────────────────────────────────────
 async function processImage(img, sideImage) {
   try {
     const mesh = initFaceMesh();
@@ -378,7 +378,7 @@ async function processImage(img, sideImage) {
   }
 }
 
-// ── Face animation ─────────────────────────────────────────────────────
+// ── Face animation ───────────────────────────────────────────────────
 function runFaceAnimation(lm, metrics, onComplete) {
   animateScan(lm, metrics, 1400, () => setTimeout(onComplete, 400));
 }
@@ -419,7 +419,7 @@ function drawScanLine(y) {
 function drawMeshUpTo(lm, scanY) {
   ctx.save(); ctx.shadowColor = "rgba(196,164,107,.55)"; ctx.shadowBlur = 5;
   MESH_GROUPS.forEach(({ conns, alpha, lw }) => {
-    ctx.strokeStyle = `rgba(196,164,107,${alpha})`;
+    ctx.strokeStyle = "rgba(196,164,107," + alpha + ")";
     ctx.lineWidth   = Math.max(.4, canvas.width / 1200 * lw);
     conns.forEach(([a, b]) => {
       const pa = lm[a], pb = lm[b];
@@ -438,7 +438,7 @@ function drawMeshUpTo(lm, scanY) {
 function drawFullMesh(lm) {
   ctx.save(); ctx.shadowColor = "rgba(196,164,107,.5)"; ctx.shadowBlur = 5;
   MESH_GROUPS.forEach(({ conns, alpha, lw }) => {
-    ctx.strokeStyle = `rgba(196,164,107,${alpha})`;
+    ctx.strokeStyle = "rgba(196,164,107," + alpha + ")";
     ctx.lineWidth   = Math.max(.4, canvas.width / 1200 * lw);
     conns.forEach(([a, b]) => {
       const pa = lm[a], pb = lm[b]; if (!pa || !pb) return;
@@ -477,7 +477,7 @@ function drawMeasurementLabels(lm, metrics) {
   const lw  = Math.max(.5, canvas.width / 1400);
   const pad = canvas.width * .018;
   ctx.save();
-  ctx.font = `${fs}px 'SF Mono','Cascadia Code',Consolas,monospace`;
+  ctx.font = fs + "px 'SF Mono','Cascadia Code',Consolas,monospace";
   ctx.fillStyle = "#c4a46b"; ctx.strokeStyle = "rgba(196,164,107,.6)";
   ctx.lineWidth = lw; ctx.shadowColor = "rgba(196,164,107,.9)"; ctx.shadowBlur = 10;
   ctx.textBaseline = "middle";
@@ -485,17 +485,17 @@ function drawMeasurementLabels(lm, metrics) {
   const fwhr = metrics.widthHeightRatio.toFixed(2);
   const lcb = p(234), rcb = p(454), ljaw = p(58), rjaw = p(288), fore = p(10);
   ctx.textAlign = "center";
-  ctx.fillText(`fWHR  ${fwhr}`, canvas.width / 2, Math.max(fore.y - fs * 2.5, fs * 1.6));
+  ctx.fillText("fWHR  " + fwhr, canvas.width / 2, Math.max(fore.y - fs * 2.5, fs * 1.6));
   const cbY = (lcb.y + rcb.y) / 2;
   ctx.beginPath(); ctx.moveTo(lcb.x - pad, cbY); ctx.lineTo(rcb.x + pad, cbY); ctx.stroke();
   [[lcb.x - pad, cbY],[rcb.x + pad, cbY]].forEach(([bx,by]) => { ctx.beginPath(); ctx.moveTo(bx, by-4); ctx.lineTo(bx, by+4); ctx.stroke(); });
   ctx.fillText("BIZYGOMATIC", (lcb.x + rcb.x) / 2, cbY - fs * 1.3);
   const jawMidY = Math.min(Math.max(ljaw.y, rjaw.y) + fs * 1.6, canvas.height - fs);
-  ctx.fillText(`SYM  ${sym}%`, (ljaw.x + rjaw.x) / 2, jawMidY);
+  ctx.fillText("SYM  " + sym + "%", (ljaw.x + rjaw.x) / 2, jawMidY);
   ctx.restore();
 }
 
-// ── AI call ────────────────────────────────────────────────────────────
+// ── AI call ──────────────────────────────────────────────────────────
 async function callAI(metrics, shapeInfo) {
   const aiReport    = document.getElementById("aiReport");
   const aiError     = document.getElementById("aiError");
@@ -514,52 +514,7 @@ async function callAI(metrics, shapeInfo) {
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
     : "CRITICAL: Only frontal view available — no side profile provided. For ДЖОУЛАЙН_MANDIBLE: score only what is visible frontally (bigonial width, taper, chin width from front). Add the note '— side view not provided, frontal estimate only.' Do NOT assign a jaw score above 6.0/10 based on frontal alone.";
 
-  const prompt = `You are a brutally honest looksmaxxing analyst. Analyze this face photo in detail. Use looksmaxxing terminology in English, but write all explanatory text in Russian. Be direct and specific — no sugarcoating.
-
-Geometric data (MediaPipe):
-- Face shape: ${shapeInfo.shape}
-- Facial symmetry: ${sym}%
-- fWHR: ${fwhr} (masculine ideal 1.9-2.1)
-- Cheekbone-to-jaw taper ratio: ${cbJawRatio} (ideal 1.2-1.35)
-- Forehead: ${Math.round(metrics.foreheadWidth)}px | Bizygomatic: ${Math.round(metrics.cheekboneWidth)}px | Bigonial: ${Math.round(metrics.jawWidth)}px
-
-${jawInstruction}
-
-Analyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):
-
-ОБЩИЙ_БАЛЛ: X/10
-[Общий PSL рейтинг. Честный вердикт с указанием на сильные и слабые стороны. 3-4 предложения.]
-
-СИММЕТРИЯ: X/10
-[Детальный анализ: facial symmetry %, orbital tilt, mandibular deviation, влияние на внешность.]
-
-ГЛАЗА_CANTHAL_TILT: X/10
-[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]
-
-МИДФЕЙС_MAXILLA: X/10
-[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]
-
-ДЖОУЛАЙН_MANDIBLE: X/10
-[Джоулайн: mandible definition, gonial angle (ideal 120-125°), ramus height, taper ratio ${cbJawRatio}, chin projection, submental angle.]
-
-НОС_NOSE: X/10
-[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]
-
-ГУБЫ_СКУЛЫ: X/10
-[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]
-
-КОЖА: X/10
-[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]
-
-ГРУМИНГ_STYLE: X/10
-[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]
-
-РЕКОМЕНДАЦИИ:
-1. [Softmax: конкретный совет]
-2. [Softmax: конкретный совет]
-3. [Softmax: конкретный совет]
-4. [Hardmax: процедура + обоснование]
-5. [Hardmax: процедура + обоснование]`;
+  const prompt = "You are a brutally honest looksmaxxing analyst. Analyze this face photo in detail. Use looksmaxxing terminology in English, but write all explanatory text in Russian. Be direct and specific — no sugarcoating.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общий PSL рейтинг. Честный вердикт с указанием на сильные и слабые стороны. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Детальный анализ: facial symmetry %, orbital tilt, mandibular deviation, влияние на внешность.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125°), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\n1. [Softmax: конкретный совет]\n2. [Softmax: конкретный совет]\n3. [Softmax: конкретный совет]\n4. [Hardmax: процедура + обоснование]\n5. [Hardmax: процедура + обоснование]";
 
   try {
     const res = await fetch(WORKER_URL, {
@@ -567,20 +522,21 @@ Analyze each category in detail. Reply STRICTLY in this format (no markdown, no 
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ prompt, image: canvasToBase64() })
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     stopAIHUD();
     renderAIReport(data.text || "Пустой ответ.");
     aiReport.classList.remove("hidden");
   } catch (err) {
     stopAIHUD();
-    aiErrorText.textContent = `Ошибка: ${err.message}`;
+    aiErrorText.textContent = "Ошибка: " + err.message;
     aiError.classList.remove("hidden");
   }
 }
 
-// ── Image helpers ─────────────────────────────────────────────────────
-function canvasToBase64(maxSize = 900) {
+// ── Image helpers ──────────────────────────────────────────────────
+function canvasToBase64(maxSize) {
+  maxSize = maxSize || 900;
   if (cleanSideCanvas) {
     return compositeToBase64(cleanImageCanvas || canvas, cleanSideCanvas, maxSize);
   }
@@ -593,7 +549,8 @@ function canvasToBase64(maxSize = 900) {
   return off.toDataURL("image/jpeg", .75).split(",")[1];
 }
 
-function compositeToBase64(frontCvs, sideCvs, maxW = 900) {
+function compositeToBase64(frontCvs, sideCvs, maxW) {
+  maxW = maxW || 900;
   const h      = Math.max(frontCvs.height, sideCvs.height);
   const totalW = frontCvs.width + sideCvs.width + 4;
   const scale  = Math.min(1, maxW / totalW);
@@ -615,7 +572,7 @@ function compositeToBase64(frontCvs, sideCvs, maxW = 900) {
   return out.toDataURL("image/jpeg", .75).split(",")[1];
 }
 
-// ── Report rendering ──────────────────────────────────────────────────
+// ── Report rendering ────────────────────────────────────────────────
 function parseAIReport(text) {
   const result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
   const overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
@@ -630,13 +587,13 @@ function parseAIReport(text) {
     { key:"КОЖА",               label:"Skin" },
     { key:"ГРУМИНГ_STYLE",      label:"Grooming / Style" },
   ];
-  cats.forEach(({ key, label }) => {
-    const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const m   = text.match(new RegExp(`${esc}:\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)`));
-    if (m) result.categories.push({ label, score: parseFloat(m[1]), text: m[2].trim() });
+  cats.forEach(function(cat) {
+    const esc = cat.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m   = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)"));
+    if (m) result.categories.push({ label: cat.label, score: parseFloat(m[1]), text: m[2].trim() });
   });
   const recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
-  if (recsM) result.recommendations = recsM[1].split("\n").map(l => l.replace(/^\d+\.\s*/,"").trim()).filter(Boolean);
+  if (recsM) result.recommendations = recsM[1].split("\n").map(function(l){ return l.replace(/^\d+\.\s*/,"").trim(); }).filter(Boolean);
   return result;
 }
 
@@ -653,17 +610,20 @@ function renderAIReport(text) {
     const eyebrow = document.createElement("span");
     eyebrow.className = "eyebrow"; eyebrow.textContent = "ДЕТАЛЬНЫЙ АНАЛИЗ";
     catContainer.appendChild(eyebrow);
-    parsed.categories.forEach(({ label, score, text }, idx) => {
+    parsed.categories.forEach(function(cat, idx) {
       const row = document.createElement("div"); row.className = "score-row";
       const header = document.createElement("div"); header.className = "score-row-header";
-      header.innerHTML = `<span class="score-name">${label}</span><span class="score-val">${score.toFixed(1)}<span style="color:var(--text-dim);font-size:.75em">/10</span></span>`;
+      header.innerHTML = "<span class=\"score-name\">" + cat.label + "</span><span class=\"score-val\">" + cat.score.toFixed(1) + "<span style=\"color:var(--text-dim);font-size:.75em\">/10</span></span>";
       const track = document.createElement("div"); track.className = "score-bar-track";
       const fill  = document.createElement("div"); fill.className  = "score-bar-fill"; fill.style.width = "0%";
       track.appendChild(fill);
-      const desc = document.createElement("p"); desc.className = "score-text"; desc.textContent = text;
+      const desc = document.createElement("p"); desc.className = "score-text"; desc.textContent = cat.text;
       row.appendChild(header); row.appendChild(track); row.appendChild(desc);
       catContainer.appendChild(row);
-      setTimeout(() => { row.classList.add("visible"); requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = `${score*10}%`; })); }, idx * 90 + 150);
+      setTimeout(function() {
+        row.classList.add("visible");
+        requestAnimationFrame(function() { requestAnimationFrame(function() { fill.style.width = (cat.score*10) + "%"; }); });
+      }, idx * 90 + 150);
     });
   } else {
     const pre = document.createElement("pre");
@@ -674,7 +634,9 @@ function renderAIReport(text) {
   const aiRecs = document.getElementById("aiRecs"), recsList = document.getElementById("recsList");
   recsList.innerHTML = "";
   if (parsed.recommendations.length > 0) {
-    parsed.recommendations.forEach(rec => { const li = document.createElement("li"); li.textContent = rec; recsList.appendChild(li); });
+    parsed.recommendations.forEach(function(rec) {
+      const li = document.createElement("li"); li.textContent = rec; recsList.appendChild(li);
+    });
     aiRecs.classList.remove("hidden");
   }
 }
