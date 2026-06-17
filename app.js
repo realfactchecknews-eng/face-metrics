@@ -1,7 +1,7 @@
 const WORKER_URL = "https://face-metrics-ai.realfactchecknews.workers.dev";
 
 // MediaPipe Face Mesh connection groups
-const FACE_OVAL  = [[10,338],[338,297],[297,332],[332,284],[284,251],[251,389],[389,356],[356,454],[454,323],[323,361],[361,288],[288,397],[397,365],[365,379],[379,378],[378,400],[400,377],[377,152],[152,148],[148,176],[176,149],[149,150],[150,136],[136,172],[172,58],[58,132],[132,93],[93,234],[234,127],[127,162],[162,21],[21,54],[54,103],[103,67],[67,109],[109,10]];
+const FACE_OVAL  = [[10,338],[338,297],[297,332],[332,284],[284,251],[251,389],[389,356],[356,454],[454,323],[323,361],[361,288],[288,397],[397,365],[365,379],[379,378],[378,400],[400,377],[377,152],[152,148],[148,176],[176,149],[149,150],[150,136],[136,172],[172,58],[58,132],[132,93],[93,234],[234,127],[127,162],[162,21],[21,54],[54,103],[103,67],[67,109],[109,10]]];
 const LEFT_EYE   = [[263,249],[249,390],[390,373],[373,374],[374,380],[380,381],[381,382],[382,362],[362,398],[398,384],[384,385],[385,386],[386,387],[387,388],[388,466],[466,263]];
 const RIGHT_EYE  = [[33,7],[7,163],[163,144],[144,145],[145,153],[153,154],[154,155],[155,133],[133,173],[173,157],[157,158],[158,159],[159,160],[160,161],[161,246],[246,33]];
 const LEFT_BROW  = [[276,283],[283,282],[282,295],[295,285],[300,293],[293,334],[334,296],[296,336]];
@@ -77,7 +77,7 @@ let factIdx          = 0;
 let _hudRAF          = null;
 let _hudPhaseTimer   = null;
 
-// ── Landing sequence ──────────────────────────────────────────────────────
+// ── Landing sequence ─────────────────────────────────────────────────────
 function startLanding() {
   const el = document.getElementById("landingSection");
   if (!el) return;
@@ -141,7 +141,7 @@ function transitionToAnalysis() {
   }, { once: true });
 }
 
-// ── Bootstrap ────────────────────────────────────────────────────────────
+// ── Bootstrap ──────────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
   const overlay = document.getElementById("introOverlay");
   if (overlay) {
@@ -159,10 +159,7 @@ window.addEventListener("DOMContentLoaded", () => {
   if (beginBtn) beginBtn.addEventListener("click", transitionToAnalysis);
 });
 
-// ── Upload: front photo ─────────────────────────────────────────────────
-choseFileBtn: {
-  // block intentionally unused
-}
+// ── Upload: front photo ────────────────────────────────────────────────
 chooseFileBtn.addEventListener("click", e => { e.stopPropagation(); fileInput.click(); });
 fileInput.addEventListener("change", e => { if (e.target.files[0]) loadFrontFile(e.target.files[0]); });
 frontArea.addEventListener("click", () => { if (!frontImg) fileInput.click(); });
@@ -196,10 +193,7 @@ function loadFrontFile(file) {
   reader.readAsDataURL(file);
 }
 
-// ── Upload: side profile photo ────────────────────────────────────────────
-chooSideBtn: {
-  // block intentionally unused
-}
+// ── Upload: side profile photo ───────────────────────────────────────────
 chooseSideBtn.addEventListener("click", e => { e.stopPropagation(); sideInput.click(); });
 sideInput.addEventListener("change", e => { if (e.target.files[0]) loadSideFile(e.target.files[0]); });
 sideArea.addEventListener("click", () => { if (!sideImg) sideInput.click(); });
@@ -231,7 +225,7 @@ function loadSideFile(file) {
   reader.readAsDataURL(file);
 }
 
-// ── Analyze button ──────────────────────────────────────────────────────
+// ── Analyze ──────────────────────────────────────────────────────────────
 analyzeBtn.addEventListener("click", () => {
   if (!frontImg) return;
   errorBox.classList.add("hidden");
@@ -265,13 +259,13 @@ function showError(msg) {
   analysisView.classList.remove("hidden");
 }
 
-// ── AI HUD animation ─────────────────────────────────────────────────────
+// ── AI HUD animation ────────────────────────────────────────────────────
 function startAIHUD(hasSide) {
-  const card     = document.getElementById("aiLoading");
-  const phaseEl  = document.getElementById("hudPhase");
-  const fillEl   = document.getElementById("hudBarFill");
-  const pctEl    = document.getElementById("hudBarPct");
-  const streamEl = document.getElementById("hudStream");
+  const card      = document.getElementById("aiLoading");
+  const phaseEl   = document.getElementById("hudPhase");
+  const fillEl    = document.getElementById("hudBarFill");
+  const pctEl     = document.getElementById("hudBarPct");
+  const streamEl  = document.getElementById("hudStream");
   const sideLabel = document.getElementById("hudSideLabel");
 
   card.classList.remove("hidden");
@@ -287,13 +281,11 @@ function startAIHUD(hasSide) {
   const TOTAL = 22000;
 
   function tickBar(now) {
-    const t = Math.min((now - t0) / TOTAL, 1);
-    const pct = Math.round(
-      t < 0.72 ? (t / 0.72) * 84 : 84 + ((t - 0.72) / 0.28) * 8
-    );
+    const t   = Math.min((now - t0) / TOTAL, 1);
+    const pct = Math.round(t < 0.72 ? (t / 0.72) * 84 : 84 + ((t - 0.72) / 0.28) * 8);
     fillEl.style.transition = "width .8s linear";
     fillEl.style.width = pct + "%";
-    pctEl.textContent = pct + "%";
+    pctEl.textContent  = pct + "%";
     if (pct < 92) _hudRAF = requestAnimationFrame(tickBar);
   }
   requestAnimationFrame(() => requestAnimationFrame(tickBar));
@@ -302,11 +294,11 @@ function startAIHUD(hasSide) {
   function nextPhase() {
     phaseEl.style.opacity = "0";
     setTimeout(() => {
-      phaseEl.textContent = AI_PHASES[phaseIdx % AI_PHASES.length];
+      phaseEl.textContent  = AI_PHASES[phaseIdx % AI_PHASES.length];
       phaseEl.style.opacity = "1";
       const line = document.createElement("span");
       line.className = "hud-stream-line" + (Math.random() > 0.5 ? " hl" : "");
-      const tok = HUD_TOKENS[phaseIdx % HUD_TOKENS.length];
+      const tok  = HUD_TOKENS[phaseIdx % HUD_TOKENS.length];
       line.textContent = `[${String(phaseIdx + 1).padStart(2, "0")}] ${AI_PHASES[phaseIdx % AI_PHASES.length]}  ${tok}`;
       streamEl.appendChild(line);
       while (streamEl.children.length > 3) streamEl.removeChild(streamEl.firstChild);
@@ -314,14 +306,14 @@ function startAIHUD(hasSide) {
     }, 180);
     _hudPhaseTimer = setTimeout(nextPhase, 2100);
   }
-  phaseEl.textContent = AI_PHASES[0];
+  phaseEl.textContent   = AI_PHASES[0];
   phaseEl.style.opacity = "1";
   _hudPhaseTimer = setTimeout(nextPhase, 2100);
 }
 
 function stopAIHUD() {
-  if (_hudRAF)       { cancelAnimationFrame(_hudRAF); _hudRAF = null; }
-  if (_hudPhaseTimer){ clearTimeout(_hudPhaseTimer); _hudPhaseTimer = null; }
+  if (_hudRAF)        { cancelAnimationFrame(_hudRAF); _hudRAF = null; }
+  if (_hudPhaseTimer) { clearTimeout(_hudPhaseTimer); _hudPhaseTimer = null; }
   const fillEl = document.getElementById("hudBarFill");
   const pctEl  = document.getElementById("hudBarPct");
   if (fillEl) { fillEl.style.transition = "width .3s ease"; fillEl.style.width = "100%"; }
@@ -332,7 +324,7 @@ function stopAIHUD() {
   }, 380);
 }
 
-// ── FaceMesh ───────────────────────────────────────────────────────────────
+// ── FaceMesh ─────────────────────────────────────────────────────────────
 function initFaceMesh() {
   if (faceMesh) return faceMesh;
   faceMesh = new FaceMesh({
@@ -342,14 +334,16 @@ function initFaceMesh() {
   return faceMesh;
 }
 
-// ── Process image ───────────────────────────────────────────────────────
+// ── Process image ─────────────────────────────────────────────────────
 async function processImage(img, sideImage) {
   try {
     const mesh = initFaceMesh();
     canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
+
     cleanImageCanvas = document.createElement("canvas");
-    cleanImageCanvas.width = canvas.width; cleanImageCanvas.height = canvas.height;
+    cleanImageCanvas.width  = canvas.width;
+    cleanImageCanvas.height = canvas.height;
     cleanImageCanvas.getContext("2d").drawImage(img, 0, 0);
 
     if (sideImage) {
@@ -367,8 +361,8 @@ async function processImage(img, sideImage) {
         showError("Не удалось распознать лицо. Попробуйте другое фото — лицо должно быть направлено в камеру и хорошо освещено."); return;
       }
       const raw = results.multiFaceLandmarks[0];
-      const w = canvas.width, h = canvas.height;
-      const lm = raw.map(p => ({ x: p.x * w, y: p.y * h }));
+      const w   = canvas.width, h = canvas.height;
+      const lm  = raw.map(p => ({ x: p.x * w, y: p.y * h }));
       const metrics   = computeFaceMetrics(lm);
       const shapeInfo = classifyFaceShape(metrics);
       runFaceAnimation(lm, metrics, () => {
@@ -384,7 +378,7 @@ async function processImage(img, sideImage) {
   }
 }
 
-// ── Face animation ───────────────────────────────────────────────────────
+// ── Face animation ─────────────────────────────────────────────────────
 function runFaceAnimation(lm, metrics, onComplete) {
   animateScan(lm, metrics, 1400, () => setTimeout(onComplete, 400));
 }
@@ -495,14 +489,13 @@ function drawMeasurementLabels(lm, metrics) {
   const cbY = (lcb.y + rcb.y) / 2;
   ctx.beginPath(); ctx.moveTo(lcb.x - pad, cbY); ctx.lineTo(rcb.x + pad, cbY); ctx.stroke();
   [[lcb.x - pad, cbY],[rcb.x + pad, cbY]].forEach(([bx,by]) => { ctx.beginPath(); ctx.moveTo(bx, by-4); ctx.lineTo(bx, by+4); ctx.stroke(); });
-  ctx.textAlign = "center";
   ctx.fillText("BIZYGOMATIC", (lcb.x + rcb.x) / 2, cbY - fs * 1.3);
   const jawMidY = Math.min(Math.max(ljaw.y, rjaw.y) + fs * 1.6, canvas.height - fs);
   ctx.fillText(`SYM  ${sym}%`, (ljaw.x + rjaw.x) / 2, jawMidY);
   ctx.restore();
 }
 
-// ── AI call ────────────────────────────────────────────────────────────────
+// ── AI call ────────────────────────────────────────────────────────────
 async function callAI(metrics, shapeInfo) {
   const aiReport    = document.getElementById("aiReport");
   const aiError     = document.getElementById("aiError");
@@ -519,7 +512,7 @@ async function callAI(metrics, shapeInfo) {
 
   const jawInstruction = hasSide
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
-    : "CRITICAL: Only frontal view is available — no side profile provided. For ДЖОУЛАЙН_MANDIBLE: score only what is visible frontally (bigonial width, taper ratio, chin width from front). You MUST add: '— side view not provided, score is a frontal estimate.' Do NOT assign a jaw score above 6.0/10 based on frontal alone, regardless of what you infer.";
+    : "CRITICAL: Only frontal view available — no side profile provided. For ДЖОУЛАЙН_MANDIBLE: score only what is visible frontally (bigonial width, taper, chin width from front). Add the note '— side view not provided, frontal estimate only.' Do NOT assign a jaw score above 6.0/10 based on frontal alone.";
 
   const prompt = `You are a brutally honest looksmaxxing analyst. Analyze this face photo in detail. Use looksmaxxing terminology in English, but write all explanatory text in Russian. Be direct and specific — no sugarcoating.
 
@@ -586,16 +579,16 @@ Analyze each category in detail. Reply STRICTLY in this format (no markdown, no 
   }
 }
 
-// ── Image helpers ────────────────────────────────────────────────────────
+// ── Image helpers ─────────────────────────────────────────────────────
 function canvasToBase64(maxSize = 900) {
   if (cleanSideCanvas) {
     return compositeToBase64(cleanImageCanvas || canvas, cleanSideCanvas, maxSize);
   }
-  const src = cleanImageCanvas || canvas;
+  const src   = cleanImageCanvas || canvas;
   const scale = Math.min(1, maxSize / Math.max(src.width, src.height));
-  const off = document.createElement("canvas");
-  off.width  = Math.round(src.width  * scale);
-  off.height = Math.round(src.height * scale);
+  const off   = document.createElement("canvas");
+  off.width   = Math.round(src.width  * scale);
+  off.height  = Math.round(src.height * scale);
   off.getContext("2d").drawImage(src, 0, 0, off.width, off.height);
   return off.toDataURL("image/jpeg", .75).split(",")[1];
 }
@@ -604,9 +597,9 @@ function compositeToBase64(frontCvs, sideCvs, maxW = 900) {
   const h      = Math.max(frontCvs.height, sideCvs.height);
   const totalW = frontCvs.width + sideCvs.width + 4;
   const scale  = Math.min(1, maxW / totalW);
-  const out = document.createElement("canvas");
-  out.width  = Math.round(totalW * scale);
-  out.height = Math.round(h      * scale);
+  const out    = document.createElement("canvas");
+  out.width    = Math.round(totalW * scale);
+  out.height   = Math.round(h      * scale);
   const c = out.getContext("2d");
   c.fillStyle = "#000";
   c.fillRect(0, 0, out.width, out.height);
@@ -622,7 +615,7 @@ function compositeToBase64(frontCvs, sideCvs, maxW = 900) {
   return out.toDataURL("image/jpeg", .75).split(",")[1];
 }
 
-// ── Report rendering ─────────────────────────────────────────────────────
+// ── Report rendering ──────────────────────────────────────────────────
 function parseAIReport(text) {
   const result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
   const overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
