@@ -112,9 +112,7 @@ async function processImage(img) {
 
       const metrics = computeFaceMetrics(landmarks);
       const shapeInfo = classifyFaceShape(metrics);
-      const recs = buildRecommendations(shapeInfo);
 
-      renderBaseResults(metrics, shapeInfo, recs);
       resultsDiv.classList.remove("hidden");
       callAI(metrics, shapeInfo);
 
@@ -139,32 +137,6 @@ function drawLandmarkOverlay(landmarks) {
   ctx.restore();
 }
 
-function renderBaseResults(metrics, shapeInfo, recs) {
-  document.getElementById("faceShape").textContent = shapeInfo.shape;
-  document.getElementById("symmetryScore").textContent = getSymmetryNote(metrics.symmetryScore);
-  const [top, mid, bottom] = metrics.thirdsRatio.map((v) => Math.round(v * 100));
-  document.getElementById("thirdsRatio").textContent = `${top}% / ${mid}% / ${bottom}%`;
-  document.getElementById("widthHeightRatio").textContent = metrics.widthHeightRatio.toFixed(2);
-  document.getElementById("zoneWidths").textContent =
-    `лоб ${Math.round(metrics.foreheadWidth)} · скулы ${Math.round(metrics.cheekboneWidth)} · челюсть ${Math.round(metrics.jawWidth)} px`;
-
-  const haircutList = document.getElementById("haircutList");
-  haircutList.innerHTML = "";
-  recs.haircuts.forEach((item) => {
-    const li = document.createElement("li");
-    li.textContent = item;
-    haircutList.appendChild(li);
-  });
-
-  const styleList = document.getElementById("styleList");
-  styleList.innerHTML = "";
-  recs.styleNotes.forEach((item) => {
-    const li = document.createElement("li");
-    li.textContent = item;
-    styleList.appendChild(li);
-  });
-}
-
 function canvasToBase64(maxSize = 640) {
   const off = document.createElement("canvas");
   const scale = Math.min(1, maxSize / Math.max(canvas.width, canvas.height));
@@ -184,48 +156,54 @@ async function callAI(metrics, shapeInfo) {
   aiReport.classList.add("hidden");
   aiError.classList.add("hidden");
 
-  const [top, mid, bottom] = metrics.thirdsRatio.map((v) => Math.round(v * 100));
   const sym = Math.round(metrics.symmetryScore * 100);
   const fwhr = metrics.widthHeightRatio.toFixed(2);
+  const cbJawRatio = (metrics.cheekboneWidth / metrics.jawWidth).toFixed(2);
 
-  const prompt = `You are a brutal, honest looksmaxxing analyst. Analyze this face photo and the geometric data below. Give a detailed, direct assessment using looksmaxxing terminology. Do NOT be soft — give real scores.
+  const prompt = `You are a brutally honest looksmaxxing analyst. Analyze this face photo in detail. Use looksmaxxing terminology in English, but write all explanatory text in Russian. Be direct and specific — no sugarcoating.
 
-Geometric data (MediaPipe Face Mesh):
+Geometric data (MediaPipe):
 - Face shape: ${shapeInfo.shape}
-- Symmetry: ${sym}% (${sym >= 90 ? 'high' : sym >= 75 ? 'moderate asymmetry' : 'notable asymmetry'})
-- Facial thirds (forehead / midface / lower): ${top}% / ${mid}% / ${bottom}% (ideal = 33/33/33)
-- fWHR (facial width-to-height ratio): ${fwhr} (ideal masculine = 1.9-2.1, feminine = 1.6-1.8)
-- Forehead width: ${Math.round(metrics.foreheadWidth)}px, bizygomatic (cheekbones): ${Math.round(metrics.cheekboneWidth)}px, bigonial (jaw): ${Math.round(metrics.jawWidth)}px
-- Cheekbone-to-jaw ratio: ${(metrics.cheekboneWidth / metrics.jawWidth).toFixed(2)} (ideal = 1.2-1.35 for tapered jaw)
+- Facial symmetry: ${sym}%
+- fWHR: ${fwhr} (masculine ideal 1.9-2.1)
+- Cheekbone-to-jaw taper ratio: ${cbJawRatio} (ideal 1.2-1.35)
+- Forehead: ${Math.round(metrics.foreheadWidth)}px | Bizygomatic: ${Math.round(metrics.cheekboneWidth)}px | Bigonial: ${Math.round(metrics.jawWidth)}px
 
-Analyze and score the following. Be specific. Use looksmaxxing terms: canthal tilt, hunter/prey eyes, maxillary projection, mandible, gonial angle, ramus height, bizygomatic width, submental angle, mewing potential, PSL rating, mogging potential, softmax/hardmax recommendations.
-
-Reply STRICTLY in this format (no markdown, no asterisks, no bullet points, plain text only):
+Analyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):
 
 ОБЩИЙ_БАЛЛ: X/10
-[Оценка PSL рейтинга. 2-3 предложения.]
+[Общий PSL рейтинг. Честный вердикт с указанием на сильные и слабые стороны. 3-4 предложения.]
 
 СИММЕТРИЯ: X/10
-[Анализ симметрии, отклонения осей, влияние на внешность.]
+[Детальный анализ: facial symmetry %, orbital tilt, mandibular deviation, влияние на внешность.]
 
-ПРОПОРЦИИ: X/10
-[Трети лица, fWHR, соотношение скул/челюсть, сравнение с идеальными значениями.]
+ГЛАЗА_CANTHAL_TILT: X/10
+[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding (есть/нет), orbital rim projection, eyelid exposure, IPD (interpupillary distance) vs норма, scleral show. Что это даёт визуально.]
 
-ЧЕРТЫ_ЛИЦА: X/10
-[Подробно: canthal tilt (положительный/отрицательный/нейтральный), hunter/prey eyes, maxillary projection (выступающая/утопленная), mandible и gonial angle, cheekbone projection, подбородок, губы.]
+МИДФЕЙС_MAXILLA: X/10
+[Максиллярная проекция (forward/recessed), midface length, zygomatic arch prominence, malar eminence, nasolabial angle, влияние на размещение губ и носа.]
+
+ДЖОУЛАЙН_MANDIBLE: X/10
+[Джоулайн: mandible definition, gonial angle (оценка угла — ideal 120-125°), ramus height, bigonial width vs bizygomatic (taper ratio ${cbJawRatio}), chin projection и shape, submental angle, neck-jawline transition.]
+
+НОС_NOSE: X/10
+[Нос: dorsum height/width (broad/narrow/ideal), tip projection (over/under projected), nasal tip rotation, columella show, alar width vs intercanthal distance, nose-lip harmony (NLH), bridge deviation.]
+
+ГУБЫ_СКУЛЫ: X/10
+[Губы: соотношение верхней/нижней (ideal 1:1.6), vermillion border четкость, philtrum length, Cupid’s bow, labiomental fold глубина. Скулы: cheekbone projection, malar fat pad, bizygomatic dominance.]
 
 КОЖА: X/10
-[Текстура, тон, поры, состояние. Процент кожи vs возраста.]
+[Кожа: skin texture (ровная/пористая/рубцовая), tone evenness, visible pores, acne/scarring, skin laxity, estimated skin age vs actual, приоритеты skincare.]
 
-СТИЛЬ_И_УХОД: X/10
-[Волосы (стрижка, густота, линия роста), брови, уход за лицом, борода (если есть). Балл за соответствие внешности.]
+ГРУМИНГ_STYLE: X/10
+[Груминг: hairline integrity (залысина/норма), hair density, hairstyle совместимость с формой лица, brow grooming (арх и толщина), facial hair assessment если есть, общее впечатление от внешности.]
 
 РЕКОМЕНДАЦИИ:
-1. [Конкретный softmax-совет: стрижка, брови, скинкер, mewing, поза или вес — с обоснованием]
-2. [Конкретный совет с обоснованием]
-3. [Конкретный совет с обоснованием]
-4. [Конкретный совет с обоснованием]
-5. [Конкретный совет с обоснованием]`;
+1. [Softmax: конкретный совет с обоснованием]
+2. [Softmax: конкретный совет с обоснованием]
+3. [Softmax: конкретный совет с обоснованием]
+4. [Hardmax: процедура + обоснование]
+5. [Hardmax: процедура + обоснование]`;
 
   try {
     const image = canvasToBase64(640);
@@ -249,22 +227,26 @@ Reply STRICTLY in this format (no markdown, no asterisks, no bullet points, plai
 function parseAIReport(text) {
   const result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
 
-  const overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_]+:|$)/);
+  const overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
   if (overallM) {
     result.overall = parseFloat(overallM[1]);
     result.overallDesc = overallM[2].trim();
   }
 
   const cats = [
-    { key: "СИММЕТРИЯ", label: "Симметрия" },
-    { key: "ПРОПОРЦИИ", label: "Пропорции" },
-    { key: "ЧЕРТЫ_ЛИЦА", label: "Черты лица" },
-    { key: "КОЖА", label: "Кожа" },
-    { key: "СТИЛЬ_И_УХОД", label: "Стиль и уход" },
+    { key: "СИММЕТРИЯ",        label: "Симметрия" },
+    { key: "ГЛАЗА_CANTHAL_TILT",  label: "Canthal Tilt / Eyes" },
+    { key: "МИДФЕЙС_MAXILLA",    label: "Midface / Maxilla" },
+    { key: "ДЖОУЛАЙН_MANDIBLE",  label: "Jawline / Mandible" },
+    { key: "НОС_NOSE",              label: "Nose" },
+    { key: "ГУБЫ_СКУЛЫ",        label: "Губы / Скулы" },
+    { key: "КОЖА",                label: "Skin" },
+    { key: "ГРУМИНГ_STYLE",      label: "Grooming / Style" },
   ];
 
   cats.forEach(({ key, label }) => {
-    const re = new RegExp(`${key}:\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_]+:|$)`);
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`${escaped}:\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)`);
     const m = text.match(re);
     if (m) result.categories.push({ label, score: parseFloat(m[1]), text: m[2].trim() });
   });
