@@ -3,148 +3,146 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Face Metrics — анализ пропорций лица</title>
+<title>Face Metrics — Aesthetic Analysis</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <header class="site-header">
-    <div class="container">
-      <h1>Face Metrics</h1>
-      <p class="subtitle">Геометрический анализ пропорций и симметрии лица — для подбора стрижки и стиля</p>
+<header class="site-header">
+  <div class="container">
+    <p class="brand-eyebrow">FACE METRICS</p>
+    <h1>Aesthetic Analysis</h1>
+    <p class="subtitle">Геометрический анализ пропорций · ИИ-оценка · Персональные рекомендации</p>
+  </div>
+</header>
+
+<main class="container">
+
+  <section id="uploadSection">
+    <div class="upload-area" id="uploadArea">
+      <input type="file" id="fileInput" accept="image/*" hidden />
+      <div class="upload-inner">
+        <div class="upload-icon">◎</div>
+        <p class="upload-title">Загрузите фото лица</p>
+        <p class="upload-hint">Фронтальный ракурс · Равномерное освещение · JPG или PNG</p>
+        <button id="chooseFileBtn" class="btn btn-primary">Выбрать файл</button>
+      </div>
     </div>
-  </header>
+  </section>
 
-  <main class="container">
+  <div id="analysisView" class="hidden">
 
-    <section id="aiSettings" class="card ai-settings-card">
-      <div class="ai-settings-header" id="aiSettingsToggle">
-        <span>Настройки ИИ-анализа</span>
-        <span class="toggle-icon" id="toggleIcon">▸</span>
-      </div>
-      <div id="aiSettingsBody" class="ai-settings-body hidden">
-        <p class="hint">
-          Укажи URL своего Cloudflare Worker — после анализа лица Claude даст персональные рекомендации.
-          Код воркера лежит в <code>worker.js</code> в репозитории.
-          Фото никуда не отправляется — только числа метрик.
-        </p>
-        <div class="settings-row">
-          <input id="workerUrlInput" type="url"
-            placeholder="https://face-metrics-ai.your-name.workers.dev"
-            class="settings-input" />
-          <button id="saveWorkerUrl" class="btn btn-primary">Сохранить</button>
-        </div>
-        <p id="workerStatus" class="hint" style="margin-top:8px;"></p>
-      </div>
-    </section>
+    <div class="photo-card">
+      <canvas id="canvas"></canvas>
+      <button id="resetBtn" class="btn-reset">↩ Загрузить другое</button>
+    </div>
 
-    <section id="disclaimer" class="card disclaimer">
-      <h2>Как это работает</h2>
-      <p>
-        Инструмент измеряет геометрические пропорции лица (соотношение третей,
-        ширину скул/лба/челюсти, симметрию относитеньно центральной оси) и
-        на основе этих чисел определяет общую форму лица и даёт справочные
-        рекомендации по стрижкам, которые обычно сочетаются с такой формой.
-      </p>
-      <p>
-        <strong>Это не оценка привлекательности.</strong> Модель не делает никаких
-        выводов о красоте или желательности лица — только измеряет геометрию.
-      </p>
-      <p>
-        Вся обработка происходит локально в вашем браузере. Фото никуда не
-        отправляется, не сохраняется и не покидает устройство.
-      </p>
-    </section>
-
-    <section id="upload-section" class="card">
-      <h2>1. Загрузите фото</h2>
-      <p class="hint">Лицо должно быть направлено прямо в камеру, при равномерном освещении, без сильного наклона головы.</p>
-
-      <div class="upload-area" id="uploadArea">
-        <input type="file" id="fileInput" accept="image/*" hidden />
-        <button id="chooseFileBtn" class="btn btn-primary">Выбрать фото</button>
-        <p class="upload-hint">или перетащите файл сюда</p>
-      </div>
-
-      <div id="previewWrap" class="preview-wrap hidden">
-        <canvas id="canvas"></canvas>
-        <button id="resetBtn" class="btn btn-secondary">Загрузить другое фото</button>
-      </div>
-    </section>
-
-    <section id="loading" class="card hidden">
-      <p>Анализируем геометрию лица…</p>
+    <div id="loading" class="loading-card hidden">
       <div class="spinner"></div>
-    </section>
-
-    <section id="results" class="card hidden">
-      <h2>2. Результаты анализа</h2>
-
-      <div class="result-grid">
-        <div class="metric-box">
-          <h3>Форма лица</h3>
-          <p id="faceShape" class="metric-value">—</p>
-        </div>
-        <div class="metric-box">
-          <h3>Симметрия</h3>
-          <p id="symmetryScore" class="metric-value">—</p>
-          <p class="metric-note">Чем ближе к 100%, тем более симметричны левая и правая половины лица</p>
-        </div>
-        <div class="metric-box">
-          <h3>Пропорции третей лица</h3>
-          <p id="thirdsRatio" class="metric-value">—</p>
-          <p class="metric-note">Лоб / нос / нижняя часть. В классическом каноне трети примерно равны</p>
-        </div>
-        <div class="metric-box">
-          <h3>Соотношение ширины и высоты лица</h3>
-          <p id="widthHeightRatio" class="metric-value">—</p>
-        </div>
-        <div class="metric-box">
-          <h3>Ширина скул / челюсти / лба</h3>
-          <p id="zoneWidths" class="metric-value">—</p>
-        </div>
-      </div>
-
-      <div id="aiResults" class="ai-results hidden">
-        <h2>ИИ-рекомендации <span class="ai-badge">Claude</span></h2>
-        <div id="aiContent" class="ai-content"></div>
-      </div>
-
-      <div id="recommendations" class="recommendations">
-        <h2>Базовые рекомендации</h2>
-        <div id="haircutRecs" class="rec-block">
-          <h3>По форме лица: стрижка и укладка</h3>
-          <ul id="haircutList"></ul>
-        </div>
-        <div id="styleRecs" class="rec-block">
-          <h3>Общие заметки по стилю</h3>
-          <ul id="styleList"></ul>
-        </div>
-      </div>
-
-      <p class="caveat">
-        ИИ-рекомендации и базовые правила — справочные, а не персональная консультация.
-        Лучший результат даст очный стилист.
-      </p>
-    </section>
-
-    <section id="errorBox" class="card error hidden">
-      <p id="errorText"></p>
-    </section>
-
-  </main>
-
-  <footer class="site-footer">
-    <div class="container">
-      <p>Обработка изображений происходит полностью на стороне браузера (on-device).
-      Ничего не отправляется на сервер и не сохраняется после закрытия страницы.</p>
+      <p>Анализируем геометрию лица…</p>
     </div>
-  </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="metrics.js"></script>
-  <script src="recommendations.js"></script>
-  <script src="app.js"></script>
+    <div id="results" class="hidden">
+
+      <div id="aiLoading" class="ai-loading-card hidden">
+        <div class="spinner spinner-sm"></div>
+        <p class="ai-loading-text">ИИ анализирует изображение…</p>
+      </div>
+
+      <div id="aiReport" class="hidden">
+        <div class="score-hero card">
+          <span class="eyebrow">ОБЩАЯ ОЦЕНКА</span>
+          <div class="overall-num-wrap">
+            <span id="overallScoreNum" class="overall-num">—</span><span class="overall-denom">/10</span>
+          </div>
+          <p id="overallDesc" class="overall-desc"></p>
+        </div>
+
+        <div id="categoryScores" class="card scores-card"></div>
+
+        <div id="aiRecs" class="card recs-card hidden">
+          <span class="eyebrow">РЕКОМЕНДАЦИИ</span>
+          <ol id="recsList" class="recs-list"></ol>
+        </div>
+      </div>
+
+      <div id="aiError" class="card ai-error-card hidden">
+        <p id="aiErrorText" class="error-text"></p>
+      </div>
+
+      <details class="card details-card">
+        <summary class="details-summary">
+          <span class="eyebrow" style="margin:0">ГЕОМЕТРИЧЕСКИЕ ДАННЫЕ</span>
+          <span class="details-toggle">+</span>
+        </summary>
+        <div class="result-grid">
+          <div class="metric-box">
+            <h3>Форма лица</h3>
+            <p id="faceShape" class="metric-value">—</p>
+          </div>
+          <div class="metric-box">
+            <h3>Симметрия</h3>
+            <p id="symmetryScore" class="metric-value">—</p>
+            <p class="metric-note">Чем ближе к 100%, тем более симметрично</p>
+          </div>
+          <div class="metric-box">
+            <h3>Пропорции третей</h3>
+            <p id="thirdsRatio" class="metric-value">—</p>
+            <p class="metric-note">Лоб / нос / нижняя часть</p>
+          </div>
+          <div class="metric-box">
+            <h3>Ширина / Высота</h3>
+            <p id="widthHeightRatio" class="metric-value">—</p>
+          </div>
+          <div class="metric-box">
+            <h3>Ширина зон</h3>
+            <p id="zoneWidths" class="metric-value">—</p>
+          </div>
+        </div>
+        <div id="recommendations" class="recommendations">
+          <div class="rec-block">
+            <h3>Стрижка и укладка</h3>
+            <ul id="haircutList"></ul>
+          </div>
+          <div class="rec-block">
+            <h3>Общие заметки</h3>
+            <ul id="styleList"></ul>
+          </div>
+        </div>
+      </details>
+
+    </div>
+  </div>
+
+  <div id="errorBox" class="card error hidden">
+    <p id="errorText"></p>
+  </div>
+
+</main>
+
+<div id="aiSettingsPanel" class="ai-settings-panel">
+  <button id="aiSettingsToggle" class="ai-settings-toggle">⚙ ИИ-настройки</button>
+  <div id="aiSettingsBody" class="ai-settings-body hidden">
+    <p class="settings-hint">URL вашего Cloudflare Worker</p>
+    <div class="settings-row">
+      <input id="workerUrlInput" type="url" placeholder="https://face-metrics-ai.*.workers.dev" class="settings-input" />
+      <button id="saveWorkerUrl" class="btn btn-sm">Сохранить</button>
+    </div>
+    <p id="workerStatus" class="settings-status"></p>
+    <p class="settings-note">При включённом ИИ-анализе фото отправляется на ваш Worker. Worker под вашим контролем.</p>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>Геометрический анализ — локально в браузере (on-device).<br>ИИ-анализ — через ваш Cloudflare Worker, если настроен.</p>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="metrics.js"></script>
+<script src="recommendations.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
