@@ -1,3 +1,5 @@
+const WORKER_URL = "https://face-metrics-ai.realfactchecknews.workers.dev";
+
 const fileInput = document.getElementById("fileInput");
 const chooseFileBtn = document.getElementById("chooseFileBtn");
 const uploadArea = document.getElementById("uploadArea");
@@ -10,40 +12,6 @@ const loadingCard = document.getElementById("loading");
 const resultsDiv = document.getElementById("results");
 const errorBox = document.getElementById("errorBox");
 const errorText = document.getElementById("errorText");
-
-const aiSettingsToggle = document.getElementById("aiSettingsToggle");
-const aiSettingsBody = document.getElementById("aiSettingsBody");
-const workerUrlInput = document.getElementById("workerUrlInput");
-const saveWorkerUrlBtn = document.getElementById("saveWorkerUrl");
-const workerStatus = document.getElementById("workerStatus");
-
-const savedUrl = localStorage.getItem("fm_worker_url");
-if (savedUrl) {
-  workerUrlInput.value = savedUrl;
-  workerStatus.textContent = "✓ URL сохранён";
-}
-
-aiSettingsToggle.addEventListener("click", (e) => {
-  e.stopPropagation();
-  aiSettingsBody.classList.toggle("hidden");
-});
-
-saveWorkerUrlBtn.addEventListener("click", () => {
-  const url = workerUrlInput.value.trim();
-  if (url) {
-    localStorage.setItem("fm_worker_url", url);
-    workerStatus.textContent = "✓ Сохранено";
-  } else {
-    localStorage.removeItem("fm_worker_url");
-    workerStatus.textContent = "URL удалён";
-  }
-});
-
-document.addEventListener("click", (e) => {
-  if (!document.getElementById("aiSettingsPanel").contains(e.target)) {
-    aiSettingsBody.classList.add("hidden");
-  }
-});
 
 let faceMesh = null;
 
@@ -207,9 +175,6 @@ function canvasToBase64(maxSize = 640) {
 }
 
 async function callAI(metrics, shapeInfo) {
-  const workerUrl = localStorage.getItem("fm_worker_url");
-  if (!workerUrl) return;
-
   const aiLoading = document.getElementById("aiLoading");
   const aiReport = document.getElementById("aiReport");
   const aiError = document.getElementById("aiError");
@@ -220,48 +185,51 @@ async function callAI(metrics, shapeInfo) {
   aiError.classList.add("hidden");
 
   const [top, mid, bottom] = metrics.thirdsRatio.map((v) => Math.round(v * 100));
+  const sym = Math.round(metrics.symmetryScore * 100);
+  const fwhr = metrics.widthHeightRatio.toFixed(2);
 
-  const prompt = `Ты — профессиональный эксперт по эстетике лица, стилистике и грумингу. Проведи честный, объективный анализ лица на фото.
+  const prompt = `You are a brutal, honest looksmaxxing analyst. Analyze this face photo and the geometric data below. Give a detailed, direct assessment using looksmaxxing terminology. Do NOT be soft — give real scores.
 
-Геометрические данные (MediaPipe Face Mesh):
-- Форма лица: ${shapeInfo.shape} (${shapeInfo.desc})
-- Симметрия: ${Math.round(metrics.symmetryScore * 100)}%
-- Пропорции третей (лоб / нос / нижняя часть): ${top}% / ${mid}% / ${bottom}%
-- Соотношение ширина/высота: ${metrics.widthHeightRatio.toFixed(2)}
-- Ширина лба: ${Math.round(metrics.foreheadWidth)}px, скул: ${Math.round(metrics.cheekboneWidth)}px, челюсти: ${Math.round(metrics.jawWidth)}px
+Geometric data (MediaPipe Face Mesh):
+- Face shape: ${shapeInfo.shape}
+- Symmetry: ${sym}% (${sym >= 90 ? 'high' : sym >= 75 ? 'moderate asymmetry' : 'notable asymmetry'})
+- Facial thirds (forehead / midface / lower): ${top}% / ${mid}% / ${bottom}% (ideal = 33/33/33)
+- fWHR (facial width-to-height ratio): ${fwhr} (ideal masculine = 1.9-2.1, feminine = 1.6-1.8)
+- Forehead width: ${Math.round(metrics.foreheadWidth)}px, bizygomatic (cheekbones): ${Math.round(metrics.cheekboneWidth)}px, bigonial (jaw): ${Math.round(metrics.jawWidth)}px
+- Cheekbone-to-jaw ratio: ${(metrics.cheekboneWidth / metrics.jawWidth).toFixed(2)} (ideal = 1.2-1.35 for tapered jaw)
 
-Дай честную, реалистичную оценку по шкале 1–10 по каждой категории. Не завышай баллы — реальная оценка полезнее. Учти всё видимое на фото: черты лица, кожу, волосы, брови, уход.
+Analyze and score the following. Be specific. Use looksmaxxing terms: canthal tilt, hunter/prey eyes, maxillary projection, mandible, gonial angle, ramus height, bizygomatic width, submental angle, mewing potential, PSL rating, mogging potential, softmax/hardmax recommendations.
 
-Отвечай СТРОГО в следующем формате (без markdown, без звёздочек, без решёток):
+Reply STRICTLY in this format (no markdown, no asterisks, no bullet points, plain text only):
 
 ОБЩИЙ_БАЛЛ: X/10
-[Одно-два предложения — общее впечатление]
+[Оценка PSL рейтинга. 2-3 предложения.]
 
 СИММЕТРИЯ: X/10
-[1–2 предложения]
+[Анализ симметрии, отклонения осей, влияние на внешность.]
 
 ПРОПОРЦИИ: X/10
-[1–2 предложения]
+[Трети лица, fWHR, соотношение скул/челюсть, сравнение с идеальными значениями.]
 
 ЧЕРТЫ_ЛИЦА: X/10
-[2–3 предложения о глазах, носе, губах, скулах, подбородке]
+[Подробно: canthal tilt (положительный/отрицательный/нейтральный), hunter/prey eyes, maxillary projection (выступающая/утопленная), mandible и gonial angle, cheekbone projection, подбородок, губы.]
 
 КОЖА: X/10
-[1–2 предложения о текстуре, тоне, состоянии]
+[Текстура, тон, поры, состояние. Процент кожи vs возраста.]
 
 СТИЛЬ_И_УХОД: X/10
-[1–2 предложения о волосах, бровях, общем уходе]
+[Волосы (стрижка, густота, линия роста), брови, уход за лицом, борода (если есть). Балл за соответствие внешности.]
 
 РЕКОМЕНДАЦИИ:
-1. [конкретный совет — стрижка, груминг, скинкер, брови или стилинг]
-2. [конкретный совет]
-3. [конкретный совет]
-4. [конкретный совет]
-5. [конкретный совет]`;
+1. [Конкретный softmax-совет: стрижка, брови, скинкер, mewing, поза или вес — с обоснованием]
+2. [Конкретный совет с обоснованием]
+3. [Конкретный совет с обоснованием]
+4. [Конкретный совет с обоснованием]
+5. [Конкретный совет с обоснованием]`;
 
   try {
     const image = canvasToBase64(640);
-    const res = await fetch(workerUrl, {
+    const res = await fetch(WORKER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, image }),
@@ -273,7 +241,7 @@ async function callAI(metrics, shapeInfo) {
     aiReport.classList.remove("hidden");
   } catch (err) {
     aiLoading.classList.add("hidden");
-    aiErrorText.textContent = `Ошибка: ${err.message}. Проверьте URL воркера в настройках.`;
+    aiErrorText.textContent = `Ошибка: ${err.message}`;
     aiError.classList.remove("hidden");
   }
 }

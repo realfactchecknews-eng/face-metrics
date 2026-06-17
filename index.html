@@ -51,7 +51,7 @@
 
       <div id="aiReport" class="hidden">
         <div class="score-hero card">
-          <span class="eyebrow">ОБЩАЯ ОЦЕНКА</span>
+          <span class="eyebrow">ОБЩАЯ ОЦЕНКА · PSL РЕЙТИНГ</span>
           <div class="overall-num-wrap">
             <span id="overallScoreNum" class="overall-num">—</span><span class="overall-denom">/10</span>
           </div>
@@ -61,7 +61,7 @@
         <div id="categoryScores" class="card scores-card"></div>
 
         <div id="aiRecs" class="card recs-card hidden">
-          <span class="eyebrow">РЕКОМЕНДАЦИИ</span>
+          <span class="eyebrow">РЕКОМЕНДАЦИИ ПО ЛУКСМАКСИНГУ</span>
           <ol id="recsList" class="recs-list"></ol>
         </div>
       </div>
@@ -83,15 +83,13 @@
           <div class="metric-box">
             <h3>Симметрия</h3>
             <p id="symmetryScore" class="metric-value">—</p>
-            <p class="metric-note">Чем ближе к 100%, тем более симметрично</p>
           </div>
           <div class="metric-box">
             <h3>Пропорции третей</h3>
             <p id="thirdsRatio" class="metric-value">—</p>
-            <p class="metric-note">Лоб / нос / нижняя часть</p>
           </div>
           <div class="metric-box">
-            <h3>Ширина / Высота</h3>
+            <h3>fWHR</h3>
             <p id="widthHeightRatio" class="metric-value">—</p>
           </div>
           <div class="metric-box">
@@ -120,22 +118,9 @@
 
 </main>
 
-<div id="aiSettingsPanel" class="ai-settings-panel">
-  <button id="aiSettingsToggle" class="ai-settings-toggle">⚙ ИИ-настройки</button>
-  <div id="aiSettingsBody" class="ai-settings-body hidden">
-    <p class="settings-hint">URL вашего Cloudflare Worker</p>
-    <div class="settings-row">
-      <input id="workerUrlInput" type="url" placeholder="https://face-metrics-ai.*.workers.dev" class="settings-input" />
-      <button id="saveWorkerUrl" class="btn btn-sm">Сохранить</button>
-    </div>
-    <p id="workerStatus" class="settings-status"></p>
-    <p class="settings-note">При включённом ИИ-анализе фото отправляется на ваш Worker. Worker под вашим контролем.</p>
-  </div>
-</div>
-
 <footer class="site-footer">
   <div class="container">
-    <p>Геометрический анализ — локально в браузере (on-device).<br>ИИ-анализ — через ваш Cloudflare Worker, если настроен.</p>
+    <p>Геометрический анализ — локально. ИИ-анализ — через защищённый Worker.</p>
   </div>
 </footer>
 
