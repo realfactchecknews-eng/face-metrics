@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Face Metrics — анализ пропорций лица</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container">
+      <h1>Face Metrics</h1>
+      <p class="subtitle">Геометрический анализ пропорций и симметрии лица — для подбора стрижки и стиля</p>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <section id="disclaimer" class="card disclaimer">
+      <h2>Как это работает</h2>
+      <p>
+        Инструмент измеряет геометрические пропорции лица (соотношение третей,
+        ширину скул/лба/челюсти, симметрию относительно центральной оси) и
+        на основе этих чисел определяет общую форму лица и даёт справочные
+        рекомендации по стрижкам, которые обычно сочетаются с такой формой.
+      </p>
+      <p>
+        <strong>Это не оценка привлекательности.</strong> Модель не делает никаких
+        выводов о красоте или желательности лица — только измеряет геометрию,
+        как это делает любой портной или стилист с сантиметровой лентой.
+      </p>
+      <p>
+        Вся обработка происходит локально в вашем браузере. Фото никуда не
+        отправляется, не сохраняется и не покидает устройство. После закрытия
+        страницы данные удаляются.
+      </p>
+    </section>
+
+    <section id="upload-section" class="card">
+      <h2>1. Загрузите фото</h2>
+      <p class="hint">Лицо должно быть направлено прямо в камеру, при равномерном освещении, без сильного наклона головы.</p>
+
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="fileInput" accept="image/*" hidden />
+        <button id="chooseFileBtn" class="btn btn-primary">Выбрать фото</button>
+        <p class="upload-hint">или перетащите файл сюда</p>
+      </div>
+
+      <div id="previewWrap" class="preview-wrap hidden">
+        <canvas id="canvas"></canvas>
+        <button id="resetBtn" class="btn btn-secondary">Загрузить другое фото</button>
+      </div>
+    </section>
+
+    <section id="loading" class="card hidden">
+      <p>Анализируем геометрию лица…</p>
+      <div class="spinner"></div>
+    </section>
+
+    <section id="results" class="card hidden">
+      <h2>2. Результаты анализа</h2>
+
+      <div class="result-grid">
+        <div class="metric-box">
+          <h3>Форма лица</h3>
+          <p id="faceShape" class="metric-value">—</p>
+        </div>
+        <div class="metric-box">
+          <h3>Симметрия</h3>
+          <p id="symmetryScore" class="metric-value">—</p>
+          <p class="metric-note">Чем ближе к 100%, тем более симметричны левая и правая половины лица</p>
+        </div>
+        <div class="metric-box">
+          <h3>Пропорции третей лица</h3>
+          <p id="thirdsRatio" class="metric-value">—</p>
+          <p class="metric-note">Лоб / нос / нижняя часть. В классическом каноне трети примерно равны</p>
+        </div>
+        <div class="metric-box">
+          <h3>Соотношение ширины и высоты лица</h3>
+          <p id="widthHeightRatio" class="metric-value">—</p>
+        </div>
+        <div class="metric-box">
+          <h3>Ширина скул / челюсти / лба</h3>
+          <p id="zoneWidths" class="metric-value">—</p>
+        </div>
+      </div>
+
+      <div id="recommendations" class="recommendations">
+        <h2>3. Рекомендации</h2>
+        <div id="haircutRecs" class="rec-block">
+          <h3>По форме лица: стрижка и укладка</h3>
+          <ul id="haircutList"></ul>
+        </div>
+        <div id="styleRecs" class="rec-block">
+          <h3>Общие заметки по стилю</h3>
+          <ul id="styleList"></ul>
+        </div>
+      </div>
+
+      <p class="caveat">
+        Это справочные рекомендации на основе общих геометрических принципов
+        стайлинга, а не персональная консультация. Лучший результат даст очный
+        стилист, который учтёт текстуру волос, образ жизни и ваши предпочтения.
+      </p>
+    </section>
+
+    <section id="errorBox" class="card error hidden">
+      <p id="errorText"></p>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Обработка изображений происходит полностью на стороне браузера (on-device).
+      Ничего не отправляется на сервер и не сохраняется после закрытия страницы.</p>
+    </div>
+  </footer>
+
+  <!-- MediaPipe Face Mesh (через CDN, выполняется в браузере пользователя) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <script src="metrics.js"></script>
+  <script src="recommendations.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
