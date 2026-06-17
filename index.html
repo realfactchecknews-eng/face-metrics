@@ -9,12 +9,11 @@
 </head>
 <body>
 
+<!-- INTRO OVERLAY -->
 <div id="introOverlay">
   <div class="intro-corners">
-    <span class="ic ic-tl"></span>
-    <span class="ic ic-tr"></span>
-    <span class="ic ic-bl"></span>
-    <span class="ic ic-br"></span>
+    <span class="ic ic-tl"></span><span class="ic ic-tr"></span>
+    <span class="ic ic-bl"></span><span class="ic ic-br"></span>
   </div>
   <div class="intro-body">
     <div class="intro-label">EST. 2025</div>
@@ -28,7 +27,60 @@
   </div>
 </div>
 
-<header class="site-header">
+<!-- LANDING SECTION -->
+<div id="landingSection">
+  <div class="land-scan-bg"></div>
+  <div class="land-corners">
+    <span class="lc lc-tl"></span><span class="lc lc-tr"></span>
+    <span class="lc lc-bl"></span><span class="lc lc-br"></span>
+  </div>
+  <div class="land-inner">
+
+    <div class="land-top">
+      <p class="land-brand">ASCEND &amp; FORGET</p>
+      <p class="land-quote" id="landQuote"></p>
+    </div>
+
+    <div class="land-stats">
+      <div class="land-stat ls-a" style="--d:0.05s">
+        <span class="lst-num" data-target="468">0</span>
+        <span class="lst-label">LANDMARKS</span>
+      </div>
+      <div class="land-stat ls-a" style="--d:0.15s">
+        <span class="lst-num" data-target="8">0</span>
+        <span class="lst-label">CATEGORIES</span>
+      </div>
+      <div class="land-stat ls-a" style="--d:0.25s">
+        <span class="lst-num" data-target="92" data-suffix="%">0%</span>
+        <span class="lst-label">SYM TARGET</span>
+      </div>
+      <div class="land-stat ls-a" style="--d:0.35s">
+        <span class="lst-num" data-decimal="1" data-target="1.618">0.000</span>
+        <span class="lst-label">GOLDEN RATIO</span>
+      </div>
+    </div>
+
+    <div class="land-fact-block ls-a" style="--d:0.55s">
+      <span class="land-fact-eye">LOOKSMAXX INSIGHT</span>
+      <div class="land-fact-wrap">
+        <div class="land-fact-bar"></div>
+        <p class="land-fact" id="landFact"></p>
+      </div>
+    </div>
+
+    <button id="beginBtn" class="btn-begin ls-a" style="--d:0.75s">
+      <span class="btn-begin-fill"></span>
+      <span class="btn-begin-inner">
+        <span>НАЧАТЬ АНАЛИЗ</span>
+        <span class="btn-begin-arr">&rarr;</span>
+      </span>
+    </button>
+
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<header class="site-header" id="mainHeader">
   <div class="container">
     <p class="brand-eyebrow">ASCEND &amp; FORGET</p>
     <h1>Aesthetic Analysis</h1>
@@ -36,27 +88,26 @@
   </div>
 </header>
 
-<main class="container">
+<main class="container" id="mainContent">
 
   <section id="uploadSection">
     <div class="upload-area" id="uploadArea">
       <input type="file" id="fileInput" accept="image/*" hidden />
       <div class="upload-inner">
         <div class="upload-icon">&#9678;</div>
-        <p class="upload-title">&#1047;&#1072;&#1075;&#1088;&#1091;&#1079;&#1080;&#1090;&#1077; &#1092;&#1086;&#1090;&#1086; &#1083;&#1080;&#1094;&#1072;</p>
-        <p class="upload-hint">&#1060;&#1088;&#1086;&#1085;&#1090;&#1072;&#1083;&#1100;&#1085;&#1099;&#1081; &#1088;&#1072;&#1082;&#1091;&#1088;&#1089; &middot; &#1056;&#1072;&#1074;&#1085;&#1086;&#1084;&#1077;&#1088;&#1085;&#1086;&#1077; &#1086;&#1089;&#1074;&#1077;&#1097;&#1077;&#1085;&#1080;&#1077; &middot; JPG &#1080;&#1083;&#1080; PNG</p>
-        <button id="chooseFileBtn" class="btn btn-primary">&#1042;&#1099;&#1073;&#1088;&#1072;&#1090;&#1100; &#1092;&#1072;&#1081;&#1083;</button>
+        <p class="upload-title">Загрузите фото лица</p>
+        <p class="upload-hint">Фронтальный ракурс &middot; Равномерное освещение &middot; JPG или PNG</p>
+        <button id="chooseFileBtn" class="btn btn-primary">Выбрать файл</button>
       </div>
     </div>
   </section>
 
   <div id="analysisView" class="hidden">
-
     <div class="photo-card">
       <div class="canvas-wrap">
         <canvas id="canvas"></canvas>
       </div>
-      <button id="resetBtn" class="btn-reset">↩ &#1047;&#1072;&#1075;&#1088;&#1091;&#1079;&#1080;&#1090;&#1100; &#1076;&#1088;&#1091;&#1075;&#1086;&#1077;</button>
+      <button id="resetBtn" class="btn-reset">↩ Загрузить другое</button>
     </div>
 
     <div id="loading" class="loading-card hidden">
@@ -65,29 +116,26 @@
         <div class="scan-ring scan-ring-2"></div>
         <div class="scan-dot"></div>
       </div>
-      <p>&#1057;&#1082;&#1072;&#1085;&#1080;&#1088;&#1086;&#1074;&#1072;&#1085;&#1080;&#1077; &#1075;&#1077;&#1086;&#1084;&#1077;&#1090;&#1088;&#1080;&#1080; &#1083;&#1080;&#1094;&#1072;&#8230;</p>
+      <p>Сканирование геометрии лица…</p>
     </div>
 
     <div id="results" class="hidden">
-
       <div id="aiLoading" class="ai-loading-card hidden">
         <div class="spinner spinner-sm"></div>
-        <p class="ai-loading-text">&#1048;&#1048; &#1072;&#1085;&#1072;&#1083;&#1080;&#1079;&#1080;&#1088;&#1091;&#1077;&#1090; &#1080;&#1079;&#1086;&#1073;&#1088;&#1072;&#1078;&#1077;&#1085;&#1080;&#1077;&#8230;</p>
+        <p class="ai-loading-text">ИИ анализирует изображение…</p>
       </div>
 
       <div id="aiReport" class="hidden">
         <div class="score-hero card">
-          <span class="eyebrow">&#1054;&#1041;&#1065;&#1040;&#1071; &#1054;&#1062;&#1045;&#1053;&#1050;&#1040; &middot; PSL &#1056;&#1045;&#1049;&#1058;&#1048;&#1053;&#1043;</span>
+          <span class="eyebrow">ОБЩАЯ ОЦЕНКА &middot; PSL РЕЙТИНГ</span>
           <div class="overall-num-wrap">
             <span id="overallScoreNum" class="overall-num">&mdash;</span><span class="overall-denom">/10</span>
           </div>
           <p id="overallDesc" class="overall-desc"></p>
         </div>
-
         <div id="categoryScores" class="card scores-card"></div>
-
         <div id="aiRecs" class="card recs-card hidden">
-          <span class="eyebrow">&#1056;&#1045;&#1050;&#1054;&#1052;&#1045;&#1053;&#1044;&#1040;&#1062;&#1048;&#1048; &#1055;&#1054; &#1051;&#1059;&#1050;&#1057;&#1052;&#1040;&#1050;&#1057;&#1048;&#1053;&#1043;&#1059;</span>
+          <span class="eyebrow">РЕКОМЕНДАЦИИ ПО ЛУКСМАКСИНГУ</span>
           <ol id="recsList" class="recs-list"></ol>
         </div>
       </div>
@@ -95,7 +143,6 @@
       <div id="aiError" class="card ai-error-card hidden">
         <p id="aiErrorText" class="error-text"></p>
       </div>
-
     </div>
   </div>
 
@@ -105,7 +152,7 @@
 
 </main>
 
-<footer class="site-footer">
+<footer class="site-footer" id="mainFooter">
   <div class="container">
     <p>ASCEND &amp; FORGET &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
   </div>
