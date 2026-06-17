@@ -22,7 +22,7 @@ export default {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
         },
-        body: JSON.stringify({ model: 'x-ai/grok-2-vision-1212', max_tokens: 1500, messages }),
+        body: JSON.stringify({ model: 'qwen/qwen2-vl-72b-instruct', max_tokens: 1500, messages }),
       });
       data = await res.json();
     } catch (err) {
