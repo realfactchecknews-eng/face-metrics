@@ -1,10 +1,3 @@
-// Cloudflare Worker — прокси к OpenRouter API для Face Metrics
-//
-// Деплой:
-//   1. npm install -g wrangler
-//   2. wrangler secret put OPENROUTER_API_KEY   (вставь свой ключ с openrouter.ai)
-//   3. wrangler deploy
-
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return cors(null, 204);
@@ -14,6 +7,13 @@ export default {
     try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
     if (!body.prompt) return cors('Missing prompt', 400);
 
+    const messages = body.image
+      ? [{ role: 'user', content: [
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${body.image}` } },
+          { type: 'text', text: body.prompt }
+        ]}]
+      : [{ role: 'user', content: body.prompt }];
+
     let data;
     try {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -22,11 +22,7 @@ export default {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
         },
-        body: JSON.stringify({
-          model: 'anthropic/claude-3-haiku',
-          max_tokens: 1024,
-          messages: [{ role: 'user', content: body.prompt }],
-        }),
+        body: JSON.stringify({ model: 'anthropic/claude-3-haiku', max_tokens: 1500, messages }),
       });
       data = await res.json();
     } catch (err) {
