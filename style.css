@@ -172,15 +172,103 @@ body {
   color: var(--text-dim);
 }
 
+/* AI settings */
+.ai-settings-card {
+  padding: 16px 24px;
+}
+
+.ai-settings-header {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.ai-settings-header:hover { color: var(--text); }
+
+.toggle-icon {
+  font-size: 1rem;
+  transition: transform 0.2s;
+}
+
+.ai-settings-body { margin-top: 14px; }
+
+.settings-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-input {
+  flex: 1;
+  min-width: 200px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.settings-input:focus { border-color: var(--accent); }
+
+code {
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.85em;
+  color: var(--accent);
+}
+
+/* AI results */
+.ai-results {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+
+.ai-results h2 {
+  margin-top: 0;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-badge {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ai-content {
+  color: var(--text-dim);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  font-size: 0.95rem;
+}
+
+.ai-error { color: var(--error); }
+
+/* Recommendations */
 .recommendations {
   margin-top: 28px;
   border-top: 1px solid var(--border);
   padding-top: 20px;
 }
 
-.rec-block {
-  margin-bottom: 18px;
-}
+.rec-block { margin-bottom: 18px; }
 
 .rec-block h3 {
   font-size: 1rem;
@@ -193,9 +281,7 @@ body {
   color: var(--text-dim);
 }
 
-.rec-block li {
-  margin-bottom: 6px;
-}
+.rec-block li { margin-bottom: 6px; }
 
 .caveat {
   font-size: 0.85rem;
@@ -205,9 +291,7 @@ body {
   margin-top: 8px;
 }
 
-.error {
-  border-color: var(--error);
-}
+.error { border-color: var(--error); }
 
 .error p {
   color: var(--error);

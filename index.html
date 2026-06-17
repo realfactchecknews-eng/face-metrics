@@ -17,23 +17,42 @@
 
   <main class="container">
 
+    <section id="aiSettings" class="card ai-settings-card">
+      <div class="ai-settings-header" id="aiSettingsToggle">
+        <span>Настройки ИИ-анализа</span>
+        <span class="toggle-icon" id="toggleIcon">▸</span>
+      </div>
+      <div id="aiSettingsBody" class="ai-settings-body hidden">
+        <p class="hint">
+          Укажи URL своего Cloudflare Worker — после анализа лица Claude даст персональные рекомендации.
+          Код воркера лежит в <code>worker.js</code> в репозитории.
+          Фото никуда не отправляется — только числа метрик.
+        </p>
+        <div class="settings-row">
+          <input id="workerUrlInput" type="url"
+            placeholder="https://face-metrics-ai.your-name.workers.dev"
+            class="settings-input" />
+          <button id="saveWorkerUrl" class="btn btn-primary">Сохранить</button>
+        </div>
+        <p id="workerStatus" class="hint" style="margin-top:8px;"></p>
+      </div>
+    </section>
+
     <section id="disclaimer" class="card disclaimer">
       <h2>Как это работает</h2>
       <p>
         Инструмент измеряет геометрические пропорции лица (соотношение третей,
-        ширину скул/лба/челюсти, симметрию относительно центральной оси) и
+        ширину скул/лба/челюсти, симметрию относитеньно центральной оси) и
         на основе этих чисел определяет общую форму лица и даёт справочные
         рекомендации по стрижкам, которые обычно сочетаются с такой формой.
       </p>
       <p>
         <strong>Это не оценка привлекательности.</strong> Модель не делает никаких
-        выводов о красоте или желательности лица — только измеряет геометрию,
-        как это делает любой портной или стилист с сантиметровой лентой.
+        выводов о красоте или желательности лица — только измеряет геометрию.
       </p>
       <p>
         Вся обработка происходит локально в вашем браузере. Фото никуда не
-        отправляется, не сохраняется и не покидает устройство. После закрытия
-        страницы данные удаляются.
+        отправляется, не сохраняется и не покидает устройство.
       </p>
     </section>
 
@@ -86,8 +105,13 @@
         </div>
       </div>
 
+      <div id="aiResults" class="ai-results hidden">
+        <h2>ИИ-рекомендации <span class="ai-badge">Claude</span></h2>
+        <div id="aiContent" class="ai-content"></div>
+      </div>
+
       <div id="recommendations" class="recommendations">
-        <h2>3. Рекомендации</h2>
+        <h2>Базовые рекомендации</h2>
         <div id="haircutRecs" class="rec-block">
           <h3>По форме лица: стрижка и укладка</h3>
           <ul id="haircutList"></ul>
@@ -99,9 +123,8 @@
       </div>
 
       <p class="caveat">
-        Это справочные рекомендации на основе общих геометрических принципов
-        стайлинга, а не персональная консультация. Лучший результат даст очный
-        стилист, который учтёт текстуру волос, образ жизни и ваши предпочтения.
+        ИИ-рекомендации и базовые правила — справочные, а не персональная консультация.
+        Лучший результат даст очный стилист.
       </p>
     </section>
 
@@ -118,10 +141,8 @@
     </div>
   </footer>
 
-  <!-- MediaPipe Face Mesh (через CDN, выполняется в браузере пользователя) -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
   <script src="metrics.js"></script>
   <script src="recommendations.js"></script>
   <script src="app.js"></script>

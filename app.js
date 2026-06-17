@@ -1,16 +1,3 @@
-/**
- * app.js
- *
- * Связывает UI, MediaPipe Face Mesh и модули metrics.js / recommendations.js.
- * Вся обработка происходит локально в браузере пользователя. Изображение
- * никуда не отправляется по сети — MediaPipe Face Mesh выполняется
- * полностью on-device (WASM), сетевой запрос идёт только один раз при
- * первой загрузке модели с CDN (кэшируется браузером).
- *
- * Никакие данные не сохраняются: после обработки кадра и закрытия
- * страницы изображение и landmarks удаляются из памяти.
- */
-
 const fileInput = document.getElementById("fileInput");
 const chooseFileBtn = document.getElementById("chooseFileBtn");
 const uploadArea = document.getElementById("uploadArea");
@@ -23,6 +10,38 @@ const resultsBox = document.getElementById("results");
 const errorBox = document.getElementById("errorBox");
 const errorText = document.getElementById("errorText");
 
+// --- AI settings ---
+const aiSettingsToggle = document.getElementById("aiSettingsToggle");
+const aiSettingsBody = document.getElementById("aiSettingsBody");
+const toggleIcon = document.getElementById("toggleIcon");
+const workerUrlInput = document.getElementById("workerUrlInput");
+const saveWorkerUrlBtn = document.getElementById("saveWorkerUrl");
+const workerStatus = document.getElementById("workerStatus");
+
+const saved = localStorage.getItem("fm_worker_url");
+if (saved) {
+  workerUrlInput.value = saved;
+  workerStatus.textContent = "✓ URL сохранён";
+}
+
+aiSettingsToggle.addEventListener("click", () => {
+  const open = !aiSettingsBody.classList.contains("hidden");
+  aiSettingsBody.classList.toggle("hidden", open);
+  toggleIcon.textContent = open ? "▸" : "▾";
+});
+
+saveWorkerUrlBtn.addEventListener("click", () => {
+  const url = workerUrlInput.value.trim();
+  if (!url) {
+    localStorage.removeItem("fm_worker_url");
+    workerStatus.textContent = "URL удалён";
+    return;
+  }
+  localStorage.setItem("fm_worker_url", url);
+  workerStatus.textContent = "✓ Сохранено";
+});
+
+// --- FaceMesh ---
 let faceMesh = null;
 
 function initFaceMesh() {
@@ -69,6 +88,7 @@ resetBtn.addEventListener("click", () => {
   resultsBox.classList.add("hidden");
   errorBox.classList.add("hidden");
   uploadArea.classList.remove("hidden");
+  document.getElementById("aiResults").classList.add("hidden");
   fileInput.value = "";
 });
 
@@ -122,7 +142,6 @@ async function processImage(img) {
       const w = canvas.width;
       const h = canvas.height;
 
-      // Переводим нормализованные координаты (0..1) в пиксели исходного изображения
       const landmarks = rawLandmarks.map((p) => ({ x: p.x * w, y: p.y * h }));
 
       drawLandmarkOverlay(landmarks);
@@ -132,11 +151,11 @@ async function processImage(img) {
       const recs = buildRecommendations(shapeInfo);
 
       renderResults(metrics, shapeInfo, recs);
+      callAI(metrics, shapeInfo);
 
       previewWrap.classList.remove("hidden");
       resultsBox.classList.remove("hidden");
 
-      // Очищаем landmarks из памяти — данные нигде не сохраняются
       rawLandmarks.length = 0;
     });
 
@@ -188,4 +207,47 @@ function renderResults(metrics, shapeInfo, recs) {
     li.textContent = item;
     styleList.appendChild(li);
   });
+}
+
+async function callAI(metrics, shapeInfo) {
+  const workerUrl = localStorage.getItem("fm_worker_url");
+  if (!workerUrl) return;
+
+  const aiResults = document.getElementById("aiResults");
+  const aiContent = document.getElementById("aiContent");
+  aiResults.classList.remove("hidden");
+  aiContent.className = "ai-content";
+  aiContent.innerHTML = '<div class="spinner"></div>';
+
+  const [top, mid, bottom] = metrics.thirdsRatio.map((v) => Math.round(v * 100));
+
+  const prompt = `Ты профессиональный стилист-парикмахер. Клиент прошёл геометрический анализ лица. Дай конкретные персональные рекомендации.
+
+Результаты анализа:
+- Форма лица: ${shapeInfo.shape} (характеристика: ${shapeInfo.desc})
+- Симметрия: ${Math.round(metrics.symmetryScore * 100)}%
+- Пропорции третей (лоб / нос / нижняя часть): ${top}% / ${mid}% / ${bottom}%
+- Соотношение ширина/высота: ${metrics.widthHeightRatio.toFixed(2)}
+- Ширина лба: ${Math.round(metrics.foreheadWidth)}px, скул: ${Math.round(metrics.cheekboneWidth)}px, челюсти: ${Math.round(metrics.jawWidth)}px
+
+Ответь четырьмя блоками без markdown-разметки (без звёздочек, решёток, заголовков), только обычный текст:
+
+1. Рекомендуемые стрижки — конкретные названия (3–4 варианта) и краткое объяснение, почему они подходят именно для этих пропорций
+2. Длина и текстура волос — что лучше работает для этих пропорций
+3. Укладка — направление, объём, текстура
+4. Чего избегать — конкретные примеры`;
+
+  try {
+    const res = await fetch(workerUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    aiContent.textContent = data.text || "Пустой ответ от модели.";
+  } catch (err) {
+    aiContent.className = "ai-content ai-error";
+    aiContent.textContent = `Ошибка: ${err.message}. Проверьте URL воркера.`;
+  }
 }
