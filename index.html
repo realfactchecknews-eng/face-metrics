@@ -91,15 +91,60 @@
 <main class="container" id="mainContent">
 
   <section id="uploadSection">
-    <div class="upload-area" id="uploadArea">
-      <input type="file" id="fileInput" accept="image/*" hidden />
-      <div class="upload-inner">
-        <div class="upload-icon">&#9678;</div>
-        <p class="upload-title">Загрузите фото лица</p>
-        <p class="upload-hint">Фронтальный ракурс &middot; Равномерное освещение &middot; JPG или PNG</p>
-        <button id="chooseFileBtn" class="btn btn-primary">Выбрать файл</button>
+    <div class="upload-grid">
+
+      <!-- Front photo (required) -->
+      <div class="upload-slot">
+        <div class="slot-header">
+          <span class="slot-eyebrow">ФРОНТ</span>
+          <span class="slot-tag slot-required">обязательно</span>
+        </div>
+        <div class="upload-area" id="frontArea">
+          <input type="file" id="fileInput" accept="image/*" hidden />
+          <div class="upload-inner" id="frontPlaceholder">
+            <div class="upload-icon">&#9678;</div>
+            <p class="upload-title">Фронтальное фото</p>
+            <p class="upload-hint">Лицо прямо &middot; Равномерный свет</p>
+            <button id="chooseFileBtn" class="btn btn-primary" style="margin-top:16px">Выбрать файл</button>
+          </div>
+          <div class="upload-thumb hidden" id="frontThumb">
+            <img id="frontThumbImg" alt="" />
+            <button class="thumb-remove" id="frontRemove" type="button">&#10005;</button>
+          </div>
+        </div>
       </div>
+
+      <!-- Side profile photo (optional) -->
+      <div class="upload-slot">
+        <div class="slot-header">
+          <span class="slot-eyebrow">ПРОФИЛЬ</span>
+          <span class="slot-tag slot-optional">опционально</span>
+        </div>
+        <div class="upload-area upload-area-opt" id="sideArea">
+          <input type="file" id="sideInput" accept="image/*" hidden />
+          <div class="upload-inner" id="sidePlaceholder">
+            <div class="upload-icon upload-icon-dim">&#9678;</div>
+            <p class="upload-title upload-title-dim">Фото профиля</p>
+            <p class="upload-hint">Для точной оценки челюсти</p>
+            <p class="upload-hint upload-hint-gold">&uarr; точность анализа</p>
+            <button id="chooseSideBtn" class="btn" style="margin-top:14px;font-size:.78rem;padding:10px 22px">Добавить</button>
+          </div>
+          <div class="upload-thumb hidden" id="sideThumb">
+            <img id="sideThumbImg" alt="" />
+            <button class="thumb-remove" id="sideRemove" type="button">&#10005;</button>
+          </div>
+        </div>
+      </div>
+
     </div>
+
+    <button id="analyzeBtn" class="btn-analyze hidden">
+      <span class="btn-analyze-fill"></span>
+      <span class="btn-analyze-inner">
+        <span class="btn-analyze-text">АНАЛИЗИРОВАТЬ</span>
+        <span class="btn-analyze-arr">&#8594;</span>
+      </span>
+    </button>
   </section>
 
   <div id="analysisView" class="hidden">
@@ -107,7 +152,7 @@
       <div class="canvas-wrap">
         <canvas id="canvas"></canvas>
       </div>
-      <button id="resetBtn" class="btn-reset">↩ Загрузить другое</button>
+      <button id="resetBtn" class="btn-reset">&#8617; Загрузить другое</button>
     </div>
 
     <div id="loading" class="loading-card hidden">
@@ -116,13 +161,31 @@
         <div class="scan-ring scan-ring-2"></div>
         <div class="scan-dot"></div>
       </div>
-      <p>Сканирование геометрии лица…</p>
+      <p>Сканирование геометрии лица&hellip;</p>
     </div>
 
     <div id="results" class="hidden">
-      <div id="aiLoading" class="ai-loading-card hidden">
-        <div class="spinner spinner-sm"></div>
-        <p class="ai-loading-text">ИИ анализирует изображение…</p>
+
+      <!-- AI HUD loading animation -->
+      <div id="aiLoading" class="ai-hud-card hidden">
+        <div class="hud-corners">
+          <span class="hc hc-tl"></span><span class="hc hc-tr"></span>
+          <span class="hc hc-bl"></span><span class="hc hc-br"></span>
+        </div>
+        <div class="hud-header">
+          <span class="hud-dot"></span>
+          <span class="hud-label">AI ANALYSIS IN PROGRESS</span>
+          <span class="hud-label-side" id="hudSideLabel"></span>
+        </div>
+        <div class="hud-phase-row">
+          <span class="hud-caret">&#8250;</span>
+          <span class="hud-phase" id="hudPhase">INITIALIZING</span>
+        </div>
+        <div class="hud-bar-row">
+          <div class="hud-bar-track"><div class="hud-bar-fill" id="hudBarFill"></div></div>
+          <span class="hud-bar-pct" id="hudBarPct">0%</span>
+        </div>
+        <div class="hud-stream" id="hudStream"></div>
       </div>
 
       <div id="aiReport" class="hidden">
