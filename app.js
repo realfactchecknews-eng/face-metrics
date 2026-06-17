@@ -1,54 +1,56 @@
 const fileInput = document.getElementById("fileInput");
 const chooseFileBtn = document.getElementById("chooseFileBtn");
 const uploadArea = document.getElementById("uploadArea");
-const previewWrap = document.getElementById("previewWrap");
+const uploadSection = document.getElementById("uploadSection");
+const analysisView = document.getElementById("analysisView");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const resetBtn = document.getElementById("resetBtn");
-const loadingBox = document.getElementById("loading");
-const resultsBox = document.getElementById("results");
+const loadingCard = document.getElementById("loading");
+const resultsDiv = document.getElementById("results");
 const errorBox = document.getElementById("errorBox");
 const errorText = document.getElementById("errorText");
 
-// --- AI settings ---
 const aiSettingsToggle = document.getElementById("aiSettingsToggle");
 const aiSettingsBody = document.getElementById("aiSettingsBody");
-const toggleIcon = document.getElementById("toggleIcon");
 const workerUrlInput = document.getElementById("workerUrlInput");
 const saveWorkerUrlBtn = document.getElementById("saveWorkerUrl");
 const workerStatus = document.getElementById("workerStatus");
 
-const saved = localStorage.getItem("fm_worker_url");
-if (saved) {
-  workerUrlInput.value = saved;
+const savedUrl = localStorage.getItem("fm_worker_url");
+if (savedUrl) {
+  workerUrlInput.value = savedUrl;
   workerStatus.textContent = "✓ URL сохранён";
 }
 
-aiSettingsToggle.addEventListener("click", () => {
-  const open = !aiSettingsBody.classList.contains("hidden");
-  aiSettingsBody.classList.toggle("hidden", open);
-  toggleIcon.textContent = open ? "▸" : "▾";
+aiSettingsToggle.addEventListener("click", (e) => {
+  e.stopPropagation();
+  aiSettingsBody.classList.toggle("hidden");
 });
 
 saveWorkerUrlBtn.addEventListener("click", () => {
   const url = workerUrlInput.value.trim();
-  if (!url) {
+  if (url) {
+    localStorage.setItem("fm_worker_url", url);
+    workerStatus.textContent = "✓ Сохранено";
+  } else {
     localStorage.removeItem("fm_worker_url");
     workerStatus.textContent = "URL удалён";
-    return;
   }
-  localStorage.setItem("fm_worker_url", url);
-  workerStatus.textContent = "✓ Сохранено";
 });
 
-// --- FaceMesh ---
+document.addEventListener("click", (e) => {
+  if (!document.getElementById("aiSettingsPanel").contains(e.target)) {
+    aiSettingsBody.classList.add("hidden");
+  }
+});
+
 let faceMesh = null;
 
 function initFaceMesh() {
   if (faceMesh) return faceMesh;
   faceMesh = new FaceMesh({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
   });
   faceMesh.setOptions({
     maxNumFaces: 1,
@@ -62,8 +64,7 @@ function initFaceMesh() {
 chooseFileBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (file) handleFile(file);
+  if (e.target.files[0]) handleFile(e.target.files[0]);
 });
 
 ["dragover", "dragenter"].forEach((evt) =>
@@ -79,23 +80,23 @@ fileInput.addEventListener("change", (e) => {
   })
 );
 uploadArea.addEventListener("drop", (e) => {
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
 });
 
 resetBtn.addEventListener("click", () => {
-  previewWrap.classList.add("hidden");
-  resultsBox.classList.add("hidden");
+  uploadSection.classList.remove("hidden");
+  analysisView.classList.add("hidden");
+  resultsDiv.classList.add("hidden");
+  loadingCard.classList.add("hidden");
   errorBox.classList.add("hidden");
-  uploadArea.classList.remove("hidden");
-  document.getElementById("aiResults").classList.add("hidden");
   fileInput.value = "";
 });
 
 function showError(msg) {
   errorText.textContent = msg;
   errorBox.classList.remove("hidden");
-  loadingBox.classList.add("hidden");
+  loadingCard.classList.add("hidden");
+  analysisView.classList.remove("hidden");
 }
 
 function handleFile(file) {
@@ -103,15 +104,14 @@ function handleFile(file) {
     showError("Пожалуйста, загрузите файл изображения (JPG, PNG).");
     return;
   }
-
   errorBox.classList.add("hidden");
-  resultsBox.classList.add("hidden");
-  uploadArea.classList.add("hidden");
-  loadingBox.classList.remove("hidden");
+  resultsDiv.classList.add("hidden");
+  uploadSection.classList.add("hidden");
+  analysisView.classList.remove("hidden");
+  loadingCard.classList.remove("hidden");
 
   const img = new Image();
   const reader = new FileReader();
-
   reader.onload = (e) => {
     img.onload = () => processImage(img);
     img.onerror = () => showError("Не удалось загрузить изображение.");
@@ -124,24 +124,20 @@ function handleFile(file) {
 async function processImage(img) {
   try {
     const mesh = initFaceMesh();
-
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
 
     mesh.onResults((results) => {
-      loadingBox.classList.add("hidden");
+      loadingCard.classList.add("hidden");
 
       if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
-        showError("Не удалось распознать лицо на фото. Попробуйте другое изображение — лицо должно быть направлено прямо в камеру и хорошо освещено.");
-        previewWrap.classList.remove("hidden");
+        showError("Не удалось распознать лицо. Попробуйте другое фото — лицо должно быть направлено в камеру и хорошо освещено.");
         return;
       }
 
       const rawLandmarks = results.multiFaceLandmarks[0];
-      const w = canvas.width;
-      const h = canvas.height;
-
+      const w = canvas.width, h = canvas.height;
       const landmarks = rawLandmarks.map((p) => ({ x: p.x * w, y: p.y * h }));
 
       drawLandmarkOverlay(landmarks);
@@ -150,11 +146,9 @@ async function processImage(img) {
       const shapeInfo = classifyFaceShape(metrics);
       const recs = buildRecommendations(shapeInfo);
 
-      renderResults(metrics, shapeInfo, recs);
+      renderBaseResults(metrics, shapeInfo, recs);
+      resultsDiv.classList.remove("hidden");
       callAI(metrics, shapeInfo);
-
-      previewWrap.classList.remove("hidden");
-      resultsBox.classList.remove("hidden");
 
       rawLandmarks.length = 0;
     });
@@ -162,35 +156,29 @@ async function processImage(img) {
     await mesh.send({ image: canvas });
   } catch (err) {
     console.error(err);
-    showError("Произошла ошибка при анализе изображения. Попробуйте обновить страницу и повторить попытку.");
+    showError("Ошибка при анализе. Попробуйте обновить страницу.");
   }
 }
 
 function drawLandmarkOverlay(landmarks) {
   ctx.save();
-  ctx.fillStyle = "rgba(108, 140, 255, 0.7)";
+  ctx.fillStyle = "rgba(240, 236, 230, 0.45)";
   landmarks.forEach((p) => {
     ctx.beginPath();
-    ctx.arc(p.x, p.y, Math.max(1, canvas.width / 400), 0, 2 * Math.PI);
+    ctx.arc(p.x, p.y, Math.max(1, canvas.width / 500), 0, 2 * Math.PI);
     ctx.fill();
   });
   ctx.restore();
 }
 
-function renderResults(metrics, shapeInfo, recs) {
+function renderBaseResults(metrics, shapeInfo, recs) {
   document.getElementById("faceShape").textContent = shapeInfo.shape;
-
-  const symEl = document.getElementById("symmetryScore");
-  symEl.textContent = getSymmetryNote(metrics.symmetryScore);
-
+  document.getElementById("symmetryScore").textContent = getSymmetryNote(metrics.symmetryScore);
   const [top, mid, bottom] = metrics.thirdsRatio.map((v) => Math.round(v * 100));
   document.getElementById("thirdsRatio").textContent = `${top}% / ${mid}% / ${bottom}%`;
-
-  document.getElementById("widthHeightRatio").textContent =
-    metrics.widthHeightRatio.toFixed(2) + " (ширина / высота)";
-
+  document.getElementById("widthHeightRatio").textContent = metrics.widthHeightRatio.toFixed(2);
   document.getElementById("zoneWidths").textContent =
-    `лоб ${Math.round(metrics.foreheadWidth)} · скулы ${Math.round(metrics.cheekboneWidth)} · челюсть ${Math.round(metrics.jawWidth)} (px)`;
+    `лоб ${Math.round(metrics.foreheadWidth)} · скулы ${Math.round(metrics.cheekboneWidth)} · челюсть ${Math.round(metrics.jawWidth)} px`;
 
   const haircutList = document.getElementById("haircutList");
   haircutList.innerHTML = "";
@@ -209,45 +197,181 @@ function renderResults(metrics, shapeInfo, recs) {
   });
 }
 
+function canvasToBase64(maxSize = 640) {
+  const off = document.createElement("canvas");
+  const scale = Math.min(1, maxSize / Math.max(canvas.width, canvas.height));
+  off.width = Math.round(canvas.width * scale);
+  off.height = Math.round(canvas.height * scale);
+  off.getContext("2d").drawImage(canvas, 0, 0, off.width, off.height);
+  return off.toDataURL("image/jpeg", 0.75).split(",")[1];
+}
+
 async function callAI(metrics, shapeInfo) {
   const workerUrl = localStorage.getItem("fm_worker_url");
   if (!workerUrl) return;
 
-  const aiResults = document.getElementById("aiResults");
-  const aiContent = document.getElementById("aiContent");
-  aiResults.classList.remove("hidden");
-  aiContent.className = "ai-content";
-  aiContent.innerHTML = '<div class="spinner"></div>';
+  const aiLoading = document.getElementById("aiLoading");
+  const aiReport = document.getElementById("aiReport");
+  const aiError = document.getElementById("aiError");
+  const aiErrorText = document.getElementById("aiErrorText");
+
+  aiLoading.classList.remove("hidden");
+  aiReport.classList.add("hidden");
+  aiError.classList.add("hidden");
 
   const [top, mid, bottom] = metrics.thirdsRatio.map((v) => Math.round(v * 100));
 
-  const prompt = `Ты профессиональный стилист-парикмахер. Клиент прошёл геометрический анализ лица. Дай конкретные персональные рекомендации.
+  const prompt = `Ты — профессиональный эксперт по эстетике лица, стилистике и грумингу. Проведи честный, объективный анализ лица на фото.
 
-Результаты анализа:
-- Форма лица: ${shapeInfo.shape} (характеристика: ${shapeInfo.desc})
+Геометрические данные (MediaPipe Face Mesh):
+- Форма лица: ${shapeInfo.shape} (${shapeInfo.desc})
 - Симметрия: ${Math.round(metrics.symmetryScore * 100)}%
 - Пропорции третей (лоб / нос / нижняя часть): ${top}% / ${mid}% / ${bottom}%
 - Соотношение ширина/высота: ${metrics.widthHeightRatio.toFixed(2)}
 - Ширина лба: ${Math.round(metrics.foreheadWidth)}px, скул: ${Math.round(metrics.cheekboneWidth)}px, челюсти: ${Math.round(metrics.jawWidth)}px
 
-Ответь четырьмя блоками без markdown-разметки (без звёздочек, решёток, заголовков), только обычный текст:
+Дай честную, реалистичную оценку по шкале 1–10 по каждой категории. Не завышай баллы — реальная оценка полезнее. Учти всё видимое на фото: черты лица, кожу, волосы, брови, уход.
 
-1. Рекомендуемые стрижки — конкретные названия (3–4 варианта) и краткое объяснение, почему они подходят именно для этих пропорций
-2. Длина и текстура волос — что лучше работает для этих пропорций
-3. Укладка — направление, объём, текстура
-4. Чего избегать — конкретные примеры`;
+Отвечай СТРОГО в следующем формате (без markdown, без звёздочек, без решёток):
+
+ОБЩИЙ_БАЛЛ: X/10
+[Одно-два предложения — общее впечатление]
+
+СИММЕТРИЯ: X/10
+[1–2 предложения]
+
+ПРОПОРЦИИ: X/10
+[1–2 предложения]
+
+ЧЕРТЫ_ЛИЦА: X/10
+[2–3 предложения о глазах, носе, губах, скулах, подбородке]
+
+КОЖА: X/10
+[1–2 предложения о текстуре, тоне, состоянии]
+
+СТИЛЬ_И_УХОД: X/10
+[1–2 предложения о волосах, бровях, общем уходе]
+
+РЕКОМЕНДАЦИИ:
+1. [конкретный совет — стрижка, груминг, скинкер, брови или стилинг]
+2. [конкретный совет]
+3. [конкретный совет]
+4. [конкретный совет]
+5. [конкретный совет]`;
 
   try {
+    const image = canvasToBase64(640);
     const res = await fetch(workerUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, image }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    aiContent.textContent = data.text || "Пустой ответ от модели.";
+    aiLoading.classList.add("hidden");
+    renderAIReport(data.text || "Пустой ответ.");
+    aiReport.classList.remove("hidden");
   } catch (err) {
-    aiContent.className = "ai-content ai-error";
-    aiContent.textContent = `Ошибка: ${err.message}. Проверьте URL воркера.`;
+    aiLoading.classList.add("hidden");
+    aiErrorText.textContent = `Ошибка: ${err.message}. Проверьте URL воркера в настройках.`;
+    aiError.classList.remove("hidden");
+  }
+}
+
+function parseAIReport(text) {
+  const result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
+
+  const overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_]+:|$)/);
+  if (overallM) {
+    result.overall = parseFloat(overallM[1]);
+    result.overallDesc = overallM[2].trim();
+  }
+
+  const cats = [
+    { key: "СИММЕТРИЯ", label: "Симметрия" },
+    { key: "ПРОПОРЦИИ", label: "Пропорции" },
+    { key: "ЧЕРТЫ_ЛИЦА", label: "Черты лица" },
+    { key: "КОЖА", label: "Кожа" },
+    { key: "СТИЛЬ_И_УХОД", label: "Стиль и уход" },
+  ];
+
+  cats.forEach(({ key, label }) => {
+    const re = new RegExp(`${key}:\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_]+:|$)`);
+    const m = text.match(re);
+    if (m) result.categories.push({ label, score: parseFloat(m[1]), text: m[2].trim() });
+  });
+
+  const recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
+  if (recsM) {
+    result.recommendations = recsM[1]
+      .split("\n")
+      .map((l) => l.replace(/^\d+\.\s*/, "").trim())
+      .filter(Boolean);
+  }
+
+  return result;
+}
+
+function renderAIReport(text) {
+  const parsed = parseAIReport(text);
+
+  document.getElementById("overallScoreNum").textContent =
+    parsed.overall !== null ? parsed.overall.toFixed(1) : "—";
+  document.getElementById("overallDesc").textContent = parsed.overallDesc;
+
+  const catContainer = document.getElementById("categoryScores");
+  catContainer.innerHTML = "";
+
+  if (parsed.categories.length > 0) {
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "eyebrow";
+    eyebrow.textContent = "ДЕТАЛЬНЫЙ АНАЛИЗ";
+    catContainer.appendChild(eyebrow);
+
+    parsed.categories.forEach(({ label, score, text }) => {
+      const row = document.createElement("div");
+      row.className = "score-row";
+
+      const header = document.createElement("div");
+      header.className = "score-row-header";
+      header.innerHTML = `<span class="score-name">${label}</span><span class="score-val">${score.toFixed(1)}<span style="color:var(--text-dim);font-size:.75em">/10</span></span>`;
+
+      const track = document.createElement("div");
+      track.className = "score-bar-track";
+      const fill = document.createElement("div");
+      fill.className = "score-bar-fill";
+      fill.style.width = "0%";
+      track.appendChild(fill);
+
+      const desc = document.createElement("p");
+      desc.className = "score-text";
+      desc.textContent = text;
+
+      row.appendChild(header);
+      row.appendChild(track);
+      row.appendChild(desc);
+      catContainer.appendChild(row);
+
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        fill.style.width = `${score * 10}%`;
+      }));
+    });
+  } else {
+    const pre = document.createElement("pre");
+    pre.style.cssText = "white-space:pre-wrap;font-size:0.85rem;color:var(--text-dim);line-height:1.7;font-family:inherit;";
+    pre.textContent = text;
+    catContainer.appendChild(pre);
+  }
+
+  const aiRecs = document.getElementById("aiRecs");
+  const recsList = document.getElementById("recsList");
+  recsList.innerHTML = "";
+  if (parsed.recommendations.length > 0) {
+    parsed.recommendations.forEach((rec) => {
+      const li = document.createElement("li");
+      li.textContent = rec;
+      recsList.appendChild(li);
+    });
+    aiRecs.classList.remove("hidden");
   }
 }
