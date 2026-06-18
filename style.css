@@ -1092,9 +1092,9 @@ canvas {
 }
 
 .overall-desc {
-  max-width: 600px;
+  max-width: 640px;
   margin: 0 auto;
-  font-size: 0.95rem;
+  font-size: 1.08rem;
   line-height: 1.8;
   color: var(--text-bright);
 }
@@ -1144,12 +1144,13 @@ canvas {
 
 .score-name {
   font-weight: 400;
+  font-size: 1.1rem;
   color: var(--text-bright);
 }
 
 .score-val {
   font-family: 'SF Mono', Consolas, monospace;
-  font-size: 1.1em;
+  font-size: 1.25em;
   color: var(--accent);
 }
 
@@ -1168,8 +1169,8 @@ canvas {
 }
 
 .score-text {
-  font-size: 0.85rem;
-  line-height: 1.7;
+  font-size: 1rem;
+  line-height: 1.75;
   color: var(--text-dim);
   margin: 0;
 }
@@ -1189,11 +1190,11 @@ canvas {
 }
 
 .recs-list li {
-  margin-bottom: 12px;
-  padding-left: 20px;
+  margin-bottom: 14px;
+  padding-left: 22px;
   position: relative;
-  font-size: 0.9rem;
-  line-height: 1.6;
+  font-size: 1.02rem;
+  line-height: 1.7;
   color: var(--text-bright);
 }
 
@@ -1202,6 +1203,15 @@ canvas {
   position: absolute;
   left: 0;
   color: var(--accent);
+}
+
+/* Крупнее и читаемее: типографика отчёта на ПК */
+@media (min-width: 768px) {
+  .overall-desc { font-size: 1.22rem; line-height: 1.85; }
+  .score-name   { font-size: 1.22rem; }
+  .score-text   { font-size: 1.12rem; }
+  .recs-list li { font-size: 1.14rem; }
+  .eyebrow      { font-size: 0.74rem; }
 }
 
 .ai-error-card {
