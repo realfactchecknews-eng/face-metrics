@@ -454,14 +454,36 @@ function computeFaceMetrics(lm) {
   var faceHeight     = _dist(lm[10],  lm[152]);
   var fwhrH = _dist(lm[9], lm[13]);
   var widthHeightRatio = fwhrH > 0 ? cheekboneWidth / fwhrH : 1.8;
-  var cx      = (lm[234].x + lm[454].x) / 2;
-  var cbLeft  = Math.abs(lm[234].x - cx);
-  var cbRight = Math.abs(lm[454].x - cx);
-  var cbSym   = cbLeft > 0 && cbRight > 0 ? Math.min(cbLeft, cbRight) / Math.max(cbLeft, cbRight) : 1;
-  var jawLeft  = Math.abs(lm[58].x  - cx);
-  var jawRight = Math.abs(lm[288].x - cx);
-  var jawSym   = jawLeft > 0 && jawRight > 0 ? Math.min(jawLeft, jawRight) / Math.max(jawLeft, jawRight) : 1;
-  var symmetryScore = (cbSym + jawSym) / 2;
+
+  // Симметрия по НАСТОЯЩЕЙ средней линии лица (нос/лоб/подбородок), а не по
+  // средней точке самих парных точек (старый баг: cx брался как середина
+  // пары → расстояния всегда равны → симметрия всегда ~идеальна → завышение).
+  var midL = [lm[10], lm[168], lm[1], lm[152], lm[0]].filter(Boolean);
+  var cx = 0; midL.forEach(function(p){ cx += p.x; }); cx /= (midL.length || 1);
+  // По вертикали средняя линия может быть наклонена — учитываем наклон оси.
+  var axisTop = lm[10] || lm[168], axisBot = lm[152];
+  var slope = (axisTop && axisBot && (axisBot.y - axisTop.y) !== 0)
+    ? (axisBot.x - axisTop.x) / (axisBot.y - axisTop.y) : 0;
+  function axisX(y) { return cx + slope * (y - (axisTop ? axisTop.y : y)); }
+
+  var PAIRS = [[33,263],[133,362],[61,291],[58,288],[234,454],[70,300],[132,361],[205,425]];
+  var hSum = 0, vSum = 0, n = 0;
+  PAIRS.forEach(function(pr){
+    var L = lm[pr[0]], R = lm[pr[1]];
+    if (!L || !R) return;
+    var dL = Math.abs(L.x - axisX(L.y));
+    var dR = Math.abs(R.x - axisX(R.y));
+    if (dL <= 0 || dR <= 0) return;
+    hSum += Math.min(dL, dR) / Math.max(dL, dR);   // горизонтальное совпадение
+    vSum += Math.abs(L.y - R.y);                    // вертикальный перекос пары
+    n++;
+  });
+  var fh = faceHeight > 0 ? faceHeight : 1;
+  var hSym = n > 0 ? hSum / n : 1;                              // 0..1
+  var vSym = n > 0 ? 1 - Math.min((vSum / n) / (fh * 0.04), 1) : 1; // штраф за наклон
+  // Итог: 70% горизонталь + 30% вертикаль, плюс лёгкая нормировка диапазона,
+  // чтобы реальные лица давали ~80-97%, а не всегда под 100%.
+  var symmetryScore = Math.max(0.4, Math.min(1, (hSym * 0.7 + vSym * 0.3)));
   return { cheekboneWidth: cheekboneWidth, jawWidth: jawWidth, foreheadWidth: foreheadWidth, faceHeight: faceHeight, widthHeightRatio: widthHeightRatio, symmetryScore: symmetryScore };
 }
 
@@ -767,7 +789,7 @@ async function callAI(metrics, shapeInfo) {
   var jawInstruction = hasSide
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
     : "Only a frontal view is available -- no side profile provided. For ДЖОУЛАЙН_MANDIBLE, judge what IS visible from the front fairly: bigonial width, jaw taper, chin width and frontal definition. Add the short note '-- оценка по анфас, профиль не предоставлен.' Be slightly conservative because gonial angle and chin projection are not fully visible, but do NOT artificially cap or lowball the score -- a well-defined jaw visible from the front can still score 7-8.";
-  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: average / completely normal person -- this is the BASELINE, most features sit here\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nThe typical person averages around 5/10 overall. Do NOT inflate: a 7+ must be earned by a genuinely strong, visible feature. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Измеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
+  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: average / completely normal person -- this is the BASELINE, most features sit here\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nThe typical person averages around 5/10 overall. Do NOT inflate: a 7+ must be earned by a genuinely strong, visible feature. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nИСПОЛЬЗУЙ ОДИН ЗНАК ПОСЛЕ ЗАПЯТОЙ для КАЖДОГО балла (например 6.3/10, 7.8/10, 4.6/10). НЕ округляй до целого -- дробная точность обязательна и помогает различать близкие черты.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Измеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
   try {
     var res = await fetch(WORKER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -1053,7 +1075,7 @@ function roundRect(c2, x, y, w, h, r) {
   var btn = document.getElementById("musicBtn");
   var audio = document.getElementById("bgMusic");
   if (!btn || !audio) return;
-  audio.volume = 0.35;
+  audio.volume = 0.16;
   var on = false;
   function sync() {
     btn.textContent = on ? "🎵" : "🔇";

@@ -1498,3 +1498,7 @@ canvas {
   .consent-actions { flex-direction: column-reverse; }
   .consent-actions button { width: 100%; }
 }
+
+/* Sticky-кнопки появляются только после интро+лендинга (когда показан сам апп) */
+.mute-btn { opacity: 0; pointer-events: none; transition: opacity .6s ease, border-color .15s, transform .15s; }
+body.post-landing .mute-btn { opacity: 1; pointer-events: auto; }
