@@ -16,7 +16,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=3" />
+<link rel="stylesheet" href="style.css?v=4" />
 </head>
 <body>
 
@@ -260,7 +260,11 @@
 <footer class="site-footer" id="mainFooter">
   <div class="container">
     <p>FaceRate &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
-    <p style="margin-top:8px"><a href="terms.html" style="color:#888;text-decoration:none">Пользовательское соглашение</a></p>
+    <p style="margin-top:8px">
+      <a href="terms.html" style="color:#888;text-decoration:none">Пользовательское соглашение</a>
+      &nbsp;&middot;&nbsp;
+      <a href="privacy.html" style="color:#888;text-decoration:none">Политика конфиденциальности</a>
+    </p>
   </div>
 </footer>
 
@@ -288,7 +292,10 @@
             <b>администрация не несёт ответственности</b> за ваши решения и любые
             последствия, основанные на результатах.</li>
       </ul>
-      <p class="consent-full-link"><a href="terms.html" target="_blank" rel="noopener">Полный текст соглашения →</a></p>
+      <p class="consent-full-link">
+        <a href="terms.html" target="_blank" rel="noopener">Полный текст соглашения →</a><br/>
+        <a href="privacy.html" target="_blank" rel="noopener">Политика конфиденциальности →</a>
+      </p>
     </div>
     <label class="consent-check-row">
       <input type="checkbox" id="consentCheck" />
@@ -309,6 +316,6 @@
 <button id="muteBtn" class="mute-btn" title="Звук уведомлений">&#128276;</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

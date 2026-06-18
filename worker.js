@@ -37,7 +37,16 @@ export default {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
         },
-        body: JSON.stringify({ model: 'qwen/qwen2.5-vl-72b-instruct', max_tokens: 2200, messages }),
+        // temperature низкая + фиксированный seed → одно и то же фото
+        // оценивается стабильно (а не каждый раз по-разному).
+        body: JSON.stringify({
+          model: 'qwen/qwen2.5-vl-72b-instruct',
+          max_tokens: 2200,
+          temperature: 0.2,
+          top_p: 0.9,
+          seed: 1337,
+          messages,
+        }),
       });
       data = await res.json();
     } catch (err) {
