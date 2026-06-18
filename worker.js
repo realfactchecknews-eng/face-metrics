@@ -22,7 +22,7 @@ export default {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
         },
-        body: JSON.stringify({ model: 'google/gemini-2.5-flash', max_tokens: 1500, messages }),
+        body: JSON.stringify({ model: 'google/gemini-2.5-flash', max_tokens: 2200, messages }),
       });
       data = await res.json();
     } catch (err) {

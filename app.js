@@ -494,17 +494,27 @@ async function processImage(img, sideImage) {
 
 // -- Face animation ----------------------------------------------------
 function runFaceAnimation(lm, metrics, onComplete) {
-  animateScan(lm, metrics, 1600, function() { setTimeout(onComplete, 400); });
+  animateScan(lm, metrics, 2300, function() { setTimeout(onComplete, 420); });
+}
+
+// easeInOutCubic — плавный разгон/торможение полосы сканирования
+function _easeInOut(p) {
+  return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
 }
 
 function animateScan(lm, metrics, duration, onComplete) {
   var t0 = performance.now();
   function frame(now) {
     var progress = Math.min((now - t0) / duration, 1);
-    var scanY    = progress * canvas.height;
+    var scanY    = _easeInOut(progress) * canvas.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(cleanImageCanvas, 0, 0);
-    ctx.fillStyle = "rgba(0,0,0,0.48)";
+    // Мягкая градиентная затемняющая маска ниже линии сканирования
+    var maskEnd = Math.min(canvas.height, scanY + canvas.height * 0.55);
+    var mask = ctx.createLinearGradient(0, scanY, 0, maskEnd);
+    mask.addColorStop(0, "rgba(0,0,0,0.12)");
+    mask.addColorStop(1, "rgba(0,0,0,0.55)");
+    ctx.fillStyle = mask;
     ctx.fillRect(0, scanY, canvas.width, canvas.height - scanY);
     drawMeshUpTo(lm, scanY);
     drawScanLine(scanY);
@@ -521,13 +531,16 @@ function animateScan(lm, metrics, duration, onComplete) {
 function drawScanLine(y) {
   if (y <= 0 || y >= canvas.height) return;
   ctx.save();
-  var grad = ctx.createLinearGradient(0, Math.max(0, y - 60), 0, y);
-  grad.addColorStop(0, "rgba(196,164,107,0)"); grad.addColorStop(1, "rgba(196,164,107,0.18)");
-  ctx.fillStyle = grad; ctx.fillRect(0, Math.max(0, y - 60), canvas.width, 62);
-  ctx.shadowColor = "#c4a46b"; ctx.shadowBlur = 16;
-  ctx.strokeStyle = "#c4a46b"; ctx.lineWidth = 1.5;
+  // Двусторонний мягкий ореол вокруг луча
+  var grad = ctx.createLinearGradient(0, y - 75, 0, y + 28);
+  grad.addColorStop(0,   "rgba(196,164,107,0)");
+  grad.addColorStop(0.72,"rgba(196,164,107,0.16)");
+  grad.addColorStop(1,   "rgba(196,164,107,0)");
+  ctx.fillStyle = grad; ctx.fillRect(0, y - 75, canvas.width, 103);
+  ctx.shadowColor = "#c4a46b"; ctx.shadowBlur = 22;
+  ctx.strokeStyle = "#e8d4a0"; ctx.lineWidth = 1.7;
   ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-  ctx.shadowBlur = 3; ctx.strokeStyle = "rgba(255,245,210,.85)"; ctx.lineWidth = .5; ctx.stroke();
+  ctx.shadowBlur = 4; ctx.strokeStyle = "rgba(255,250,235,.9)"; ctx.lineWidth = .6; ctx.stroke();
   ctx.restore();
 }
 
@@ -567,9 +580,9 @@ function drawMeshUpTo(lm, scanY) {
       ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
     });
   });
-  var dotR = Math.max(1, canvas.width / 700);
-  ctx.fillStyle = "rgba(196,164,107,.55)"; ctx.shadowBlur = 6;
-  for (var i = 0; i < lm.length; i += 4) {
+  var dotR = Math.max(0.8, canvas.width / 850);
+  ctx.fillStyle = "rgba(196,164,107,.5)"; ctx.shadowBlur = 5;
+  for (var i = 0; i < lm.length; i += 2) {
     if (lm[i] && lm[i].y < scanY) { ctx.beginPath(); ctx.arc(lm[i].x, lm[i].y, dotR, 0, Math.PI*2); ctx.fill(); }
   }
   ctx.restore();
@@ -585,9 +598,9 @@ function drawFullMesh(lm) {
       ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
     });
   });
-  var dotR = Math.max(1, canvas.width / 700);
-  ctx.fillStyle = "rgba(196,164,107,.5)"; ctx.shadowBlur = 6;
-  for (var i = 0; i < lm.length; i += 4) {
+  var dotR = Math.max(0.8, canvas.width / 850);
+  ctx.fillStyle = "rgba(196,164,107,.45)"; ctx.shadowBlur = 5;
+  for (var i = 0; i < lm.length; i += 2) {
     if (!lm[i]) continue;
     ctx.beginPath(); ctx.arc(lm[i].x, lm[i].y, dotR, 0, Math.PI*2); ctx.fill();
   }
@@ -717,7 +730,7 @@ async function callAI(metrics, shapeInfo) {
   var jawInstruction = hasSide
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
     : "Only a frontal view is available -- no side profile provided. For ДЖОУЛАЙН_MANDIBLE, judge what IS visible from the front fairly: bigonial width, jaw taper, chin width and frontal definition. Add the short note '-- оценка по анфас, профиль не предоставлен.' Be slightly conservative because gonial angle and chin projection are not fully visible, but do NOT artificially cap or lowball the score -- a well-defined jaw visible from the front can still score 7-8.";
-  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: average / completely normal person -- this is the BASELINE, most features sit here\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nThe typical person averages around 5/10 overall. Do NOT inflate: a 7+ must be earned by a genuinely strong, visible feature. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Измеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\n1. [Softmax: конкретный совет]\n2. [Softmax: конкретный совет]\n3. [Softmax: конкретный совет]\n4. [Hardmax: процедура + обоснование]\n5. [Hardmax: процедура + обоснование]";
+  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: average / completely normal person -- this is the BASELINE, most features sit here\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nThe typical person averages around 5/10 overall. Do NOT inflate: a 7+ must be earned by a genuinely strong, visible feature. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Измеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
   try {
     var res = await fetch(WORKER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -784,7 +797,13 @@ function parseAIReport(text) {
     if (m) result.categories.push({ label: cat.label, score: parseFloat(m[1]), text: m[3].trim() });
   });
   var recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
-  if (recsM) result.recommendations = recsM[1].split("\n").map(function(l){ return l.replace(/^\d+\.\s*/,"").trim(); }).filter(Boolean);
+  if (recsM) {
+    result.recommendations = recsM[1].split("\n")
+      .map(function(l){ return l.trim(); })
+      .filter(function(l){ return /^\d+[.)]/.test(l); })          // только пронумерованные строки
+      .map(function(l){ return l.replace(/^\d+[.)]\s*/, "").replace(/^(Softmax|Hardmax):\s*/i, function(m){ return m.toUpperCase().replace(":"," —"); }).trim(); })
+      .filter(Boolean);
+  }
   return result;
 }
 

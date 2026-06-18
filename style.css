@@ -833,6 +833,50 @@ canvas {
   display: block;
 }
 
+/* Decorative gold corner brackets around the photo */
+.cf {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  animation: cfIn 0.6s ease 0.15s forwards;
+}
+.cf-tl { top: 10px; left: 10px;  border-right: none;  border-bottom: none; }
+.cf-tr { top: 10px; right: 10px; border-left: none;   border-bottom: none; }
+.cf-bl { bottom: 10px; left: 10px;  border-right: none; border-top: none; }
+.cf-br { bottom: 10px; right: 10px; border-left: none;  border-top: none; }
+@keyframes cfIn {
+  from { opacity: 0; transform: scale(1.25); }
+  to   { opacity: 0.9; transform: scale(1); }
+}
+
+/* Soft animated glow framing the photo */
+.canvas-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  box-shadow: inset 0 0 36px rgba(196,164,107,0.12);
+  border: 1px solid rgba(196,164,107,0.25);
+  animation: glowPulse 3.2s ease-in-out infinite;
+}
+@keyframes glowPulse {
+  0%, 100% { box-shadow: inset 0 0 28px rgba(196,164,107,0.10); border-color: rgba(196,164,107,0.18); }
+  50%      { box-shadow: inset 0 0 46px rgba(196,164,107,0.20); border-color: rgba(196,164,107,0.40); }
+}
+
+/* Thumbnail entrance animation when a photo is uploaded */
+.upload-thumb:not(.hidden) {
+  animation: thumbIn 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes thumbIn {
+  from { opacity: 0; transform: scale(0.92); filter: blur(6px); }
+  to   { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+
 .btn-reset {
   width: 100%;
   background: rgba(196,164,107,0.08);
@@ -1115,6 +1159,10 @@ canvas {
   border-radius: 2px;
   margin-bottom: 30px;
 }
+
+/* Глобальная утилита: без неё #aiError/#aiReport не прятались,
+   и пустая карточка ошибки висела красным прямоугольником внизу. */
+.hidden { display: none !important; }
 
 .scores-card {
   padding: 40px 30px;
