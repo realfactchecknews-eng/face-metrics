@@ -265,6 +265,7 @@ function loadSideFile(file) {
 // -- Analyze -----------------------------------------------------------
 analyzeBtn.addEventListener("click", function() {
   if (!frontImg) return;
+  clearReport();
   errorBox.classList.add("hidden");
   resultsDiv.classList.add("hidden");
   uploadSection.classList.add("hidden");
@@ -287,7 +288,31 @@ resetBtn.addEventListener("click", function() {
   document.getElementById("sideThumb").classList.add("hidden");
   document.getElementById("sidePlaceholder").classList.remove("hidden");
   analyzeBtn.classList.add("hidden");
+  clearReport();
 });
+
+// Полностью обнуляет блок результатов, чтобы при анализе нового фото
+// не оставалось старого PSL-балла, категорий и заполненного кольца.
+function clearReport() {
+  var aiReport = document.getElementById("aiReport");
+  var aiError  = document.getElementById("aiError");
+  var aiRecs   = document.getElementById("aiRecs");
+  if (aiReport) aiReport.classList.add("hidden");
+  if (aiError)  aiError.classList.add("hidden");
+  if (aiRecs)   aiRecs.classList.add("hidden");
+
+  var num  = document.getElementById("overallScoreNum");
+  if (num) { num.textContent = "--"; num.style.color = ""; }
+  var desc = document.getElementById("overallDesc");
+  if (desc) desc.textContent = "";
+  var cats = document.getElementById("categoryScores");
+  if (cats) cats.innerHTML = "";
+  var recs = document.getElementById("recsList");
+  if (recs) recs.innerHTML = "";
+
+  var arc = document.getElementById("scoreRingArc");
+  if (arc) { arc.style.transition = "none"; arc.style.strokeDashoffset = "516"; arc.style.stroke = "#c4a46b"; }
+}
 
 function showError(msg) {
   errorText.textContent = msg;
