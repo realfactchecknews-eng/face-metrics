@@ -16,7 +16,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=4" />
+<link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
 
@@ -111,11 +111,16 @@
 <main class="container" id="mainContent">
 
   <section id="uploadSection">
-    <button id="lastResultBanner" class="last-result-banner hidden">
+    <div id="lastResultBanner" class="last-result-banner hidden">
       <span class="lrb-label">ПРОШЛЫЙ РЕЗУЛЬТАТ</span>
       <span class="lrb-score" id="lrbScore">--</span>
-      <span class="lrb-cta">скрыть &times;</span>
-    </button>
+      <span class="lrb-cta">Открыть отчёт →</span>
+      <button class="lrb-dismiss" type="button" title="Скрыть">&times;</button>
+    </div>
+
+    <!-- летающие размытые пилюли на фоне загрузки -->
+    <div class="pill-field" id="pillField" aria-hidden="true"></div>
+
     <div class="upload-grid">
 
       <!-- Front photo (required) -->
@@ -260,6 +265,11 @@
 <footer class="site-footer" id="mainFooter">
   <div class="container">
     <p>FaceRate &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
+    <p style="margin-top:10px">
+      <a href="glossary.html" style="color:#c4a46b;text-decoration:none">Луксмакс-словарь</a>
+      &nbsp;&middot;&nbsp;
+      <a href="#" id="feedbackLink" style="color:#c4a46b;text-decoration:none">Обратная связь</a>
+    </p>
     <p style="margin-top:8px">
       <a href="terms.html" style="color:#888;text-decoration:none">Пользовательское соглашение</a>
       &nbsp;&middot;&nbsp;
@@ -308,6 +318,36 @@
   </div>
 </div>
 
+<!-- LAST RESULT MODAL -->
+<div id="lastResultModal" class="lr-overlay hidden">
+  <div class="lr-box">
+    <button id="lastResultClose" class="lr-close" type="button">&times;</button>
+    <span class="eyebrow">ПРОШЛЫЙ ОТЧЁТ</span>
+    <div id="lastResultBody"></div>
+  </div>
+</div>
+
+<!-- FEEDBACK MODAL -->
+<div id="feedbackModal" class="consent-overlay hidden">
+  <div class="consent-box">
+    <button id="feedbackClose" class="lr-close" type="button">&times;</button>
+    <span class="eyebrow">ОБРАТНАЯ СВЯЗЬ</span>
+    <h2 class="consent-title">Пожелания и предложения</h2>
+    <p class="consent-body" style="margin-bottom:18px">Что улучшить? Чего не хватает?
+    Нашли ошибку? Напишите — это помогает делать сервис лучше.</p>
+    <form id="feedbackForm" class="fb-form">
+      <input class="fb-input" type="text" name="name" placeholder="Имя или ник (необязательно)" />
+      <input class="fb-input" type="email" name="email" placeholder="Email для ответа (необязательно)" />
+      <textarea class="fb-input fb-textarea" name="message" placeholder="Ваше сообщение…" required></textarea>
+      <div class="fb-status" id="feedbackStatus"></div>
+      <div class="consent-actions">
+        <button id="feedbackCancel" class="btn-reset" type="button">Закрыть</button>
+        <button class="btn-primary" type="submit">Отправить</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Фоновая музыка (положи royalty-free трек в music.mp3) -->
 <audio id="bgMusic" loop preload="none" src="music.mp3"></audio>
 
@@ -316,6 +356,6 @@
 <button id="muteBtn" class="mute-btn" title="Звук уведомлений">&#128276;</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
