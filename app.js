@@ -265,6 +265,16 @@ function loadSideFile(file) {
 // -- Analyze -----------------------------------------------------------
 analyzeBtn.addEventListener("click", function() {
   if (!frontImg) return;
+  // Перед первой генерацией — показать соглашение и взять согласие.
+  if (localStorage.getItem("fm-consent") !== "1") {
+    showConsent();
+    return;
+  }
+  runAnalysis();
+});
+
+function runAnalysis() {
+  if (!frontImg) return;
   clearReport();
   errorBox.classList.add("hidden");
   resultsDiv.classList.add("hidden");
@@ -272,7 +282,32 @@ analyzeBtn.addEventListener("click", function() {
   analysisView.classList.remove("hidden");
   loadingCard.classList.remove("hidden");
   processImage(frontImg, sideImg);
-});
+}
+
+function showConsent() {
+  var m = document.getElementById("consentModal");
+  if (m) m.classList.remove("hidden");
+}
+
+(function initConsent() {
+  var modal  = document.getElementById("consentModal");
+  if (!modal) return;
+  var accept = document.getElementById("consentAccept");
+  var decline = document.getElementById("consentDecline");
+  var check  = document.getElementById("consentCheck");
+  if (check && accept) {
+    accept.disabled = !check.checked;
+    check.addEventListener("change", function() { accept.disabled = !check.checked; });
+  }
+  accept.addEventListener("click", function() {
+    if (check && !check.checked) return;
+    localStorage.setItem("fm-consent", "1");
+    localStorage.setItem("fm-consent-date", new Date().toISOString());
+    modal.classList.add("hidden");
+    runAnalysis();
+  });
+  decline.addEventListener("click", function() { modal.classList.add("hidden"); });
+})();
 
 resetBtn.addEventListener("click", function() {
   uploadSection.classList.remove("hidden");
@@ -1012,3 +1047,25 @@ function roundRect(c2, x, y, w, h, r) {
   c2.arcTo(x, y, x + w, y, r);
   c2.closePath();
 }
+
+/* ───────────────────  Фоновая музыка  ─────────────────── */
+(function initMusic() {
+  var btn = document.getElementById("musicBtn");
+  var audio = document.getElementById("bgMusic");
+  if (!btn || !audio) return;
+  audio.volume = 0.35;
+  var on = false;
+  function sync() {
+    btn.textContent = on ? "🎵" : "🔇";
+    btn.classList.toggle("active", on);
+  }
+  // Если файла нет (404) — прячем кнопку, чтобы не вводить в заблуждение.
+  audio.addEventListener("error", function() { btn.style.display = "none"; });
+  btn.addEventListener("click", function() {
+    on = !on;
+    if (on) { audio.play().catch(function() { on = false; sync(); }); }
+    else { audio.pause(); }
+    sync();
+  });
+  sync();
+})();

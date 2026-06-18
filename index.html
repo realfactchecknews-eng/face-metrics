@@ -16,7 +16,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=2" />
+<link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
 
@@ -260,13 +260,55 @@
 <footer class="site-footer" id="mainFooter">
   <div class="container">
     <p>FaceRate &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
+    <p style="margin-top:8px"><a href="terms.html" style="color:#888;text-decoration:none">Пользовательское соглашение</a></p>
   </div>
 </footer>
 
-<!-- Sticky mute: звук-пинг при готовности отчёта -->
+<!-- CONSENT MODAL (показывается один раз перед первым анализом) -->
+<div id="consentModal" class="consent-overlay hidden">
+  <div class="consent-box">
+    <span class="eyebrow">ПЕРЕД НАЧАЛОМ</span>
+    <h2 class="consent-title">Пользовательское соглашение</h2>
+    <div class="consent-body">
+      <p>Нажимая «Принимаю», вы подтверждаете, что:</p>
+      <ul>
+        <li>вам <b>исполнилось 18 лет</b>;</li>
+        <li>сервис носит <b>развлекательный характер</b>, его оценки — это
+            субъективная эвристика нейросети, а <b>не</b> медицинская, психологическая
+            или иная профессиональная диагностика и не объективная истина;</li>
+        <li>геометрия лица считается в вашем браузере, но <b>само фото
+            отправляется</b> на сторонний AI-сервис (OpenRouter) для формирования
+            отчёта; сервис не хранит фотографии после обработки;</li>
+        <li>вы загружаете <b>только собственное изображение</b> либо фото лица,
+            <b>давшего на это согласие</b>; вы не загружаете фотографии
+            несовершеннолетних и третьих лиц без их согласия;</li>
+        <li>вы даёте согласие на обработку загруженного изображения в указанных
+            целях и понимаете, что можете прекратить использование в любой момент;</li>
+        <li>вы используете сервис на свой риск и принимаете, что
+            <b>администрация не несёт ответственности</b> за ваши решения и любые
+            последствия, основанные на результатах.</li>
+      </ul>
+      <p class="consent-full-link"><a href="terms.html" target="_blank" rel="noopener">Полный текст соглашения →</a></p>
+    </div>
+    <label class="consent-check-row">
+      <input type="checkbox" id="consentCheck" />
+      <span>Я прочитал(а) и принимаю условия</span>
+    </label>
+    <div class="consent-actions">
+      <button id="consentDecline" class="btn-reset">Отмена</button>
+      <button id="consentAccept" class="btn-primary" disabled>Принимаю</button>
+    </div>
+  </div>
+</div>
+
+<!-- Фоновая музыка (положи royalty-free трек в music.mp3) -->
+<audio id="bgMusic" loop preload="none" src="music.mp3"></audio>
+
+<!-- Sticky controls -->
+<button id="musicBtn" class="mute-btn music-btn" title="Музыка">&#127925;</button>
 <button id="muteBtn" class="mute-btn" title="Звук уведомлений">&#128276;</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
