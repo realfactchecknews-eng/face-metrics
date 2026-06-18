@@ -393,16 +393,24 @@ function computeFaceMetrics(lm) {
 }
 
 function classifyFaceShape(metrics) {
-  var cbJaw  = metrics.cheekboneWidth / (metrics.jawWidth      || 1);
-  var cbFore = metrics.cheekboneWidth / (metrics.foreheadWidth || 1);
-  var ratio  = metrics.faceHeight     / (metrics.cheekboneWidth || 1);
+  // Точки 234/454 — это самые широкие точки контура (у ушей), поэтому скулы
+  // почти всегда чуть шире лба и челюсти: cbJaw/cbFore обычно лежат в ~1.0-1.25.
+  // Пороги подобраны под этот реальный диапазон, а дефолт — oval (сбалансированное),
+  // а не round, иначе в round проваливалось бы большинство лиц.
+  var cb   = metrics.cheekboneWidth || 1;
+  var jaw  = metrics.jawWidth       || 1;
+  var fore = metrics.foreheadWidth  || 1;
+  var lengthRatio = metrics.faceHeight / cb;   // >=1.55 длинное, <1.4 короткое
+  var cbJaw  = cb / jaw;                        // насколько скулы шире челюсти
+  var cbFore = cb / fore;                       // насколько скулы шире лба
+
   var shape;
-  if      (ratio  > 1.75)                                    shape = "oblong";
-  else if (cbJaw  < 1.05 && cbFore < 1.05)                  shape = "square";
-  else if (metrics.foreheadWidth > metrics.cheekboneWidth * 1.1) shape = "heart";
-  else if (cbJaw  > 1.3  && cbFore > 1.15)                  shape = "diamond";
-  else if (cbJaw  > 1.2)                                     shape = "oval";
-  else                                                       shape = "round";
+  if      (lengthRatio >= 1.55 && cbJaw < 1.12 && cbFore < 1.15) shape = "oblong";   // длинное, равномерной ширины
+  else if (fore >= cb * 0.98 && jaw <= cb * 0.9)                 shape = "heart";    // широкий лоб, узкая челюсть
+  else if (cbJaw >= 1.15 && cbFore >= 1.1)                       shape = "diamond";  // скулы заметно шире лба и челюсти
+  else if (lengthRatio < 1.4 && jaw >= cb * 0.93)               shape = "square";   // короткое, сильная челюсть
+  else if (lengthRatio < 1.4 && cbJaw < 1.12)                   shape = "round";    // короткое, мягкий контур
+  else                                                           shape = "oval";     // сбалансированное (по умолчанию)
   return { shape: shape };
 }
 
@@ -674,8 +682,8 @@ async function callAI(metrics, shapeInfo) {
   var cbJawRatio = (metrics.cheekboneWidth / metrics.jawWidth).toFixed(2);
   var jawInstruction = hasSide
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
-    : "CRITICAL: Only frontal view available -- no side profile provided. For DJOULAIN_MANDIBLE: score only what is visible frontally (bigonial width, taper, chin width from front). Add the note '-- side view not provided, frontal estimate only.' Do NOT assign a jaw score above 6.0/10 based on frontal alone.";
-  var prompt = "You are a brutally honest looksmaxxing analyst. Analyze this face photo in detail. Use looksmaxxing terminology in English, but write all explanatory text in Russian. Be direct and specific -- no sugarcoating.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общий PSL рейтинг. Честный вердикт с указанием на сильные и слабые стороны. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Детальный анализ: facial symmetry %, orbital tilt, mandibular deviation, влияние на внешность.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\n1. [Softmax: конкретный совет]\n2. [Softmax: конкретный совет]\n3. [Softmax: конкретный совет]\n4. [Hardmax: процедура + обоснование]\n5. [Hardmax: процедура + обоснование]";
+    : "Only a frontal view is available -- no side profile provided. For ДЖОУЛАЙН_MANDIBLE, judge what IS visible from the front fairly: bigonial width, jaw taper, chin width and frontal definition. Add the short note '-- оценка по анфас, профиль не предоставлен.' Be slightly conservative because gonial angle and chin projection are not fully visible, but do NOT artificially cap or lowball the score -- a well-defined jaw visible from the front can still score 7-8.";
+  var prompt = "You are an experienced, fair-minded looksmaxxing analyst. Give an honest but BALANCED assessment of this face -- point out genuine strengths as much as weaknesses, and do not default to harsh low scores. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range, do NOT cluster everything in the low end:\n- 1-3: notable flaws in that area\n- 4-5: below average\n- 6: average / completely normal person\n- 7: clearly above average, attractive\n- 8-9: model-tier, exceptional\n- 10: rare near-perfection\nMost ordinary people should land around 5.5-7. Only go below 5 for a feature that is genuinely weak, never as a default.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Детальный анализ: facial symmetry %, orbital tilt, mandibular deviation, влияние на внешность.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\n1. [Softmax: конкретный совет]\n2. [Softmax: конкретный совет]\n3. [Softmax: конкретный совет]\n4. [Hardmax: процедура + обоснование]\n5. [Hardmax: процедура + обоснование]";
   try {
     var res = await fetch(WORKER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
