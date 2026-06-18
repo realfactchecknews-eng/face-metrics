@@ -79,7 +79,7 @@ let _hudPhaseTimer   = null;
 
 // -- Landing sequence ---------------------------------------------------
 function startLanding() {
-  const el = document.getElementById("landingSection");
+  var el = document.getElementById("landingSection");
   if (!el) return;
   el.classList.add("landing-visible");
   setTimeout(countUpStats, 200);
@@ -132,13 +132,19 @@ function showFact(idx) {
 
 function transitionToAnalysis() {
   if (factTimer) clearInterval(factTimer);
-  var el = document.getElementById("landingSection");
-  if (!el) return;
-  el.classList.add("landing-exit");
-  el.addEventListener("transitionend", function() {
-    el.remove();
-    document.body.classList.add("post-landing");
-  }, { once: true });
+  // Trigger big pill drop
+  var pill = document.getElementById("pillDrop");
+  if (pill) pill.classList.add("pill-active");
+  // Slight delay so pill is visible before landing slides away
+  setTimeout(function() {
+    var el = document.getElementById("landingSection");
+    if (!el) return;
+    el.classList.add("landing-exit");
+    el.addEventListener("transitionend", function() {
+      el.remove();
+      document.body.classList.add("post-landing");
+    }, { once: true });
+  }, 280);
 }
 
 // -- Bootstrap ----------------------------------------------------------
@@ -342,12 +348,8 @@ function computeFaceMetrics(lm) {
   var jawWidth       = _dist(lm[58],  lm[288]);
   var foreheadWidth  = _dist(lm[21],  lm[251]);
   var faceHeight     = _dist(lm[10],  lm[152]);
-
-  // fWHR: bizygomatic / (glabella to upper lip)
   var fwhrH = _dist(lm[9], lm[13]);
   var widthHeightRatio = fwhrH > 0 ? cheekboneWidth / fwhrH : 1.8;
-
-  // Symmetry: compare left/right halves from bizygomatic midpoint
   var cx      = (lm[234].x + lm[454].x) / 2;
   var cbLeft  = Math.abs(lm[234].x - cx);
   var cbRight = Math.abs(lm[454].x - cx);
@@ -356,7 +358,6 @@ function computeFaceMetrics(lm) {
   var jawRight = Math.abs(lm[288].x - cx);
   var jawSym   = jawLeft > 0 && jawRight > 0 ? Math.min(jawLeft, jawRight) / Math.max(jawLeft, jawRight) : 1;
   var symmetryScore = (cbSym + jawSym) / 2;
-
   return { cheekboneWidth: cheekboneWidth, jawWidth: jawWidth, foreheadWidth: foreheadWidth, faceHeight: faceHeight, widthHeightRatio: widthHeightRatio, symmetryScore: symmetryScore };
 }
 
@@ -365,12 +366,12 @@ function classifyFaceShape(metrics) {
   var cbFore = metrics.cheekboneWidth / (metrics.foreheadWidth || 1);
   var ratio  = metrics.faceHeight     / (metrics.cheekboneWidth || 1);
   var shape;
-  if      (ratio  > 1.75)                               shape = "oblong";
-  else if (cbJaw  < 1.05 && cbFore < 1.05)              shape = "square";
+  if      (ratio  > 1.75)                                    shape = "oblong";
+  else if (cbJaw  < 1.05 && cbFore < 1.05)                  shape = "square";
   else if (metrics.foreheadWidth > metrics.cheekboneWidth * 1.1) shape = "heart";
-  else if (cbJaw  > 1.3  && cbFore > 1.15)              shape = "diamond";
-  else if (cbJaw  > 1.2)                                shape = "oval";
-  else                                                  shape = "round";
+  else if (cbJaw  > 1.3  && cbFore > 1.15)                  shape = "diamond";
+  else if (cbJaw  > 1.2)                                     shape = "oval";
+  else                                                       shape = "round";
   return { shape: shape };
 }
 
@@ -420,7 +421,7 @@ async function processImage(img, sideImage) {
 
 // -- Face animation ----------------------------------------------------
 function runFaceAnimation(lm, metrics, onComplete) {
-  animateScan(lm, metrics, 1400, function() { setTimeout(onComplete, 400); });
+  animateScan(lm, metrics, 1600, function() { setTimeout(onComplete, 400); });
 }
 
 function animateScan(lm, metrics, duration, onComplete) {
@@ -430,10 +431,11 @@ function animateScan(lm, metrics, duration, onComplete) {
     var scanY    = progress * canvas.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(cleanImageCanvas, 0, 0);
-    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillStyle = "rgba(0,0,0,0.48)";
     ctx.fillRect(0, scanY, canvas.width, canvas.height - scanY);
     drawMeshUpTo(lm, scanY);
     drawScanLine(scanY);
+    drawScannerCrosshairs(lm, scanY);
     if (progress < 1) { requestAnimationFrame(frame); return; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(cleanImageCanvas, 0, 0);
@@ -453,6 +455,33 @@ function drawScanLine(y) {
   ctx.strokeStyle = "#c4a46b"; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
   ctx.shadowBlur = 3; ctx.strokeStyle = "rgba(255,245,210,.85)"; ctx.lineWidth = .5; ctx.stroke();
+  ctx.restore();
+}
+
+function drawScannerCrosshairs(lm, scanY) {
+  var targets = [33, 263, 1, 152, 234, 454, 58, 288, 10, 94];
+  var cs = Math.max(7, canvas.width * 0.013);
+  ctx.save();
+  ctx.lineWidth = Math.max(0.6, canvas.width / 900);
+  ctx.shadowColor = "rgba(196,164,107,0.9)";
+  ctx.shadowBlur = 10;
+  targets.forEach(function(idx) {
+    var p = lm[idx];
+    if (!p || p.y >= scanY - cs * 0.5) return;
+    var alpha = Math.min(1, (scanY - p.y) / (cs * 4));
+    ctx.strokeStyle = "rgba(196,164,107," + (0.85 * alpha) + ")";
+    // crosshair lines
+    ctx.beginPath(); ctx.moveTo(p.x - cs, p.y); ctx.lineTo(p.x + cs, p.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p.x, p.y - cs); ctx.lineTo(p.x, p.y + cs); ctx.stroke();
+    // corner bracket
+    var bs = cs * 0.42;
+    ctx.beginPath();
+    ctx.moveTo(p.x - cs, p.y - cs + bs); ctx.lineTo(p.x - cs, p.y - cs); ctx.lineTo(p.x - cs + bs, p.y - cs);
+    ctx.moveTo(p.x + cs - bs, p.y - cs); ctx.lineTo(p.x + cs, p.y - cs); ctx.lineTo(p.x + cs, p.y - cs + bs);
+    ctx.moveTo(p.x - cs, p.y + cs - bs); ctx.lineTo(p.x - cs, p.y + cs); ctx.lineTo(p.x - cs + bs, p.y + cs);
+    ctx.moveTo(p.x + cs - bs, p.y + cs); ctx.lineTo(p.x + cs, p.y + cs); ctx.lineTo(p.x + cs, p.y + cs - bs);
+    ctx.stroke();
+  });
   ctx.restore();
 }
 
@@ -494,43 +523,124 @@ function drawFullMesh(lm) {
   ctx.restore();
 }
 
+// Sequential measurement animation: 4 phases, each fades in one layer
 function animateMeasurements(lm, metrics, onComplete) {
   var snap = document.createElement("canvas");
   snap.width = canvas.width; snap.height = canvas.height;
   snap.getContext("2d").drawImage(canvas, 0, 0);
-  var t0 = performance.now(), dur = 550;
+
+  var PHASE_DUR = 460;
+  var NUM = 4;
+  var t0  = performance.now();
+  var totalDur = PHASE_DUR * NUM;
+
+  function drawPhase(idx, alpha) {
+    ctx.globalAlpha = alpha;
+    if (idx === 0) drawCanthalLine(lm);
+    if (idx === 1) drawBizygomaticLine(lm);
+    if (idx === 2) drawFWHRLabel(lm, metrics);
+    if (idx === 3) drawJawSymLine(lm, metrics);
+    ctx.globalAlpha = 1;
+  }
+
   function frame(now) {
-    var alpha = Math.min((now - t0) / dur, 1);
+    var elapsed = now - t0;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(snap, 0, 0);
-    ctx.globalAlpha = alpha;
-    drawMeasurementLabels(lm, metrics);
-    ctx.globalAlpha = 1;
-    if (alpha < 1) requestAnimationFrame(frame); else onComplete();
+
+    for (var i = 0; i < NUM; i++) {
+      var ps = i * PHASE_DUR;
+      var pe = ps + PHASE_DUR;
+      var alpha = elapsed >= pe ? 1 : elapsed >= ps ? (elapsed - ps) / PHASE_DUR : 0;
+      if (alpha > 0) drawPhase(i, Math.min(alpha * 2.5, 1));
+    }
+
+    if (elapsed < totalDur) { requestAnimationFrame(frame); }
+    else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(snap, 0, 0);
+      for (var j = 0; j < NUM; j++) drawPhase(j, 1);
+      setTimeout(onComplete, 320);
+    }
   }
   requestAnimationFrame(frame);
 }
 
-function drawMeasurementLabels(lm, metrics) {
-  var fs  = Math.max(10, Math.round(canvas.width * .018));
-  var lw  = Math.max(.5, canvas.width / 1400);
-  var pad = canvas.width * .018;
+function drawCanthalLine(lm) {
+  var le = lm[33], re = lm[263];
+  if (!le || !re) return;
+  var angle = Math.atan2(re.y - le.y, re.x - le.x) * 180 / Math.PI;
+  var fs = Math.max(9, canvas.width * 0.015);
   ctx.save();
-  ctx.font = fs + "px 'SF Mono','Cascadia Code',Consolas,monospace";
-  ctx.fillStyle = "#c4a46b"; ctx.strokeStyle = "rgba(196,164,107,.6)";
-  ctx.lineWidth = lw; ctx.shadowColor = "rgba(196,164,107,.9)"; ctx.shadowBlur = 10;
-  ctx.textBaseline = "middle";
-  var sym  = Math.round(metrics.symmetryScore * 100);
-  var fwhr = metrics.widthHeightRatio.toFixed(2);
-  var lcb = lm[234], rcb = lm[454], ljaw = lm[58], rjaw = lm[288], fore = lm[10];
-  ctx.textAlign = "center";
-  ctx.fillText("fWHR  " + fwhr, canvas.width / 2, Math.max(fore.y - fs * 2.5, fs * 1.6));
-  var cbY = (lcb.y + rcb.y) / 2;
-  ctx.beginPath(); ctx.moveTo(lcb.x - pad, cbY); ctx.lineTo(rcb.x + pad, cbY); ctx.stroke();
-  [[lcb.x - pad, cbY],[rcb.x + pad, cbY]].forEach(function(pt) { ctx.beginPath(); ctx.moveTo(pt[0], pt[1]-4); ctx.lineTo(pt[0], pt[1]+4); ctx.stroke(); });
-  ctx.fillText("BIZYGOMATIC", (lcb.x + rcb.x) / 2, cbY - fs * 1.3);
-  var jawMidY = Math.min(Math.max(ljaw.y, rjaw.y) + fs * 1.6, canvas.height - fs);
-  ctx.fillText("SYM  " + sym + "%", (ljaw.x + rjaw.x) / 2, jawMidY);
+  ctx.strokeStyle = "rgba(196,164,107,0.72)";
+  ctx.lineWidth = Math.max(0.7, canvas.width / 1200);
+  ctx.setLineDash([Math.max(3, canvas.width / 280), Math.max(4, canvas.width / 180)]);
+  ctx.shadowColor = "rgba(196,164,107,.8)"; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.moveTo(le.x, le.y); ctx.lineTo(re.x, re.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.font = fs + "px 'SF Mono',Consolas,monospace";
+  ctx.fillStyle = "rgba(196,164,107,0.88)"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  ctx.shadowBlur = 12;
+  var labelY = Math.min(le.y, re.y) - fs * 0.6;
+  ctx.fillText("CANT " + (angle >= 0 ? "+" : "") + angle.toFixed(1) + "°", (le.x + re.x) / 2, Math.max(labelY, fs * 1.2));
+  ctx.restore();
+}
+
+function drawBizygomaticLine(lm) {
+  var lcb = lm[234], rcb = lm[454];
+  if (!lcb || !rcb) return;
+  var midY = (lcb.y + rcb.y) / 2;
+  var pad  = canvas.width * 0.02;
+  var tick = canvas.height * 0.013;
+  var fs   = Math.max(9, canvas.width * 0.014);
+  ctx.save();
+  ctx.strokeStyle = "rgba(196,164,107,0.62)";
+  ctx.lineWidth = Math.max(0.7, canvas.width / 1200);
+  ctx.shadowColor = "rgba(196,164,107,.7)"; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.moveTo(lcb.x - pad, midY); ctx.lineTo(rcb.x + pad, midY); ctx.stroke();
+  [[lcb.x - pad, midY], [rcb.x + pad, midY]].forEach(function(pt) {
+    ctx.beginPath(); ctx.moveTo(pt[0], pt[1] - tick); ctx.lineTo(pt[0], pt[1] + tick); ctx.stroke();
+  });
+  ctx.font = fs + "px 'SF Mono',Consolas,monospace";
+  ctx.fillStyle = "rgba(196,164,107,0.82)"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  ctx.shadowBlur = 10;
+  ctx.fillText("BIZYGOMATIC", (lcb.x + rcb.x) / 2, midY - tick - 3);
+  ctx.restore();
+}
+
+function drawFWHRLabel(lm, metrics) {
+  var fore = lm[10];
+  if (!fore) return;
+  var fs = Math.max(11, canvas.width * 0.018);
+  ctx.save();
+  ctx.font = "bold " + fs + "px 'SF Mono',Consolas,monospace";
+  ctx.fillStyle = "rgba(196,164,107,0.92)"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  ctx.shadowColor = "rgba(196,164,107,.95)"; ctx.shadowBlur = 16;
+  var labelY = Math.max(fore.y - fs * 2.2, fs * 1.4);
+  ctx.fillText("fWHR  " + metrics.widthHeightRatio.toFixed(2), canvas.width / 2, labelY);
+  ctx.restore();
+}
+
+function drawJawSymLine(lm, metrics) {
+  var ljaw = lm[58], rjaw = lm[288];
+  if (!ljaw || !rjaw) return;
+  var midY = Math.max(ljaw.y, rjaw.y) + canvas.height * 0.025;
+  if (midY > canvas.height - 12) midY = (ljaw.y + rjaw.y) / 2;
+  var pad  = canvas.width * 0.014;
+  var tick = canvas.height * 0.011;
+  var fs   = Math.max(9, canvas.width * 0.013);
+  ctx.save();
+  ctx.strokeStyle = "rgba(196,164,107,0.52)";
+  ctx.lineWidth = Math.max(0.6, canvas.width / 1400);
+  ctx.shadowColor = "rgba(196,164,107,.6)"; ctx.shadowBlur = 6;
+  ctx.beginPath(); ctx.moveTo(ljaw.x - pad, midY); ctx.lineTo(rjaw.x + pad, midY); ctx.stroke();
+  [[ljaw.x - pad, midY], [rjaw.x + pad, midY]].forEach(function(pt) {
+    ctx.beginPath(); ctx.moveTo(pt[0], pt[1] - tick); ctx.lineTo(pt[0], pt[1] + tick); ctx.stroke();
+  });
+  ctx.font = fs + "px 'SF Mono',Consolas,monospace";
+  ctx.fillStyle = "rgba(196,164,107,0.78)"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.shadowBlur = 8;
+  ctx.fillText("SYM  " + Math.round(metrics.symmetryScore * 100) + "%", (ljaw.x + rjaw.x) / 2, midY + tick + 4);
   ctx.restore();
 }
 
@@ -640,8 +750,32 @@ function renderAIReport(text) {
   var parsed  = parseAIReport(text);
   var scoreEl = document.getElementById("overallScoreNum");
   document.getElementById("overallDesc").textContent = parsed.overallDesc;
-  if (parsed.overall !== null) animateCount(scoreEl, parsed.overall, 1600);
-  else scoreEl.textContent = "--";
+
+  // Flash reveal
+  var flash = document.createElement("div");
+  flash.className = "results-reveal-flash";
+  document.body.appendChild(flash);
+  flash.addEventListener("animationend", function() { flash.remove(); });
+
+  // Animate overall score number
+  if (parsed.overall !== null) {
+    animateCount(scoreEl, parsed.overall, 1800);
+    // Animate score ring arc
+    setTimeout(function() {
+      var arc = document.getElementById("scoreRingArc");
+      if (arc) {
+        var target = 516 - (parsed.overall / 10) * 516;
+        arc.style.transition = "stroke-dashoffset 2s cubic-bezier(0.16,1,0.3,1)";
+        arc.style.strokeDashoffset = String(target);
+        // Color the score number based on rating
+        var col = parsed.overall >= 7.5 ? "#c4a46b" : parsed.overall >= 5.5 ? "#f0ece6" : "#888";
+        scoreEl.style.color = col;
+        arc.style.stroke    = col;
+      }
+    }, 120);
+  } else {
+    scoreEl.textContent = "--";
+  }
 
   var catContainer = document.getElementById("categoryScores");
   catContainer.innerHTML = "";
@@ -662,7 +796,7 @@ function renderAIReport(text) {
       setTimeout(function() {
         row.classList.add("visible");
         requestAnimationFrame(function() { requestAnimationFrame(function() { fill.style.width = (cat.score*10) + "%"; }); });
-      }, idx * 90 + 150);
+      }, idx * 100 + 200);
     });
   } else {
     var pre = document.createElement("pre");
