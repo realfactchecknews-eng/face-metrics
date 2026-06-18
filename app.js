@@ -132,42 +132,28 @@ function showFact(idx) {
 
 function transitionToAnalysis() {
   if (factTimer) clearInterval(factTimer);
-  var scene   = document.getElementById("pillScene");
-  var pill    = document.getElementById("pillDrop");
-  var landing = document.getElementById("landingSection");
+  var bpScene  = document.getElementById("bpScene");
+  var landing  = document.getElementById("landingSection");
+  var bpLegend = document.getElementById("bpLegend");
   uploadSection.classList.add("hidden");
-  // Fallback if new HTML not present
-  if (!scene || !pill) {
-    if (landing) {
-      landing.classList.add("landing-exit");
-      landing.addEventListener("transitionend", function() {
-        landing.remove();
-        document.body.classList.add("post-landing");
-        uploadSection.classList.remove("hidden");
-      }, { once: true });
-    }
-    return;
-  }
-  // Show perspective scene, then kick off fall animation
-  scene.classList.add("scene-active");
-  requestAnimationFrame(function() {
-    requestAnimationFrame(function() {
-      pill.classList.add("pill-falling");
-    });
-  });
-  // After fall settles, split the capsule open + exit landing simultaneously
-  var FALL_DUR  = 3400;
-  var SPLIT_DUR = 950;
+  
+  if (!bpScene) return;
+  
+  bpScene.classList.add("pill-animated");
+  if (bpLegend) bpLegend.style.opacity = "0";
+  
+  var ANIM_DUR = 4200;
+  var SPLIT_DUR = 800;
+  
   setTimeout(function() {
-    pill.classList.add("pill-split");
+    bpScene.classList.add("pill-split");
     if (landing) landing.classList.add("landing-exit");
     setTimeout(function() {
       if (landing && landing.parentNode) landing.remove();
       document.body.classList.add("post-landing");
-      scene.style.display = "none";
       uploadSection.classList.remove("hidden");
     }, SPLIT_DUR);
-  }, FALL_DUR);
+  }, ANIM_DUR);
 }
 
 // -- Bootstrap ----------------------------------------------------------
