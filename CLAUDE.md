@@ -18,7 +18,10 @@ Deploy: push to `master` → GitHub Actions (`peaceiris/actions-gh-pages@v4`) �
   (chosen because Gemini/GPT-4o tend to refuse looksmaxxing/appearance rating).
   - Worker URL: `https://face-metrics-ai.realfactchecknews.workers.dev` (also `WORKER_URL` in `app.js`)
   - `OPENROUTER_API_KEY` is a Cloudflare Worker secret — **never put it in frontend**
-  - Worker deploys SEPARATELY: `wrangler deploy` (NOT via GitHub Pages)
+  - Worker deploys SEPARATELY from Pages. Auto-deploy via
+    `.github/workflows/deploy-worker.yml` on push to master (needs the
+    `CLOUDFLARE_API_TOKEN` GitHub secret — see README "Автодеплой воркера").
+    If the secret isn't set, fall back to manual `wrangler deploy`.
 - **Privacy note**: landmarks are on-device, but the PHOTO itself is sent (base64)
   to the Worker → OpenRouter for the AI report. The image does leave the device.
 - **Fonts**: Google Fonts — Cormorant Garamond 300/400
