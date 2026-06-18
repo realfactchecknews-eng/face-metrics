@@ -143,6 +143,7 @@ function transitionToAnalysis() {
       landing.addEventListener("transitionend", function() {
         landing.remove();
         document.body.classList.add("post-landing");
+        uploadSection.classList.remove("hidden");
       }, { once: true });
     }
     return;
