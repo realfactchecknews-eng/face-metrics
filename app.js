@@ -132,28 +132,40 @@ function showFact(idx) {
 
 function transitionToAnalysis() {
   if (factTimer) clearInterval(factTimer);
-  var bpScene  = document.getElementById("bpScene");
-  var landing  = document.getElementById("landingSection");
-  var bpLegend = document.getElementById("bpLegend");
-  uploadSection.classList.add("hidden");
-  
-  if (!bpScene) return;
-  
+  var bpScene = document.getElementById("bpScene");
+  var landing = document.getElementById("landingSection");
+
+  // Fallback: if the pill/landing aren't present, just reveal the main app.
+  if (!bpScene || !landing) {
+    if (landing && landing.parentNode) landing.remove();
+    document.body.classList.add("post-landing");
+    return;
+  }
+
+  var GROW_DUR = 3600; // pill slowly rotates + grows
+  var OPEN_DUR = 1000; // pill opens
+  var EXIT_DUR = 650;  // dark landing fades out / main scene fades in
+
+  // 1. Fade everything around the pill so only the pill is in focus.
+  landing.classList.add("landing-focus");
+
+  // 2. Pill slowly rotates and grows.
   bpScene.classList.add("pill-animated");
-  if (bpLegend) bpLegend.style.opacity = "0";
-  
-  var ANIM_DUR = 4200;
-  var SPLIT_DUR = 800;
-  
+
+  // 3. After it has grown, the pill opens.
   setTimeout(function() {
     bpScene.classList.add("pill-split");
-    if (landing) landing.classList.add("landing-exit");
+
+    // 4. Only after the pill has fully opened do we reveal the main scene.
+    //    The dark landing fades away and the main app fades in underneath.
     setTimeout(function() {
-      if (landing && landing.parentNode) landing.remove();
       document.body.classList.add("post-landing");
-      uploadSection.classList.remove("hidden");
-    }, SPLIT_DUR);
-  }, ANIM_DUR);
+      landing.classList.add("landing-exit");
+      setTimeout(function() {
+        if (landing.parentNode) landing.remove();
+      }, EXIT_DUR + 100);
+    }, OPEN_DUR);
+  }, GROW_DUR);
 }
 
 // -- Bootstrap ----------------------------------------------------------

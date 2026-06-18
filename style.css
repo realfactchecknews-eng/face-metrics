@@ -255,36 +255,60 @@ html, body {
   to { transform: rotateY(360deg); }
 }
 
-/* Pill Grow/Spin/Split Animation (triggered) */
-#bpScene.pill-animated .bp-pill-wrap {
-  animation: pillGrowSpinSplit 4.2s ease-in-out forwards !important;
+/* When the transition starts, fade out everything around the pill so the
+   focus is on the pill alone while it grows and opens. */
+#landingSection.landing-focus .land-top,
+#landingSection.landing-focus .land-stats,
+#landingSection.landing-focus .land-fact-block,
+#landingSection.landing-focus .btn-begin,
+#landingSection.landing-focus .bp-legend {
+  opacity: 0 !important;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
 }
-@keyframes pillGrowSpinSplit {
+
+/* Phase 1: pill slowly rotates and grows (triggered) */
+#bpScene.pill-animated .bp-pill-wrap {
+  animation: pillGrowSpin 3.6s cubic-bezier(0.45, 0, 0.2, 1) forwards !important;
+}
+@keyframes pillGrowSpin {
   0% {
-    transform: scale(1) rotateX(0deg) rotateY(0deg) rotateZ(0deg);
-  }
-  30% {
-    transform: scale(1.1) rotateX(20deg) rotateY(180deg) rotateZ(-15deg);
+    transform: scale(1) rotateX(0deg) rotateY(0deg);
   }
   60% {
-    transform: scale(1.3) rotateX(10deg) rotateY(360deg) rotateZ(30deg);
-  }
-  85% {
-    transform: scale(1.4) rotateX(5deg) rotateY(450deg) rotateZ(-20deg);
+    transform: scale(1.4) rotateX(8deg) rotateY(320deg);
   }
   100% {
-    transform: scale(1.5) rotateX(0deg) rotateY(540deg) rotateZ(0deg);
+    transform: scale(1.75) rotateX(0deg) rotateY(540deg);
   }
 }
 
+/* Phase 2: pill opens — a soft golden flash, then it splits open and clears */
 #bpScene.pill-split .bp-pill {
-  animation: pillSplitOpen 0.8s cubic-bezier(0.76, 0, 0.24, 1) forwards;
-  background: radial-gradient(ellipse at 36% 30%, #1e1e1e 0%, #000 100%);
+  animation: pillOpen 1s cubic-bezier(0.7, 0, 0.3, 1) forwards;
+  background: radial-gradient(ellipse at 36% 30%, #2a2a2a 0%, #000 100%);
 }
-@keyframes pillSplitOpen {
-  0% { transform: scaleY(1); opacity: 1; }
-  50% { transform: scaleY(0.5); opacity: 0.8; }
-  100% { transform: scaleY(0); opacity: 0; }
+@keyframes pillOpen {
+  0% {
+    transform: scaleY(1);
+    opacity: 1;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  }
+  35% {
+    transform: scaleY(1.1);
+    opacity: 1;
+    box-shadow: 0 0 44px 8px rgba(196, 164, 107, 0.55);
+  }
+  65% {
+    transform: scaleY(0.4);
+    opacity: 0.9;
+    box-shadow: 0 0 64px 16px rgba(196, 164, 107, 0.7);
+  }
+  100% {
+    transform: scaleY(0);
+    opacity: 0;
+    box-shadow: 0 0 88px 24px rgba(196, 164, 107, 0);
+  }
 }
 
 .land-stats {
@@ -420,6 +444,22 @@ html, body {
 }
 
 /* == MAIN APP LAYOUT == */
+/* The whole main app stays hidden (display:none) until the landing/pill
+   animation is fully complete. This prevents the upload page from flashing
+   on initial load and from showing through before the pill finishes. */
+#mainHeader,
+#mainContent,
+#mainFooter {
+  display: none;
+}
+body.post-landing #mainHeader,
+body.post-landing #mainFooter {
+  display: block;
+}
+body.post-landing #mainContent {
+  display: block;
+}
+
 body.post-landing {
   background: var(--bg-dark);
 }
