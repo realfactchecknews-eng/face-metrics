@@ -5,8 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>FaceRate</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<meta name="description" content="AI-анализ лица: PSL рейтинг, геометрия пропорций и персональные рекомендации по луксмаксингу." />
+
+<!-- OG / превью при шере в мессенджерах и соцсетях -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="FaceRate — AI Aesthetic Analysis" />
+<meta property="og:description" content="Узнай свой PSL рейтинг. AI-анализ лица + геометрия пропорций." />
+<meta property="og:image" content="https://facerate.ru/og.png" />
+<meta property="og:url" content="https://facerate.ru/" />
+<meta name="twitter:card" content="summary_large_image" />
+
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
 
@@ -101,6 +111,11 @@
 <main class="container" id="mainContent">
 
   <section id="uploadSection">
+    <button id="lastResultBanner" class="last-result-banner hidden">
+      <span class="lrb-label">ПРОШЛЫЙ РЕЗУЛЬТАТ</span>
+      <span class="lrb-score" id="lrbScore">--</span>
+      <span class="lrb-cta">скрыть &times;</span>
+    </button>
     <div class="upload-grid">
 
       <!-- Front photo (required) -->
@@ -165,7 +180,10 @@
         <span class="cf cf-bl"></span><span class="cf cf-br"></span>
         <span class="canvas-glow"></span>
       </div>
-      <button id="resetBtn" class="btn-reset">&#8617; Загрузить другое</button>
+      <div class="photo-actions">
+        <button id="shareBtn" class="btn-share hidden">&#8599; Поделиться результатом</button>
+        <button id="resetBtn" class="btn-reset">&#8617; Загрузить другое</button>
+      </div>
     </div>
 
     <div id="loading" class="loading-card hidden">
@@ -245,7 +263,10 @@
   </div>
 </footer>
 
+<!-- Sticky mute: звук-пинг при готовности отчёта -->
+<button id="muteBtn" class="mute-btn" title="Звук уведомлений">&#128276;</button>
+
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

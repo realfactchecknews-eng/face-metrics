@@ -56,7 +56,7 @@
 | `style.css` | Все стили и анимации |
 | `app.js` | **Вся логика**: загрузка фото, FaceLandmarker, метрики, анимация canvas, вызов ИИ, парсинг и рендер отчёта |
 | `worker.js` | Cloudflare Worker — прокси к OpenRouter (хранит ключ, добавляет CORS) |
-| `wrangler.toml` | Конфиг воркера (`name = "face-metrics-ai"`, `main = "worker.js"`) |
+| `wrangler.toml` | Конфиг воркера (`name`, `main`) + binding KV `RATE_LIMIT` для rate-limit |
 | `favicon.svg` | Иконка |
 | `CLAUDE.md` | Контекст проекта для ИИ-ассистентов |
 | `metrics.js`, `recommendations.js` | ⚠️ **МЁРТВЫЙ КОД** — не подключены в `index.html`, вся логика живёт в `app.js`. Можно удалить. |
@@ -92,6 +92,43 @@ wrangler deploy              # выкатить worker.js
 ```bash
 wrangler secret put OPENROUTER_API_KEY    # ключ берётся на openrouter.ai/keys
 ```
+
+---
+
+## Rate limit (защита OpenRouter-баланса)
+
+Воркер открыт миру: любой, кто увидит `WORKER_URL` в `app.js`, может слать
+запросы к платной vision-модели за наш счёт. Поэтому в `worker.js` стоит
+лимит по IP через **Cloudflare KV**: `25/день` и `8/час` (константы
+`LIMIT_PER_DAY` / `LIMIT_PER_HOUR`). Если KV не привязан — лимит просто
+отключается, воркер продолжает работать.
+
+**Настройка KV (один раз):**
+```bash
+wrangler kv namespace create RATE_LIMIT
+# скопировать выданный id в wrangler.toml вместо PASTE_KV_ID_HERE
+wrangler deploy
+```
+Для автодеплоя через GitHub Actions KV-namespace должен существовать, а id —
+быть прописан в `wrangler.toml` (см. `[[kv_namespaces]]`).
+
+---
+
+## UX-фичи фронтенда (localStorage, без бэкенда)
+
+- **Поделиться результатом** (`#shareBtn`) — `buildShareCard()` рисует
+  PNG-карточку 1080×1350 (фото + PSL-балл + бренд) и отдаёт через
+  `navigator.share`, иначе скачивает файл. Виральность = трафик.
+- **Прошлый результат** (`#lastResultBanner`) — баннер с последним баллом из
+  `localStorage.fm-last`.
+- **История** — последние 20 баллов в `localStorage.fm-history` (только числа,
+  без фото).
+- **Звук-пинг** при готовности отчёта (`playPing()`, Web Audio, без файла) +
+  sticky-кнопка mute `#muteBtn` (🔔/🔕), состояние в `localStorage.fm-muted`.
+- **OG-теги** в `<head>` для превью при шере. ⚠️ Ссылаются на `og.png` в корне —
+  **файла пока нет**, нужно добавить картинку-превью 1200×630.
+- **Кэш-бастинг:** у `style.css` и `app.js` в `index.html` стоит `?v=N`.
+  Поднимай `N` при изменениях, иначе юзеры сидят на старом кэше GitHub Pages.
 
 ---
 

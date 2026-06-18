@@ -288,6 +288,8 @@ resetBtn.addEventListener("click", function() {
   document.getElementById("sideThumb").classList.add("hidden");
   document.getElementById("sidePlaceholder").classList.remove("hidden");
   analyzeBtn.classList.add("hidden");
+  var sb = document.getElementById("shareBtn");
+  if (sb) sb.classList.add("hidden");
   clearReport();
 });
 
@@ -863,6 +865,14 @@ function renderAIReport(text) {
     });
     aiRecs.classList.remove("hidden");
   }
+
+  // Отчёт готов — звук, сохранение, кнопка «Поделиться».
+  if (parsed.overall !== null) {
+    playPing();
+    saveLastResult(parsed.overall);
+    var sb = document.getElementById("shareBtn");
+    if (sb) sb.classList.remove("hidden");
+  }
 }
 
 function animateCount(el, target, duration) {
@@ -874,4 +884,131 @@ function animateCount(el, target, duration) {
     if (p < 1) requestAnimationFrame(tick); else el.textContent = target.toFixed(1);
   }
   requestAnimationFrame(tick);
+}
+
+/* ───────────────────  Звук-пинг (Web Audio, без файла)  ─────────────────── */
+var _audioCtx = null;
+function isMuted() { return localStorage.getItem("fm-muted") === "1"; }
+function playPing() {
+  if (isMuted()) return;
+  try {
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    var t = _audioCtx.currentTime;
+    [880, 1320].forEach(function(freq, i) {
+      var osc = _audioCtx.createOscillator(), gain = _audioCtx.createGain();
+      osc.type = "sine"; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.18, t + i * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.25);
+      osc.connect(gain).connect(_audioCtx.destination);
+      osc.start(t + i * 0.12); osc.stop(t + i * 0.12 + 0.26);
+    });
+  } catch (e) { /* звук не критичен */ }
+}
+
+(function initMute() {
+  var btn = document.getElementById("muteBtn");
+  if (!btn) return;
+  function sync() { btn.textContent = isMuted() ? "🔕" : "🔔"; }
+  btn.addEventListener("click", function() {
+    localStorage.setItem("fm-muted", isMuted() ? "0" : "1");
+    sync();
+    if (!isMuted()) playPing();
+  });
+  sync();
+})();
+
+/* ───────────────────  Последний результат + история  ─────────────────── */
+function saveLastResult(overall) {
+  try {
+    var entry = { score: overall, date: Date.now() };
+    localStorage.setItem("fm-last", JSON.stringify(entry));
+    var hist = JSON.parse(localStorage.getItem("fm-history") || "[]");
+    hist.unshift(entry);
+    localStorage.setItem("fm-history", JSON.stringify(hist.slice(0, 20)));
+  } catch (e) { /* приватный режим */ }
+}
+
+(function showLastResultBanner() {
+  try {
+    var last = JSON.parse(localStorage.getItem("fm-last") || "null");
+    if (!last) return;
+    var banner = document.getElementById("lastResultBanner");
+    if (!banner) return;
+    document.getElementById("lrbScore").textContent = Number(last.score).toFixed(1) + "/10";
+    banner.classList.remove("hidden");
+    banner.addEventListener("click", function() { banner.classList.add("hidden"); });
+  } catch (e) { /* ignore */ }
+})();
+
+/* ───────────────────  Поделиться: PNG-карточка из canvas  ─────────────────── */
+(function initShare() {
+  var shareBtn = document.getElementById("shareBtn");
+  if (!shareBtn) return;
+  shareBtn.addEventListener("click", async function() {
+    var blob = await buildShareCard();
+    if (!blob) return;
+    var file = new File([blob], "facerate.png", { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "FaceRate", text: "Мой PSL рейтинг — facerate.ru" });
+        return;
+      } catch (e) { /* отмена → скачивание */ }
+    }
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "facerate.png"; a.click();
+    URL.revokeObjectURL(url);
+  });
+})();
+
+function buildShareCard() {
+  return new Promise(function(resolve) {
+    var src = cleanImageCanvas || canvas;  // чистое фото без оверлея, если есть
+    var W = 1080, H = 1350;
+    var c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    var g = c.getContext("2d");
+
+    g.fillStyle = "#0a0a0a"; g.fillRect(0, 0, W, H);
+
+    // фото квадратом сверху, со скруглением
+    var side = W - 120, ix = 60, iy = 70;
+    var s = Math.min(src.width, src.height);
+    g.save();
+    roundRect(g, ix, iy, side, side, 28); g.clip();
+    g.drawImage(src, (src.width - s) / 2, (src.height - s) / 2, s, s, ix, iy, side, side);
+    g.restore();
+    g.strokeStyle = "rgba(196,164,107,0.4)"; g.lineWidth = 1;
+    roundRect(g, ix, iy, side, side, 28); g.stroke();
+
+    g.textAlign = "center";
+    g.fillStyle = "#888";
+    g.font = "400 26px Georgia, 'Times New Roman', serif";
+    g.fillText("A S C E N D   &   F O R G E T", W / 2, iy + side + 95);
+
+    var score = (document.getElementById("overallScoreNum").textContent || "--");
+    g.fillStyle = "#f0ece6";
+    g.font = "300 210px Georgia, serif";
+    g.fillText(score, W / 2 - 28, iy + side + 300);
+    g.fillStyle = "#888";
+    g.font = "300 64px Georgia, serif";
+    g.fillText("/10", W / 2 + (score.length * 58), iy + side + 300);
+
+    g.fillStyle = "#c4a46b";
+    g.font = "400 30px Georgia, serif";
+    g.fillText("PSL РЕЙТИНГ  ·  facerate.ru", W / 2, iy + side + 380);
+
+    c.toBlob(function(b) { resolve(b); }, "image/png");
+  });
+}
+
+function roundRect(c2, x, y, w, h, r) {
+  c2.beginPath();
+  c2.moveTo(x + r, y);
+  c2.arcTo(x + w, y, x + w, y + h, r);
+  c2.arcTo(x + w, y + h, x, y + h, r);
+  c2.arcTo(x, y + h, x, y, r);
+  c2.arcTo(x, y, x + w, y, r);
+  c2.closePath();
 }
