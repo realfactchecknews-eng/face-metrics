@@ -95,10 +95,48 @@ wrangler secret put OPENROUTER_API_KEY    # ключ берётся на openrou
 
 ---
 
+## Автодеплой воркера (чтобы ИИ-ассистент мог обновлять воркер сам)
+
+По умолчанию `worker.js` надо деплоить вручную (`wrangler deploy`), а это требует
+интерактивного `wrangler login` — у ИИ-ассистента такого доступа нет, он умеет
+только пушить в git. Чтобы воркер выкатывался **автоматически при пуше**, в репо
+уже лежит workflow `.github/workflows/deploy-worker.yml`. Его триггерят изменения
+`worker.js` / `wrangler.toml` в ветке `master`.
+
+Чтобы он заработал, **нужно один раз добавить токен Cloudflare** (делает владелец репо):
+
+1. **Создать API-токен Cloudflare:**
+   dash.cloudflare.com → справа сверху иконка профиля → **My Profile** →
+   **API Tokens** → **Create Token** → шаблон **«Edit Cloudflare Workers»** →
+   **Continue** → **Create Token** → скопировать токен (показывается один раз).
+
+2. **Добавить токен в секреты GitHub:**
+   репозиторий на GitHub → **Settings** → **Secrets and variables** → **Actions**
+   → **New repository secret** →
+   - **Name:** `CLOUDFLARE_API_TOKEN`
+   - **Secret:** вставить скопированный токен → **Add secret**
+
+3. *(Только если токен имеет доступ к нескольким аккаунтам Cloudflare)* добавить
+   ещё секрет `CLOUDFLARE_ACCOUNT_ID` (Account ID виден на главной странице
+   Workers в дашборде) и раскомментировать строку `accountId:` в workflow.
+
+Готово. После этого **любой push в `master`, меняющий `worker.js`, сам выкатит
+воркер** — ИИ-ассистенту достаточно отредактировать `worker.js` и запушить,
+ручной `wrangler deploy` больше не нужен.
+
+> Секрет `OPENROUTER_API_KEY` живёт на стороне Cloudflare и при автодеплое **не
+> стирается** — повторно его задавать не надо.
+>
+> Проверить запуск: GitHub → вкладка **Actions** → workflow **Deploy Cloudflare
+> Worker**. Можно запустить вручную кнопкой **Run workflow** (`workflow_dispatch`).
+
+---
+
 ## Смена ИИ-модели
 
-Поменять одну строку в `worker.js` (поле `model`) и сделать `wrangler deploy`.
-Модель **обязана поддерживать vision** (приём изображений).
+Поменять одну строку в `worker.js` (поле `model`) и задеплоить воркер: либо
+`wrangler deploy`, либо просто **запушить в `master`**, если настроен автодеплой
+(см. раздел выше). Модель **обязана поддерживать vision** (приём изображений).
 
 Текущая модель: **`qwen/qwen2.5-vl-72b-instruct`** — выбрана потому, что хорошо
 описывает лица и **не отказывается** оценивать внешность (Gemini/GPT-4o склонны
