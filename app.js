@@ -67,7 +67,7 @@ const resultsDiv    = document.getElementById("results");
 const errorBox      = document.getElementById("errorBox");
 const errorText     = document.getElementById("errorText");
 
-let faceMesh         = null;
+let faceLandmarker   = null;
 let frontImg         = null;
 let sideImg          = null;
 let cleanImageCanvas = null;
@@ -361,14 +361,25 @@ function stopAIHUD() {
   }, 380);
 }
 
-// -- FaceMesh ----------------------------------------------------------
-function initFaceMesh() {
-  if (faceMesh) return faceMesh;
-  faceMesh = new FaceMesh({
-    locateFile: function(f) { return "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/" + f; },
+// -- Face detection: MediaPipe Tasks FaceLandmarker (IMAGE mode) -------
+// IMAGE mode is purpose-built for still photos (no video tracking), so the
+// 468/478-point mesh lands accurately on the face. Same canonical topology
+// as legacy FaceMesh, so all landmark indices below stay valid.
+const TASKS_VISION = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+async function initFaceLandmarker() {
+  if (faceLandmarker) return faceLandmarker;
+  const vision = await import(TASKS_VISION);
+  const fileset = await vision.FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+  );
+  faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+    },
+    runningMode: "IMAGE",
+    numFaces: 1,
   });
-  faceMesh.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.5 });
-  return faceMesh;
+  return faceLandmarker;
 }
 
 // -- Face metrics ------------------------------------------------------
@@ -417,7 +428,7 @@ function classifyFaceShape(metrics) {
 // -- Process image -----------------------------------------------------
 async function processImage(img, sideImage) {
   try {
-    var mesh = initFaceMesh();
+    var fl = await initFaceLandmarker();
     canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
 
@@ -435,23 +446,21 @@ async function processImage(img, sideImage) {
       cleanSideCanvas = null;
     }
 
-    mesh.onResults(function(results) {
-      loadingCard.classList.add("hidden");
-      if (!results.multiFaceLandmarks || !results.multiFaceLandmarks.length) {
-        showError("He удалось распознать лицо. Попробуйте другое фото -- лицо должно быть направлено в камеру и хорошо освещено."); return;
-      }
-      var raw = results.multiFaceLandmarks[0];
-      var w   = canvas.width, h = canvas.height;
-      var lm  = raw.map(function(p) { return { x: p.x * w, y: p.y * h }; });
-      var metrics   = computeFaceMetrics(lm);
-      var shapeInfo = classifyFaceShape(metrics);
-      runFaceAnimation(lm, metrics, function() {
-        resultsDiv.classList.remove("hidden");
-        callAI(metrics, shapeInfo);
-      });
-      raw.length = 0;
+    // IMAGE mode: detect() is synchronous and returns results directly.
+    var results = fl.detect(cleanImageCanvas);
+    loadingCard.classList.add("hidden");
+    if (!results.faceLandmarks || !results.faceLandmarks.length) {
+      showError("Не удалось распознать лицо. Попробуйте другое фото -- лицо должно быть направлено в камеру и хорошо освещено."); return;
+    }
+    var raw = results.faceLandmarks[0];
+    var w   = canvas.width, h = canvas.height;
+    var lm  = raw.map(function(p) { return { x: p.x * w, y: p.y * h }; });
+    var metrics   = computeFaceMetrics(lm);
+    var shapeInfo = classifyFaceShape(metrics);
+    runFaceAnimation(lm, metrics, function() {
+      resultsDiv.classList.remove("hidden");
+      callAI(metrics, shapeInfo);
     });
-    await mesh.send({ image: canvas });
   } catch (err) {
     console.error(err);
     showError("Ошибка при анализе. Попробуйте обновить страницу.");
