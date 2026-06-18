@@ -135,6 +135,7 @@ function transitionToAnalysis() {
   var scene   = document.getElementById("pillScene");
   var pill    = document.getElementById("pillDrop");
   var landing = document.getElementById("landingSection");
+  uploadSection.classList.add("hidden");
   // Fallback if new HTML not present
   if (!scene || !pill) {
     if (landing) {
@@ -163,6 +164,7 @@ function transitionToAnalysis() {
       if (landing && landing.parentNode) landing.remove();
       document.body.classList.add("post-landing");
       scene.style.display = "none";
+      uploadSection.classList.remove("hidden");
     }, SPLIT_DUR);
   }, FALL_DUR);
 }
@@ -713,8 +715,8 @@ function compositeToBase64(frontCvs, sideCvs, maxW) {
 
 function parseAIReport(text) {
   var result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
-  var overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
-  if (overallM) { result.overall = parseFloat(overallM[1]); result.overallDesc = overallM[2].trim(); }
+  var overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/(10)\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
+  if (overallM) { result.overall = parseFloat(overallM[1]); result.overallDesc = overallM[3].trim(); }
   var cats = [
     { key:"СИММЕТРИЯ",          label:"Симметрия" },
     { key:"ГЛАЗА_CANTHAL_TILT", label:"Canthal Tilt / Eyes" },
@@ -727,8 +729,8 @@ function parseAIReport(text) {
   ];
   cats.forEach(function(cat) {
     var esc = cat.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    var m = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)"));
-    if (m) result.categories.push({ label: cat.label, score: parseFloat(m[1]), text: m[2].trim() });
+    var m = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/(10)\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)"));
+    if (m) result.categories.push({ label: cat.label, score: parseFloat(m[1]), text: m[3].trim() });
   });
   var recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
   if (recsM) result.recommendations = recsM[1].split("\n").map(function(l){ return l.replace(/^\d+\.\s*/,"").trim(); }).filter(Boolean);
