@@ -1,3 +1,9 @@
 name = "face-metrics-ai"
 main = "worker.js"
 compatibility_date = "2025-01-01"
+
+# Rate limit. Создай namespace:  wrangler kv namespace create RATE_LIMIT
+# Вставь выданный id вместо PASTE_KV_ID_HERE и задеплой:  wrangler deploy
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "PASTE_KV_ID_HERE"
