@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>FaceRate</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
@@ -89,9 +89,12 @@
   </div>
 </div>
 
-<!-- FALLING PILL (transition effect) -->
-<div id="pillDrop">
-  <div class="pill-drop-body"></div>
+<!-- PILL SCENE (3D capsule transition) -->
+<div id="pillScene">
+  <div id="pillDrop">
+    <div class="ph ph-top"></div>
+    <div class="ph ph-bot"></div>
+  </div>
 </div>
 
 <!-- MAIN APP -->
