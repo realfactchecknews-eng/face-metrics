@@ -6,4 +6,4 @@ compatibility_date = "2025-01-01"
 # Вставь выданный id вместо PASTE_KV_ID_HERE и задеплой:  wrangler deploy
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "PASTE_KV_ID_HERE"
+id = "252f7860538642e0a684414741893076"
