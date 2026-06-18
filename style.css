@@ -418,7 +418,9 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 .fact-in {
-  animation: factSwitch 0.5s ease;
+  /* forwards: держим opacity:1 после смены факта, иначе .land-fact откатывается
+     к базовому opacity:0 и подсказка мигает/пропадает */
+  animation: factSwitch 0.5s ease forwards;
 }
 @keyframes factSwitch {
   0%, 30% { opacity: 0; }
