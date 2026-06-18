@@ -1,7 +1,7 @@
 const WORKER_URL = "https://face-metrics-ai.realfactchecknews.workers.dev";
 
 // MediaPipe Face Mesh connection groups
-const FACE_OVAL  = [[10,338],[338,297],[297,332],[332,284],[284,251],[251,389],[389,356],[356,454],[454,323],[323,361],[361,288],[288,397],[397,365],[365,379],[379,378],[378,400],[400,377],[377,152],[152,148],[148,176],[176,149],[149,150],[150,136],[136,172],[172,58],[58,132],[132,93],[93,234],[234,127],[127,162],[162,21],[21,54],[54,103],[103,67],[67,109],[109,10]];
+const FACE_OVAL  = [[10,338],[338,297],[297,332],[332,284],[284,251],[251,389],[389,356],[356,454],[454,323],[323,361],[361,288],[288,397],[397,365],[365,379],[379,378],[378,400],[400,377],[377,152],[152,148],[148,176],[176,149],[149,150],[150,136],[136,172],[172,58],[58,132],[132,93],[93,234],[234,127],[127,162],[162,21],[21,54],[54,103],[103,67],[67,109],[109,10]]];
 const LEFT_EYE   = [[263,249],[249,390],[390,373],[373,374],[374,380],[380,381],[381,382],[382,362],[362,398],[398,384],[384,385],[385,386],[386,387],[387,388],[388,466],[466,263]];
 const RIGHT_EYE  = [[33,7],[7,163],[163,144],[144,145],[145,153],[153,154],[154,155],[155,133],[133,173],[173,157],[157,158],[158,159],[159,160],[160,161],[161,246],[246,33]];
 const LEFT_BROW  = [[276,283],[283,282],[282,295],[295,285],[300,293],[293,334],[334,296],[296,336]];
@@ -132,19 +132,39 @@ function showFact(idx) {
 
 function transitionToAnalysis() {
   if (factTimer) clearInterval(factTimer);
-  // Trigger big pill drop
-  var pill = document.getElementById("pillDrop");
-  if (pill) pill.classList.add("pill-active");
-  // Slight delay so pill is visible before landing slides away
+  var scene   = document.getElementById("pillScene");
+  var pill    = document.getElementById("pillDrop");
+  var landing = document.getElementById("landingSection");
+  // Fallback if new HTML not present
+  if (!scene || !pill) {
+    if (landing) {
+      landing.classList.add("landing-exit");
+      landing.addEventListener("transitionend", function() {
+        landing.remove();
+        document.body.classList.add("post-landing");
+      }, { once: true });
+    }
+    return;
+  }
+  // Show perspective scene, then kick off fall animation
+  scene.classList.add("scene-active");
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      pill.classList.add("pill-falling");
+    });
+  });
+  // After fall settles, split the capsule open + exit landing simultaneously
+  var FALL_DUR  = 3400;
+  var SPLIT_DUR = 950;
   setTimeout(function() {
-    var el = document.getElementById("landingSection");
-    if (!el) return;
-    el.classList.add("landing-exit");
-    el.addEventListener("transitionend", function() {
-      el.remove();
+    pill.classList.add("pill-split");
+    if (landing) landing.classList.add("landing-exit");
+    setTimeout(function() {
+      if (landing && landing.parentNode) landing.remove();
       document.body.classList.add("post-landing");
-    }, { once: true });
-  }, 280);
+      scene.style.display = "none";
+    }, SPLIT_DUR);
+  }, FALL_DUR);
 }
 
 // -- Bootstrap ----------------------------------------------------------
@@ -470,10 +490,8 @@ function drawScannerCrosshairs(lm, scanY) {
     if (!p || p.y >= scanY - cs * 0.5) return;
     var alpha = Math.min(1, (scanY - p.y) / (cs * 4));
     ctx.strokeStyle = "rgba(196,164,107," + (0.85 * alpha) + ")";
-    // crosshair lines
     ctx.beginPath(); ctx.moveTo(p.x - cs, p.y); ctx.lineTo(p.x + cs, p.y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(p.x, p.y - cs); ctx.lineTo(p.x, p.y + cs); ctx.stroke();
-    // corner bracket
     var bs = cs * 0.42;
     ctx.beginPath();
     ctx.moveTo(p.x - cs, p.y - cs + bs); ctx.lineTo(p.x - cs, p.y - cs); ctx.lineTo(p.x - cs + bs, p.y - cs);
@@ -523,17 +541,14 @@ function drawFullMesh(lm) {
   ctx.restore();
 }
 
-// Sequential measurement animation: 4 phases, each fades in one layer
 function animateMeasurements(lm, metrics, onComplete) {
   var snap = document.createElement("canvas");
   snap.width = canvas.width; snap.height = canvas.height;
   snap.getContext("2d").drawImage(canvas, 0, 0);
-
   var PHASE_DUR = 460;
   var NUM = 4;
   var t0  = performance.now();
   var totalDur = PHASE_DUR * NUM;
-
   function drawPhase(idx, alpha) {
     ctx.globalAlpha = alpha;
     if (idx === 0) drawCanthalLine(lm);
@@ -542,19 +557,15 @@ function animateMeasurements(lm, metrics, onComplete) {
     if (idx === 3) drawJawSymLine(lm, metrics);
     ctx.globalAlpha = 1;
   }
-
   function frame(now) {
     var elapsed = now - t0;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(snap, 0, 0);
-
     for (var i = 0; i < NUM; i++) {
-      var ps = i * PHASE_DUR;
-      var pe = ps + PHASE_DUR;
+      var ps = i * PHASE_DUR, pe = ps + PHASE_DUR;
       var alpha = elapsed >= pe ? 1 : elapsed >= ps ? (elapsed - ps) / PHASE_DUR : 0;
       if (alpha > 0) drawPhase(i, Math.min(alpha * 2.5, 1));
     }
-
     if (elapsed < totalDur) { requestAnimationFrame(frame); }
     else {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -581,8 +592,7 @@ function drawCanthalLine(lm) {
   ctx.font = fs + "px 'SF Mono',Consolas,monospace";
   ctx.fillStyle = "rgba(196,164,107,0.88)"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
   ctx.shadowBlur = 12;
-  var labelY = Math.min(le.y, re.y) - fs * 0.6;
-  ctx.fillText("CANT " + (angle >= 0 ? "+" : "") + angle.toFixed(1) + "°", (le.x + re.x) / 2, Math.max(labelY, fs * 1.2));
+  ctx.fillText("CANT " + (angle >= 0 ? "+" : "") + angle.toFixed(1) + "°", (le.x + re.x) / 2, Math.max(Math.min(le.y, re.y) - fs * 0.6, fs * 1.2));
   ctx.restore();
 }
 
@@ -590,16 +600,15 @@ function drawBizygomaticLine(lm) {
   var lcb = lm[234], rcb = lm[454];
   if (!lcb || !rcb) return;
   var midY = (lcb.y + rcb.y) / 2;
-  var pad  = canvas.width * 0.02;
-  var tick = canvas.height * 0.013;
+  var pad  = canvas.width * 0.02, tick = canvas.height * 0.013;
   var fs   = Math.max(9, canvas.width * 0.014);
   ctx.save();
   ctx.strokeStyle = "rgba(196,164,107,0.62)";
   ctx.lineWidth = Math.max(0.7, canvas.width / 1200);
   ctx.shadowColor = "rgba(196,164,107,.7)"; ctx.shadowBlur = 8;
   ctx.beginPath(); ctx.moveTo(lcb.x - pad, midY); ctx.lineTo(rcb.x + pad, midY); ctx.stroke();
-  [[lcb.x - pad, midY], [rcb.x + pad, midY]].forEach(function(pt) {
-    ctx.beginPath(); ctx.moveTo(pt[0], pt[1] - tick); ctx.lineTo(pt[0], pt[1] + tick); ctx.stroke();
+  [[lcb.x - pad, midY],[rcb.x + pad, midY]].forEach(function(pt) {
+    ctx.beginPath(); ctx.moveTo(pt[0], pt[1]-tick); ctx.lineTo(pt[0], pt[1]+tick); ctx.stroke();
   });
   ctx.font = fs + "px 'SF Mono',Consolas,monospace";
   ctx.fillStyle = "rgba(196,164,107,0.82)"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
@@ -609,33 +618,29 @@ function drawBizygomaticLine(lm) {
 }
 
 function drawFWHRLabel(lm, metrics) {
-  var fore = lm[10];
-  if (!fore) return;
+  var fore = lm[10]; if (!fore) return;
   var fs = Math.max(11, canvas.width * 0.018);
   ctx.save();
   ctx.font = "bold " + fs + "px 'SF Mono',Consolas,monospace";
   ctx.fillStyle = "rgba(196,164,107,0.92)"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
   ctx.shadowColor = "rgba(196,164,107,.95)"; ctx.shadowBlur = 16;
-  var labelY = Math.max(fore.y - fs * 2.2, fs * 1.4);
-  ctx.fillText("fWHR  " + metrics.widthHeightRatio.toFixed(2), canvas.width / 2, labelY);
+  ctx.fillText("fWHR  " + metrics.widthHeightRatio.toFixed(2), canvas.width / 2, Math.max(fore.y - fs * 2.2, fs * 1.4));
   ctx.restore();
 }
 
 function drawJawSymLine(lm, metrics) {
-  var ljaw = lm[58], rjaw = lm[288];
-  if (!ljaw || !rjaw) return;
+  var ljaw = lm[58], rjaw = lm[288]; if (!ljaw || !rjaw) return;
   var midY = Math.max(ljaw.y, rjaw.y) + canvas.height * 0.025;
   if (midY > canvas.height - 12) midY = (ljaw.y + rjaw.y) / 2;
-  var pad  = canvas.width * 0.014;
-  var tick = canvas.height * 0.011;
+  var pad  = canvas.width * 0.014, tick = canvas.height * 0.011;
   var fs   = Math.max(9, canvas.width * 0.013);
   ctx.save();
   ctx.strokeStyle = "rgba(196,164,107,0.52)";
   ctx.lineWidth = Math.max(0.6, canvas.width / 1400);
   ctx.shadowColor = "rgba(196,164,107,.6)"; ctx.shadowBlur = 6;
   ctx.beginPath(); ctx.moveTo(ljaw.x - pad, midY); ctx.lineTo(rjaw.x + pad, midY); ctx.stroke();
-  [[ljaw.x - pad, midY], [rjaw.x + pad, midY]].forEach(function(pt) {
-    ctx.beginPath(); ctx.moveTo(pt[0], pt[1] - tick); ctx.lineTo(pt[0], pt[1] + tick); ctx.stroke();
+  [[ljaw.x - pad, midY],[rjaw.x + pad, midY]].forEach(function(pt) {
+    ctx.beginPath(); ctx.moveTo(pt[0], pt[1]-tick); ctx.lineTo(pt[0], pt[1]+tick); ctx.stroke();
   });
   ctx.font = fs + "px 'SF Mono',Consolas,monospace";
   ctx.fillStyle = "rgba(196,164,107,0.78)"; ctx.textAlign = "center"; ctx.textBaseline = "top";
@@ -650,26 +655,20 @@ async function callAI(metrics, shapeInfo) {
   var aiError     = document.getElementById("aiError");
   var aiErrorText = document.getElementById("aiErrorText");
   var hasSide     = !!cleanSideCanvas;
-
   startAIHUD(hasSide);
   aiReport.classList.add("hidden");
   aiError.classList.add("hidden");
-
   var sym        = Math.round(metrics.symmetryScore * 100);
   var fwhr       = metrics.widthHeightRatio.toFixed(2);
   var cbJawRatio = (metrics.cheekboneWidth / metrics.jawWidth).toFixed(2);
-
   var jawInstruction = hasSide
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
     : "CRITICAL: Only frontal view available -- no side profile provided. For DJOULAIN_MANDIBLE: score only what is visible frontally (bigonial width, taper, chin width from front). Add the note '-- side view not provided, frontal estimate only.' Do NOT assign a jaw score above 6.0/10 based on frontal alone.";
-
   var prompt = "You are a brutally honest looksmaxxing analyst. Analyze this face photo in detail. Use looksmaxxing terminology in English, but write all explanatory text in Russian. Be direct and specific -- no sugarcoating.\n\nGeometric data (MediaPipe):\n- Face shape: " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общий PSL рейтинг. Честный вердикт с указанием на сильные и слабые стороны. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Детальный анализ: facial symmetry %, orbital tilt, mandibular deviation, влияние на внешность.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\n1. [Softmax: конкретный совет]\n2. [Softmax: конкретный совет]\n3. [Softmax: конкретный совет]\n4. [Hardmax: процедура + обоснование]\n5. [Hardmax: процедура + обоснование]";
-
   try {
     var res = await fetch(WORKER_URL, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ prompt: prompt, image: canvasToBase64() })
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: prompt, image: canvasToBase64() })
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
@@ -683,45 +682,35 @@ async function callAI(metrics, shapeInfo) {
   }
 }
 
-// -- Image helpers -----------------------------------------------------
 function canvasToBase64(maxSize) {
   maxSize = maxSize || 900;
-  if (cleanSideCanvas) {
-    return compositeToBase64(cleanImageCanvas || canvas, cleanSideCanvas, maxSize);
-  }
-  var src   = cleanImageCanvas || canvas;
+  if (cleanSideCanvas) return compositeToBase64(cleanImageCanvas || canvas, cleanSideCanvas, maxSize);
+  var src = cleanImageCanvas || canvas;
   var scale = Math.min(1, maxSize / Math.max(src.width, src.height));
-  var off   = document.createElement("canvas");
-  off.width   = Math.round(src.width  * scale);
-  off.height  = Math.round(src.height * scale);
+  var off = document.createElement("canvas");
+  off.width = Math.round(src.width * scale); off.height = Math.round(src.height * scale);
   off.getContext("2d").drawImage(src, 0, 0, off.width, off.height);
   return off.toDataURL("image/jpeg", .75).split(",")[1];
 }
 
 function compositeToBase64(frontCvs, sideCvs, maxW) {
   maxW = maxW || 900;
-  var h      = Math.max(frontCvs.height, sideCvs.height);
+  var h = Math.max(frontCvs.height, sideCvs.height);
   var totalW = frontCvs.width + sideCvs.width + 4;
-  var scale  = Math.min(1, maxW / totalW);
-  var out    = document.createElement("canvas");
-  out.width  = Math.round(totalW * scale);
-  out.height = Math.round(h      * scale);
+  var scale = Math.min(1, maxW / totalW);
+  var out = document.createElement("canvas");
+  out.width = Math.round(totalW * scale); out.height = Math.round(h * scale);
   var c = out.getContext("2d");
-  c.fillStyle = "#000";
-  c.fillRect(0, 0, out.width, out.height);
-  var fw = Math.round(frontCvs.width  * scale);
-  var fh = Math.round(frontCvs.height * scale);
+  c.fillStyle = "#000"; c.fillRect(0, 0, out.width, out.height);
+  var fw = Math.round(frontCvs.width * scale), fh = Math.round(frontCvs.height * scale);
   c.drawImage(frontCvs, 0, Math.round((out.height - fh) / 2), fw, fh);
-  c.strokeStyle = "rgba(196,164,107,.5)";
-  c.lineWidth = 1;
+  c.strokeStyle = "rgba(196,164,107,.5)"; c.lineWidth = 1;
   c.beginPath(); c.moveTo(fw + 2, 0); c.lineTo(fw + 2, out.height); c.stroke();
-  var sw = Math.round(sideCvs.width  * scale);
-  var sh = Math.round(sideCvs.height * scale);
+  var sw = Math.round(sideCvs.width * scale), sh = Math.round(sideCvs.height * scale);
   c.drawImage(sideCvs, fw + 4, Math.round((out.height - sh) / 2), sw, sh);
   return out.toDataURL("image/jpeg", .75).split(",")[1];
 }
 
-// -- Report rendering --------------------------------------------------
 function parseAIReport(text) {
   var result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
   var overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/10\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
@@ -738,7 +727,7 @@ function parseAIReport(text) {
   ];
   cats.forEach(function(cat) {
     var esc = cat.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    var m   = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)"));
+    var m = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/10\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)"));
     if (m) result.categories.push({ label: cat.label, score: parseFloat(m[1]), text: m[2].trim() });
   });
   var recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
@@ -750,33 +739,24 @@ function renderAIReport(text) {
   var parsed  = parseAIReport(text);
   var scoreEl = document.getElementById("overallScoreNum");
   document.getElementById("overallDesc").textContent = parsed.overallDesc;
-
-  // Flash reveal
   var flash = document.createElement("div");
   flash.className = "results-reveal-flash";
   document.body.appendChild(flash);
   flash.addEventListener("animationend", function() { flash.remove(); });
-
-  // Animate overall score number
   if (parsed.overall !== null) {
     animateCount(scoreEl, parsed.overall, 1800);
-    // Animate score ring arc
     setTimeout(function() {
       var arc = document.getElementById("scoreRingArc");
       if (arc) {
         var target = 516 - (parsed.overall / 10) * 516;
         arc.style.transition = "stroke-dashoffset 2s cubic-bezier(0.16,1,0.3,1)";
         arc.style.strokeDashoffset = String(target);
-        // Color the score number based on rating
         var col = parsed.overall >= 7.5 ? "#c4a46b" : parsed.overall >= 5.5 ? "#f0ece6" : "#888";
         scoreEl.style.color = col;
-        arc.style.stroke    = col;
+        arc.style.stroke = col;
       }
     }, 120);
-  } else {
-    scoreEl.textContent = "--";
-  }
-
+  } else { scoreEl.textContent = "--"; }
   var catContainer = document.getElementById("categoryScores");
   catContainer.innerHTML = "";
   if (parsed.categories.length > 0) {
@@ -788,14 +768,14 @@ function renderAIReport(text) {
       var header = document.createElement("div"); header.className = "score-row-header";
       header.innerHTML = "<span class=\"score-name\">" + cat.label + "</span><span class=\"score-val\">" + cat.score.toFixed(1) + "<span style=\"color:var(--text-dim);font-size:.75em\">/10</span></span>";
       var track = document.createElement("div"); track.className = "score-bar-track";
-      var fill  = document.createElement("div"); fill.className  = "score-bar-fill"; fill.style.width = "0%";
+      var fill  = document.createElement("div"); fill.className = "score-bar-fill"; fill.style.width = "0%";
       track.appendChild(fill);
       var desc = document.createElement("p"); desc.className = "score-text"; desc.textContent = cat.text;
       row.appendChild(header); row.appendChild(track); row.appendChild(desc);
       catContainer.appendChild(row);
       setTimeout(function() {
         row.classList.add("visible");
-        requestAnimationFrame(function() { requestAnimationFrame(function() { fill.style.width = (cat.score*10) + "%"; }); });
+        requestAnimationFrame(function() { requestAnimationFrame(function() { fill.style.width = (cat.score * 10) + "%"; }); });
       }, idx * 100 + 200);
     });
   } else {
@@ -803,7 +783,6 @@ function renderAIReport(text) {
     pre.style.cssText = "white-space:pre-wrap;font-size:.85rem;color:var(--text-dim);line-height:1.7;font-family:inherit;";
     pre.textContent = text; catContainer.appendChild(pre);
   }
-
   var aiRecs = document.getElementById("aiRecs"), recsList = document.getElementById("recsList");
   recsList.innerHTML = "";
   if (parsed.recommendations.length > 0) {
