@@ -149,7 +149,17 @@ function transitionToAnalysis() {
   // 1. Fade everything around the pill so only the pill is in focus.
   landing.classList.add("landing-focus");
 
-  // 2. Pill slowly rotates and grows.
+  // Measure how far the pill is from the centre of the screen, so the grow
+  // animation can drift it to the exact centre regardless of screen size.
+  var wrap = document.getElementById("bpPillWrap");
+  if (wrap) {
+    var rect = wrap.getBoundingClientRect();
+    var pillCenterY = rect.top + rect.height / 2;
+    var shift = Math.round(window.innerHeight / 2 - pillCenterY);
+    bpScene.style.setProperty("--pill-shift", shift + "px");
+  }
+
+  // 2. Pill slowly rotates, grows and drifts to the centre.
   bpScene.classList.add("pill-animated");
 
   // 3. After it has grown, the pill opens.
