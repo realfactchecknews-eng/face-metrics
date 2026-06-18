@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ascend &amp; Forget</title>
+<title>FaceRate</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
 </head>
@@ -39,6 +40,15 @@
     <div class="land-top">
       <p class="land-brand">ASCEND &amp; FORGET</p>
       <p class="land-quote" id="landQuote"></p>
+    </div>
+
+    <!-- Black pill -->
+    <div class="bp-scene ls-a" style="--d:0.38s">
+      <div class="bp-pill-wrap">
+        <div class="bp-pill"></div>
+      </div>
+      <div class="bp-pill-shd"></div>
+      <p class="bp-legend">TAKE THE BLACK PILL</p>
     </div>
 
     <div class="land-stats">
@@ -217,14 +227,12 @@
 
 <footer class="site-footer" id="mainFooter">
   <div class="container">
-    <p>ASCEND &amp; FORGET &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
+    <p>FaceRate &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
   </div>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="metrics.js"></script>
-<script src="recommendations.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
