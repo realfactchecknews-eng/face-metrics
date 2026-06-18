@@ -261,25 +261,28 @@ html, body {
 #landingSection.landing-focus .land-stats,
 #landingSection.landing-focus .land-fact-block,
 #landingSection.landing-focus .btn-begin,
-#landingSection.landing-focus .bp-legend {
+#landingSection.landing-focus .bp-legend,
+#landingSection.landing-focus .bp-pill-shd {
   opacity: 0 !important;
   pointer-events: none;
   transition: opacity 0.5s ease;
 }
 
-/* Phase 1: pill slowly rotates and grows (triggered) */
+/* Phase 1: pill slowly rotates, grows and drifts to the screen centre.
+   --pill-shift (the vertical distance to the viewport centre) is measured
+   and set in JS just before the animation starts. */
 #bpScene.pill-animated .bp-pill-wrap {
   animation: pillGrowSpin 3.6s cubic-bezier(0.45, 0, 0.2, 1) forwards !important;
 }
 @keyframes pillGrowSpin {
   0% {
-    transform: scale(1) rotateX(0deg) rotateY(0deg);
+    transform: translateY(0) scale(1) rotateX(0deg) rotateY(0deg);
   }
   60% {
-    transform: scale(1.4) rotateX(8deg) rotateY(320deg);
+    transform: translateY(calc(var(--pill-shift, 0px) * 0.6)) scale(1.4) rotateX(8deg) rotateY(320deg);
   }
   100% {
-    transform: scale(1.75) rotateX(0deg) rotateY(540deg);
+    transform: translateY(var(--pill-shift, 0px)) scale(1.75) rotateX(0deg) rotateY(540deg);
   }
 }
 
