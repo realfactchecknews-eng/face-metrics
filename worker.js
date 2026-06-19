@@ -29,32 +29,45 @@ export default {
         ]}]
       : [{ role: 'user', content: body.prompt }];
 
-    let data;
-    try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
-        },
-        // temperature умеренная (различает черты, не жмёт всё к ~5.7) +
-        // фиксированный seed → одно фото всё равно даёт стабильный результат.
-        body: JSON.stringify({
-          model: 'qwen/qwen2.5-vl-72b-instruct',
-          max_tokens: 2200,
-          temperature: 0.7,
-          top_p: 0.95,
-          seed: 1337,
-          messages,
-        }),
-      });
-      data = await res.json();
-    } catch (err) {
-      return cors(JSON.stringify({ text: `Ошибка воркера: ${err.message}` }), 200, 'application/json');
+    // Базовое тело запроса. temperature умеренная (различает черты, не жмёт к ~5.7);
+    // seed → одно фото даёт стабильный результат. allow_fallbacks → если провайдер
+    // упал, OpenRouter пробует другого.
+    function buildBody(withSeed) {
+      const b = {
+        model: 'qwen/qwen2.5-vl-72b-instruct',
+        max_tokens: 2200,
+        temperature: 0.7,
+        top_p: 0.95,
+        messages,
+      };
+      if (withSeed) b.seed = 1337;
+      return JSON.stringify(b);
     }
 
-    if (data?.error) {
-      return cors(JSON.stringify({ text: `OpenRouter: ${data.error.message ?? JSON.stringify(data.error)}` }), 200, 'application/json');
+    // До 3 попыток: при ошибке провайдера повторяем, на последней — без seed.
+    let data, lastErr = 'unknown';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+          },
+          body: buildBody(attempt < 2),
+        });
+        data = await res.json();
+      } catch (err) {
+        lastErr = err.message; data = null;
+      }
+      const hasText = data?.choices?.[0]?.message?.content;
+      if (hasText) break;
+      lastErr = data?.error?.message ?? lastErr;
+      if (attempt < 2) await new Promise(r => setTimeout(r, 700));
+    }
+
+    if (!data?.choices?.[0]?.message?.content) {
+      return cors(JSON.stringify({ text: `Сервис перегружен, попробуйте ещё раз. (${lastErr})` }), 200, 'application/json');
     }
 
     const text = data?.choices?.[0]?.message?.content ?? `Пустой ответ. Данные: ${JSON.stringify(data)}`;
