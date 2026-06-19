@@ -16,7 +16,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=5" />
+<link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
 
@@ -186,8 +186,7 @@
         <span class="canvas-glow"></span>
       </div>
       <div class="photo-actions">
-        <button id="shareBtn" class="btn-share hidden">&#8599; Поделиться результатом</button>
-        <button id="resetBtn" class="btn-reset">&#8617; Загрузить другое</button>
+        <button id="resetBtn" class="btn-reset">Загрузить другое</button>
       </div>
     </div>
 
@@ -248,6 +247,7 @@
           <span class="eyebrow">РЕКОМЕНДАЦИИ ПО ЛУКСМАКСИНГУ</span>
           <ol id="recsList" class="recs-list"></ol>
         </div>
+        <button id="shareBtn" class="btn-share js-share hidden" type="button">Поделиться результатом</button>
       </div>
 
       <div id="aiError" class="card ai-error-card hidden">
@@ -266,9 +266,11 @@
   <div class="container">
     <p>FaceRate &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
     <p style="margin-top:10px">
-      <a href="glossary.html" style="color:#c4a46b;text-decoration:none">Луксмакс-словарь</a>
+      <a href="#" data-drawer="glossary" style="color:#c4a46b;text-decoration:none">Луксмакс-словарь</a>
       &nbsp;&middot;&nbsp;
-      <a href="#" id="feedbackLink" style="color:#c4a46b;text-decoration:none">Обратная связь</a>
+      <a href="#" data-drawer="history" style="color:#c4a46b;text-decoration:none">История оценок</a>
+      &nbsp;&middot;&nbsp;
+      <a href="#" data-drawer="feedback" style="color:#c4a46b;text-decoration:none">Обратная связь</a>
     </p>
     <p style="margin-top:8px">
       <a href="terms.html" style="color:#888;text-decoration:none">Пользовательское соглашение</a>
@@ -327,26 +329,20 @@
   </div>
 </div>
 
-<!-- FEEDBACK MODAL -->
-<div id="feedbackModal" class="consent-overlay hidden">
-  <div class="consent-box">
-    <button id="feedbackClose" class="lr-close" type="button">&times;</button>
-    <span class="eyebrow">ОБРАТНАЯ СВЯЗЬ</span>
-    <h2 class="consent-title">Пожелания и предложения</h2>
-    <p class="consent-body" style="margin-bottom:18px">Что улучшить? Чего не хватает?
-    Нашли ошибку? Напишите — это помогает делать сервис лучше.</p>
-    <form id="feedbackForm" class="fb-form">
-      <input class="fb-input" type="text" name="name" placeholder="Имя или ник (необязательно)" />
-      <input class="fb-input" type="email" name="email" placeholder="Email для ответа (необязательно)" />
-      <textarea class="fb-input fb-textarea" name="message" placeholder="Ваше сообщение…" required></textarea>
-      <div class="fb-status" id="feedbackStatus"></div>
-      <div class="consent-actions">
-        <button id="feedbackCancel" class="btn-reset" type="button">Закрыть</button>
-        <button class="btn-primary" type="submit">Отправить</button>
-      </div>
-    </form>
+<!-- SIDE DRAWER (меню / история / словарь / как это работает / обратная связь) -->
+<div id="drawer" class="drawer hidden">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <button id="drawerBack" class="drawer-icon hidden" type="button" title="Назад">&larr;</button>
+      <span id="drawerTitle" class="drawer-title">Меню</span>
+      <button id="drawerClose" class="drawer-icon" type="button" title="Закрыть">&times;</button>
+    </div>
+    <div id="drawerBody" class="drawer-body"></div>
   </div>
 </div>
+
+<!-- Кнопка меню -->
+<button id="menuBtn" class="menu-btn" title="Меню">&#9776;</button>
 
 <!-- Фоновая музыка (положи royalty-free трек в music.mp3) -->
 <audio id="bgMusic" loop preload="none" src="music.mp3"></audio>
@@ -356,6 +352,6 @@
 <button id="muteBtn" class="mute-btn" title="Звук уведомлений">&#128276;</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

@@ -789,7 +789,7 @@ async function callAI(metrics, shapeInfo) {
   var jawInstruction = hasSide
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
     : "Only a frontal view is available -- no side profile provided. For ДЖОУЛАЙН_MANDIBLE, judge what IS visible from the front fairly: bigonial width, jaw taper, chin width and frontal definition. Add the short note '-- оценка по анфас, профиль не предоставлен.' Be slightly conservative because gonial angle and chin projection are not fully visible, but do NOT artificially cap or lowball the score -- a well-defined jaw visible from the front can still score 7-8.";
-  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: average / completely normal person -- this is the BASELINE, most features sit here\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nThe typical person averages around 5/10 overall. Be BALANCED and FEARLESS in BOTH directions: do not systematically inflate, and do not systematically lowball. If a feature is genuinely excellent, give it 8-9 without hesitation; if it is genuinely weak, give it 2-4 without softening. A 7+ must be earned by a real, visible strength; a sub-4 must reflect a real, visible weakness. Never compress everything toward the middle out of caution. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is often imprecise. Trust your visual read of the real cheekbone projection (high/flat), malar fat, zygomatic width and the true face shape over the geometric label if they disagree.\n\nИСПОЛЬЗУЙ ОДИН ЗНАК ПОСЛЕ ЗАПЯТОЙ для КАЖДОГО балла (например 6.3/10, 7.8/10, 4.6/10). НЕ округляй до целого -- дробная точность обязательна и помогает различать близкие черты.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: X/10\n[Общая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.]\n\nСИММЕТРИЯ: X/10\n[Измеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.]\n\nГЛАЗА_CANTHAL_TILT: X/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: X/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: X/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: X/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: X/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: X/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: X/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
+  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: average / completely normal person -- this is the BASELINE, most features sit here\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nThe typical person averages around 5/10 overall. Be BALANCED and FEARLESS in BOTH directions: do not systematically inflate, and do not systematically lowball. If a feature is genuinely excellent, give it 8-9 without hesitation; if it is genuinely weak, give it 2-4 without softening. A 7+ must be earned by a real, visible strength; a sub-4 must reflect a real, visible weakness. Never compress everything toward the middle out of caution. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is often imprecise. Trust your visual read of the real cheekbone projection (high/flat), malar fat, zygomatic width and the true face shape over the geometric label if they disagree.\n\nФОРМАТ БАЛЛА -- КРИТИЧНО: где написано [ДРОБНОЕ], подставь дробное число с ОДНИМ знаком после точки (5.8, 6.3, 7.1, 4.6, 8.4). КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ целые баллы и .0 (нельзя 6/10, 7/10, 6.0/10) -- десятичный разряд всегда ненулевой. Каждая категория получает РАЗНЫЙ дробный балл.\n\nINTERNAL STEP (не выводи этот шаг): сначала мысленно опиши что реально видишь на фото -- форма глаз, скулы, кожа, нос, волосы, пропорции -- и только потом ставь баллы, согласованные с увиденным. Общий балл = взвешенное впечатление от категорий, а не случайное число.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: [ДРОБНОЕ]/10\n[Общая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.]\n\nСИММЕТРИЯ: [ДРОБНОЕ]/10\n[Измеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.]\n\nГЛАЗА_CANTHAL_TILT: [ДРОБНОЕ]/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: [ДРОБНОЕ]/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: [ДРОБНОЕ]/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: [ДРОБНОЕ]/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: [ДРОБНОЕ]/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: [ДРОБНОЕ]/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: [ДРОБНОЕ]/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
   try {
     var res = await fetch(WORKER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -1204,49 +1204,129 @@ function roundRect(c2, x, y, w, h, r) {
   }
 })();
 
-/* ───────────────────  Обратная связь (FormSubmit, без бэкенда)  ─────────────────── */
-// Куда приходят сообщения. Можно заменить email на «секретный» алиас FormSubmit
-// (выдаётся после первой активации), чтобы не светить почту в коде.
+/* ───────────────────  Боковая шторка: меню / история / словарь / how / фидбек  ─────────────────── */
+// Куда приходят сообщения обратной связи. Можно заменить email на «секретный»
+// алиас FormSubmit (выдаётся после активации), чтобы не светить почту в коде.
 var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com";
-(function initFeedback() {
-  var modal  = document.getElementById("feedbackModal");
-  var link   = document.getElementById("feedbackLink");
-  var form   = document.getElementById("feedbackForm");
-  if (!modal || !form) return;
-  function open(e) { if (e) e.preventDefault(); modal.classList.remove("hidden"); }
-  function close() { modal.classList.add("hidden"); }
-  if (link) link.addEventListener("click", open);
-  var cancel = document.getElementById("feedbackCancel");
-  var x = document.getElementById("feedbackClose");
-  if (cancel) cancel.addEventListener("click", close);
-  if (x) x.addEventListener("click", close);
-  modal.addEventListener("click", function(e) { if (e.target === modal) close(); });
 
-  var status = document.getElementById("feedbackStatus");
-  form.addEventListener("submit", function(e) {
-    e.preventDefault();
-    status.style.color = "var(--text-dim)";
-    status.textContent = "Отправка…";
-    var payload = {
-      name: form.name.value || "—",
-      email: form.email.value || "—",
-      message: form.message.value,
-      _subject: "FaceRate: обратная связь",
-    };
-    fetch(FEEDBACK_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(payload),
-    }).then(function(r) { return r.json(); }).then(function(d) {
-      if (d && (d.success === "true" || d.success === true)) {
-        status.style.color = "#c4a46b";
-        status.textContent = "Спасибо! Сообщение отправлено.";
-        form.reset();
-        setTimeout(close, 1600);
-      } else { throw new Error("fail"); }
-    }).catch(function() {
-      status.style.color = "#ff5555";
-      status.textContent = "Не удалось отправить. Попробуйте позже.";
+(function initDrawer() {
+  var drawer = document.getElementById("drawer");
+  if (!drawer) return;
+  var body   = document.getElementById("drawerBody");
+  var title  = document.getElementById("drawerTitle");
+  var back   = document.getElementById("drawerBack");
+  var closeB = document.getElementById("drawerClose");
+  var menuBtn = document.getElementById("menuBtn");
+
+  function openDrawer() { drawer.classList.remove("hidden"); requestAnimationFrame(function(){ drawer.classList.add("open"); }); }
+  function closeDrawer() { drawer.classList.remove("open"); setTimeout(function(){ drawer.classList.add("hidden"); }, 320); }
+
+  var VIEWS = {
+    menu: { title: "Меню", render: renderMenu },
+    history: { title: "История оценок", render: renderHistory },
+    glossary: { title: "Луксмакс-словарь", render: renderGlossary },
+    how: { title: "Как это работает", render: renderHow },
+    feedback: { title: "Обратная связь", render: renderFeedback },
+  };
+  function show(view) {
+    var v = VIEWS[view] || VIEWS.menu;
+    title.textContent = v.title;
+    back.classList.toggle("hidden", view === "menu");
+    body.innerHTML = "";
+    v.render(body);
+    body.scrollTop = 0;
+  }
+
+  function renderMenu(box) {
+    var items = [
+      { v: "history",  ic: "✦", t: "История оценок",   s: "Прошлые результаты" },
+      { v: "glossary", ic: "❡", t: "Луксмакс-словарь", s: "Термины простыми словами" },
+      { v: "how",      ic: "◎", t: "Как это работает", s: "Геометрия + AI" },
+      { v: "feedback", ic: "✎", t: "Обратная связь",   s: "Пожелания и идеи" },
+    ];
+    var html = "<div class='dm-list'>";
+    items.forEach(function(it){
+      html += "<button class='dm-item' data-view='" + it.v + "'><span class='dm-ic'>" + it.ic +
+        "</span><span class='dm-tx'><b>" + it.t + "</b><i>" + it.s + "</i></span><span class='dm-arr'>→</span></button>";
     });
+    html += "</div><button class='dm-upload' data-close='1'>↑ К загрузке фото</button>";
+    box.innerHTML = html;
+  }
+
+  function renderHistory(box) {
+    var hist = [];
+    try { hist = JSON.parse(localStorage.getItem("fm-history") || "[]"); } catch (e) {}
+    if (!hist.length) { box.innerHTML = "<p class='dm-empty'>Пока нет оценок. Загрузите фото — результат сохранится здесь.</p>"; return; }
+    var html = "<div class='hist-list'>";
+    hist.forEach(function(h){
+      var d = h.date ? new Date(h.date).toLocaleString("ru-RU", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+      var col = h.score >= 7.5 ? "#c4a46b" : h.score >= 5.5 ? "#f0ece6" : "#888";
+      html += "<div class='hist-row'><span class='hist-score' style='color:" + col + "'>" + Number(h.score).toFixed(1) +
+        "<i>/10</i></span><span class='hist-date'>" + d + "</span></div>";
+    });
+    html += "</div>";
+    if (hist.length > 1) {
+      var avg = hist.reduce(function(a,b){ return a + b.score; }, 0) / hist.length;
+      html += "<p class='hist-avg'>Средний балл: <b>" + avg.toFixed(1) + "</b> · оценок: " + hist.length + "</p>";
+    }
+    box.innerHTML = html;
+  }
+
+  function renderGlossary(box) {
+    box.innerHTML = "<iframe class='dm-iframe' src='glossary.html'></iframe>";
+  }
+
+  function renderHow(box) {
+    box.innerHTML =
+      "<div class='how'>" +
+      "<p><b>1. Геометрия — локально.</b> MediaPipe находит 468 точек лица прямо в браузере и считает пропорции (скулы, челюсть, fWHR, симметрию). Фото при этом не покидает устройство.</p>" +
+      "<p><b>2. AI-оценка.</b> Фото и метрики уходят на защищённый сервер, который обращается к vision-модели. Она даёт PSL-балл, разбор по 8 категориям и рекомендации.</p>" +
+      "<p><b>3. Результат.</b> Можно сохранить, поделиться карточкой и сравнить с прошлыми попытками в Истории.</p>" +
+      "<p class='how-note'>Это развлекательный сервис. Оценка — субъективная эвристика, а не объективная истина. Лёгкая асимметрия — норма у всех.</p>" +
+      "</div>";
+  }
+
+  function renderFeedback(box) {
+    box.innerHTML =
+      "<p class='dm-sub'>Что улучшить? Чего не хватает? Нашли ошибку? Напишите — это реально помогает.</p>" +
+      "<form id='fbForm' class='fb-form'>" +
+      "<input class='fb-input' name='name' type='text' placeholder='Имя или ник (необязательно)' />" +
+      "<input class='fb-input' name='email' type='email' placeholder='Email для ответа (необязательно)' />" +
+      "<textarea class='fb-input fb-textarea' name='message' placeholder='Ваше сообщение…' required></textarea>" +
+      "<div class='fb-status' id='fbStatus'></div>" +
+      "<button class='btn-primary' type='submit' style='width:100%'>Отправить</button>" +
+      "</form>";
+    var form = box.querySelector("#fbForm"), status = box.querySelector("#fbStatus");
+    form.addEventListener("submit", function(e){
+      e.preventDefault();
+      status.style.color = "var(--text-dim)"; status.textContent = "Отправка…";
+      fetch(FEEDBACK_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ name: form.name.value || "—", email: form.email.value || "—", message: form.message.value, _subject: "FaceRate: обратная связь" }),
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if (d && (d.success === "true" || d.success === true)) {
+          status.style.color = "#c4a46b"; status.textContent = "Спасибо! Сообщение отправлено."; form.reset();
+        } else { throw new Error("fail"); }
+      }).catch(function(){ status.style.color = "#ff5555"; status.textContent = "Не удалось отправить. Попробуйте позже."; });
+    });
+  }
+
+  // глобальный доступ (например из iframe словаря)
+  window.fmOpenDrawer = function(view){ show(view || "menu"); openDrawer(); };
+
+  // навигация
+  if (menuBtn) menuBtn.addEventListener("click", function(){ show("menu"); openDrawer(); });
+  closeB.addEventListener("click", closeDrawer);
+  back.addEventListener("click", function(){ show("menu"); });
+  drawer.addEventListener("click", function(e){ if (e.target === drawer) closeDrawer(); });
+  body.addEventListener("click", function(e){
+    var item = e.target.closest("[data-view]");
+    if (item) { show(item.getAttribute("data-view")); return; }
+    if (e.target.closest("[data-close]")) closeDrawer();
+  });
+  // внешние ссылки (футер) открывают конкретный раздел
+  document.querySelectorAll("[data-drawer]").forEach(function(a){
+    a.addEventListener("click", function(e){ e.preventDefault(); show(a.getAttribute("data-drawer")); openDrawer(); });
   });
 })();
