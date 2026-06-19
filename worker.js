@@ -37,13 +37,13 @@ export default {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
         },
-        // temperature низкая + фиксированный seed → одно и то же фото
-        // оценивается стабильно (а не каждый раз по-разному).
+        // temperature умеренная (различает черты, не жмёт всё к ~5.7) +
+        // фиксированный seed → одно фото всё равно даёт стабильный результат.
         body: JSON.stringify({
           model: 'qwen/qwen2.5-vl-72b-instruct',
           max_tokens: 2200,
-          temperature: 0.2,
-          top_p: 0.9,
+          temperature: 0.7,
+          top_p: 0.95,
           seed: 1337,
           messages,
         }),
