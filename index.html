@@ -16,7 +16,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=6" />
+<link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
 
@@ -97,6 +97,38 @@
     </button>
 
   </div>
+</div>
+
+<!-- FULL-SCREEN MENU HUB (после «Начать анализ») -->
+<div id="menuScreen" class="menu-screen hidden">
+  <div class="menu-bg-pills" id="menuBgPills" aria-hidden="true"></div>
+  <div class="menu-inner">
+    <div class="menu-pill-stage" id="menuPillStage">
+      <div class="menu-pill-wrap" id="menuPillWrap">
+        <div class="bp-pill"></div>
+      </div>
+      <div class="menu-pill-shadow"></div>
+    </div>
+    <p class="menu-eyebrow">ASCEND &amp; FORGET</p>
+    <h2 class="menu-title">Меню</h2>
+    <div class="menu-tiles">
+      <button class="menu-tile" data-view="history"><span class="mt-ic">✦</span><span class="mt-tx"><b>История оценок</b><i>Прошлые результаты</i></span></button>
+      <button class="menu-tile" data-view="glossary"><span class="mt-ic">❡</span><span class="mt-tx"><b>Луксмакс-словарь</b><i>Термины простыми словами</i></span></button>
+      <button class="menu-tile" data-view="how"><span class="mt-ic">◎</span><span class="mt-tx"><b>Как это работает</b><i>Геометрия + AI</i></span></button>
+      <button class="menu-tile" data-view="feedback"><span class="mt-ic">✎</span><span class="mt-tx"><b>Обратная связь</b><i>Пожелания и идеи</i></span></button>
+    </div>
+    <button id="menuGoBtn" class="menu-go"><span>Перейти к анализу</span><span class="menu-go-arr">&rarr;</span></button>
+  </div>
+</div>
+
+<!-- FULL-SCREEN VIEW (история / словарь / как / обратная связь) -->
+<div id="fsView" class="fs-view hidden">
+  <div class="fs-head">
+    <button id="fsBack" class="fs-back" type="button">&larr; Назад</button>
+    <span id="fsTitle" class="fs-title"></span>
+    <span class="fs-spacer"></span>
+  </div>
+  <div id="fsBody" class="fs-body"></div>
 </div>
 
 <!-- MAIN APP -->
@@ -186,6 +218,7 @@
         <span class="canvas-glow"></span>
       </div>
       <div class="photo-actions">
+        <button id="toMenuBtn" class="btn-reset" type="button">&larr; Меню</button>
         <button id="resetBtn" class="btn-reset">Загрузить другое</button>
       </div>
     </div>
@@ -264,13 +297,13 @@
 
 <footer class="site-footer" id="mainFooter">
   <div class="container">
-    <p>FaceRate &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
-    <p style="margin-top:10px">
-      <a href="#" data-drawer="glossary" style="color:#c4a46b;text-decoration:none">Луксмакс-словарь</a>
+    <p class="footer-extra">FaceRate &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
+    <p class="footer-extra" style="margin-top:10px">
+      <a href="#" data-view="glossary" style="color:#c4a46b;text-decoration:none">Луксмакс-словарь</a>
       &nbsp;&middot;&nbsp;
-      <a href="#" data-drawer="history" style="color:#c4a46b;text-decoration:none">История оценок</a>
+      <a href="#" data-view="history" style="color:#c4a46b;text-decoration:none">История оценок</a>
       &nbsp;&middot;&nbsp;
-      <a href="#" data-drawer="feedback" style="color:#c4a46b;text-decoration:none">Обратная связь</a>
+      <a href="#" data-view="feedback" style="color:#c4a46b;text-decoration:none">Обратная связь</a>
     </p>
     <p style="margin-top:8px">
       <a href="terms.html" style="color:#888;text-decoration:none">Пользовательское соглашение</a>
@@ -329,29 +362,13 @@
   </div>
 </div>
 
-<!-- SIDE DRAWER (меню / история / словарь / как это работает / обратная связь) -->
-<div id="drawer" class="drawer hidden">
-  <div class="drawer-panel">
-    <div class="drawer-head">
-      <button id="drawerBack" class="drawer-icon hidden" type="button" title="Назад">&larr;</button>
-      <span id="drawerTitle" class="drawer-title">Меню</span>
-      <button id="drawerClose" class="drawer-icon" type="button" title="Закрыть">&times;</button>
-    </div>
-    <div id="drawerBody" class="drawer-body"></div>
-  </div>
-</div>
-
-<!-- Кнопка меню -->
-<button id="menuBtn" class="menu-btn" title="Меню">&#9776;</button>
-
 <!-- Фоновая музыка (положи royalty-free трек в music.mp3) -->
 <audio id="bgMusic" loop preload="none" src="music.mp3"></audio>
 
-<!-- Sticky controls -->
-<button id="musicBtn" class="mute-btn music-btn" title="Музыка">&#127925;</button>
-<button id="muteBtn" class="mute-btn" title="Звук уведомлений">&#128276;</button>
+<!-- Единая кнопка звука (музыка + уведомления) -->
+<button id="musicBtn" class="mute-btn" title="Звук">&#128266;</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

@@ -193,8 +193,39 @@ window.addEventListener("DOMContentLoaded", function() {
     startLanding();
   }
   var beginBtn = document.getElementById("beginBtn");
-  if (beginBtn) beginBtn.addEventListener("click", transitionToAnalysis);
+  if (beginBtn) beginBtn.addEventListener("click", enterMenu);
 });
+
+// Лендинг → полноэкранное меню.
+function enterMenu() {
+  var landing = document.getElementById("landingSection");
+  var menu = document.getElementById("menuScreen");
+  document.body.classList.add("entered");
+  if (landing) {
+    landing.classList.add("landing-exit");
+    setTimeout(function(){ if (landing.parentNode) landing.remove(); }, 700);
+  }
+  if (menu) {
+    menu.classList.remove("hidden");
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ menu.classList.add("in"); }); });
+  }
+}
+
+// Меню → экран анализа (загрузка фото).
+function goToAnalysis() {
+  var menu = document.getElementById("menuScreen");
+  if (menu) { menu.classList.remove("in"); setTimeout(function(){ menu.classList.add("hidden"); }, 420); }
+  document.body.classList.add("post-landing");
+}
+
+// Экран анализа → меню.
+function backToMenu() {
+  document.getElementById("analysisView").classList.add("hidden");
+  document.getElementById("uploadSection").classList.remove("hidden");
+  document.body.classList.remove("analyzing", "post-landing");
+  var menu = document.getElementById("menuScreen");
+  if (menu) { menu.classList.remove("hidden"); requestAnimationFrame(function(){ menu.classList.add("in"); }); }
+}
 
 // -- Upload: front photo -----------------------------------------------
 chooseFileBtn.addEventListener("click", function(e) { e.stopPropagation(); fileInput.click(); });
@@ -280,9 +311,18 @@ function runAnalysis() {
   resultsDiv.classList.add("hidden");
   uploadSection.classList.add("hidden");
   analysisView.classList.remove("hidden");
+  document.body.classList.add("analyzing");
   loadingCard.classList.remove("hidden");
   processImage(frontImg, sideImg);
 }
+
+// Кнопки навигации меню/анализа
+(function wireNav(){
+  var go = document.getElementById("menuGoBtn");
+  if (go) go.addEventListener("click", goToAnalysis);
+  var toMenu = document.getElementById("toMenuBtn");
+  if (toMenu) toMenu.addEventListener("click", backToMenu);
+})();
 
 function showConsent() {
   var m = document.getElementById("consentModal");
@@ -312,6 +352,7 @@ function showConsent() {
 resetBtn.addEventListener("click", function() {
   uploadSection.classList.remove("hidden");
   analysisView.classList.add("hidden");
+  document.body.classList.remove("analyzing");
   resultsDiv.classList.add("hidden");
   loadingCard.classList.add("hidden");
   errorBox.classList.add("hidden");
@@ -789,7 +830,7 @@ async function callAI(metrics, shapeInfo) {
   var jawInstruction = hasSide
     ? "A side profile photo is included on the RIGHT side of the image. Use it to accurately assess jawline definition, gonial angle, chin projection, ramus height, and nasal profile."
     : "Only a frontal view is available -- no side profile provided. For ДЖОУЛАЙН_MANDIBLE, judge what IS visible from the front fairly: bigonial width, jaw taper, chin width and frontal definition. Add the short note '-- оценка по анфас, профиль не предоставлен.' Be slightly conservative because gonial angle and chin projection are not fully visible, but do NOT artificially cap or lowball the score -- a well-defined jaw visible from the front can still score 7-8.";
-  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: average / completely normal person -- this is the BASELINE, most features sit here\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nThe typical person averages around 5/10 overall. Be BALANCED and FEARLESS in BOTH directions: do not systematically inflate, and do not systematically lowball. If a feature is genuinely excellent, give it 8-9 without hesitation; if it is genuinely weak, give it 2-4 without softening. A 7+ must be earned by a real, visible strength; a sub-4 must reflect a real, visible weakness. Never compress everything toward the middle out of caution. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is often imprecise. Trust your visual read of the real cheekbone projection (high/flat), malar fat, zygomatic width and the true face shape over the geometric label if they disagree.\n\nФОРМАТ БАЛЛА -- КРИТИЧНО: где написано [ДРОБНОЕ], подставь дробное число с ОДНИМ знаком после точки (5.8, 6.3, 7.1, 4.6, 8.4). КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ целые баллы и .0 (нельзя 6/10, 7/10, 6.0/10) -- десятичный разряд всегда ненулевой. Каждая категория получает РАЗНЫЙ дробный балл.\n\nINTERNAL STEP (не выводи этот шаг): сначала мысленно опиши что реально видишь на фото -- форма глаз, скулы, кожа, нос, волосы, пропорции -- и только потом ставь баллы, согласованные с увиденным. Общий балл = взвешенное впечатление от категорий, а не случайное число.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: [ДРОБНОЕ]/10\n[Общая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.]\n\nСИММЕТРИЯ: [ДРОБНОЕ]/10\n[Измеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.]\n\nГЛАЗА_CANTHAL_TILT: [ДРОБНОЕ]/10\n[Конкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.]\n\nМИДФЕЙС_MAXILLA: [ДРОБНОЕ]/10\n[Максиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.]\n\nДЖОУЛАЙН_MANDIBLE: [ДРОБНОЕ]/10\n[Джоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.]\n\nНОС_NOSE: [ДРОБНОЕ]/10\n[Нос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.]\n\nГУБЫ_СКУЛЫ: [ДРОБНОЕ]/10\n[Губы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.]\n\nКОЖА: [ДРОБНОЕ]/10\n[Текстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.]\n\nГРУМИНГ_STYLE: [ДРОБНОЕ]/10\n[Hairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.]\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
+  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: average / completely normal person -- this is the BASELINE, most features sit here\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nThe typical person averages around 5/10 overall. Be BALANCED and FEARLESS in BOTH directions: do not systematically inflate, and do not systematically lowball. If a feature is genuinely excellent, give it 8-9 without hesitation; if it is genuinely weak, give it 2-4 without softening. A 7+ must be earned by a real, visible strength; a sub-4 must reflect a real, visible weakness. Never compress everything toward the middle out of caution. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is often imprecise. Trust your visual read of the real cheekbone projection (high/flat), malar fat, zygomatic width and the true face shape over the geometric label if they disagree.\n\nФОРМАТ БАЛЛА -- КРИТИЧНО: вместо 0.0 ставь дробное число с ОДНИМ знаком после точки (5.8, 6.3, 7.1, 4.6, 8.4). КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ целые баллы и .0 (нельзя 6/10, 7/10, 6.0/10) -- десятичный разряд всегда ненулевой. Каждая категория получает РАЗНЫЙ дробный балл. В ОТВЕТЕ НЕ ПИШИ квадратные скобки [ ], слова-плейсхолдеры или текст подсказок -- описания под каждой меткой замени СВОИМ готовым текстом про это фото.\n\nINTERNAL STEP (не выводи этот шаг): сначала мысленно опиши что реально видишь на фото -- форма глаз, скулы, кожа, нос, волосы, пропорции -- и только потом ставь баллы, согласованные с увиденным. Общий балл = взвешенное впечатление от категорий, а не случайное число.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: 0.0/10\nОбщая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.\n\nСИММЕТРИЯ: 0.0/10\nИзмеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.\n\nГЛАЗА_CANTHAL_TILT: 0.0/10\nКонкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.\n\nМИДФЕЙС_MAXILLA: 0.0/10\nМаксиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.\n\nДЖОУЛАЙН_MANDIBLE: 0.0/10\nДжоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.\n\nНОС_NOSE: 0.0/10\nНос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.\n\nГУБЫ_СКУЛЫ: 0.0/10\nГубы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.\n\nКОЖА: 0.0/10\nТекстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.\n\nГРУМИНГ_STYLE: 0.0/10\nHairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
   try {
     var res = await fetch(WORKER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -838,7 +879,7 @@ function compositeToBase64(frontCvs, sideCvs, maxW) {
 
 function parseAIReport(text) {
   var result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
-  var overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/(10)\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
+  var overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/(10)\s*\n([\s\S]*?)(?=\nЀ-ӿ_A-Z]+:|$)/);
   if (overallM) { result.overall = parseFloat(overallM[1]); result.overallDesc = overallM[3].trim(); }
   var cats = [
     { key:"СИММЕТРИЯ",          label:"Симметрия" },
@@ -852,7 +893,7 @@ function parseAIReport(text) {
   ];
   cats.forEach(function(cat) {
     var esc = cat.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    var m = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/(10)\\s*\\n([\\s\\S]*?)(?=\\n[\\u0400-\\u04FF_A-Z]+:|$)"));
+    var m = text.match(new RegExp(esc + ":\\s*(\\d+(?:\\.\\d+)?)\\/(10)\\s*\\n([\\s\\S]*?)(?=\\n\\u0400-\\u04FF_A-Z]+:|$)"));
     if (m) result.categories.push({ label: cat.label, score: parseFloat(m[1]), text: m[3].trim() });
   });
   var recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
@@ -945,7 +986,9 @@ function animateCount(el, target, duration) {
 
 /* ───────────────────  Звук-пинг (Web Audio, без файла)  ─────────────────── */
 var _audioCtx = null;
-function isMuted() { return localStorage.getItem("fm-muted") === "1"; }
+// Единый звук: вкл = музыка + пинг. "fm-sound"==="1" → звук включён.
+function soundOn() { return localStorage.getItem("fm-sound") === "1"; }
+function isMuted() { return !soundOn(); }
 function playPing() {
   if (isMuted()) return;
   try {
@@ -963,17 +1006,6 @@ function playPing() {
   } catch (e) { /* звук не критичен */ }
 }
 
-(function initMute() {
-  var btn = document.getElementById("muteBtn");
-  if (!btn) return;
-  function sync() { btn.textContent = isMuted() ? "🔕" : "🔔"; }
-  btn.addEventListener("click", function() {
-    localStorage.setItem("fm-muted", isMuted() ? "0" : "1");
-    sync();
-    if (!isMuted()) playPing();
-  });
-  sync();
-})();
 
 /* ───────────────────  Последний результат + история  ─────────────────── */
 function saveLastResult(overall, reportText) {
@@ -1107,15 +1139,17 @@ function buildShareCard() {
     g.strokeStyle = "rgba(196,164,107,0.45)"; g.lineWidth = 1.5;
     roundRect(g, ix, iy, side, side, 26); g.stroke();
 
-    // общий балл
+    // общий балл — балл + «/10» как одна центрированная группа (без съезжания)
     var score = (document.getElementById("overallScoreNum").textContent || "--");
     var by = iy + side + 130;
-    g.fillStyle = "#f0ece6";
-    g.font = "300 150px Georgia, serif";
-    g.fillText(score, W / 2 - 24, by);
-    g.fillStyle = "#888";
-    g.font = "300 50px Georgia, serif";
-    g.fillText("/10", W / 2 + (score.length * 42), by);
+    g.textAlign = "left"; g.textBaseline = "alphabetic";
+    var scoreFont = "300 150px Georgia, serif", denomFont = "300 50px Georgia, serif";
+    g.font = scoreFont; var wScore = g.measureText(score).width;
+    g.font = denomFont; var wDenom = g.measureText("/10").width;
+    var gap = 8, startX = W / 2 - (wScore + gap + wDenom) / 2;
+    g.font = scoreFont; g.fillStyle = "#f0ece6"; g.fillText(score, startX, by);
+    g.font = denomFont; g.fillStyle = "#888"; g.fillText("/10", startX + wScore + gap, by);
+    g.textAlign = "center";
     g.fillStyle = "#c4a46b";
     g.font = "400 26px Georgia, serif";
     g.fillText("PSL РЕЙТИНГ", W / 2, by + 44);
@@ -1158,25 +1192,29 @@ function roundRect(c2, x, y, w, h, r) {
   c2.closePath();
 }
 
-/* ───────────────────  Фоновая музыка  ─────────────────── */
-(function initMusic() {
+/* ───────────────────  Единая кнопка звука (музыка + пинг)  ─────────────────── */
+(function initSound() {
   var btn = document.getElementById("musicBtn");
   var audio = document.getElementById("bgMusic");
-  if (!btn || !audio) return;
-  audio.volume = 0.16;
-  var on = false;
+  if (!btn) return;
+  if (audio) audio.volume = 0.16;
   function sync() {
-    btn.textContent = on ? "🎵" : "🔇";
+    var on = soundOn();
+    btn.textContent = on ? "🔊" : "🔇";
     btn.classList.toggle("active", on);
   }
-  // Если файла нет (404) — прячем кнопку, чтобы не вводить в заблуждение.
-  audio.addEventListener("error", function() { btn.style.display = "none"; });
   btn.addEventListener("click", function() {
-    on = !on;
-    if (on) { audio.play().catch(function() { on = false; sync(); }); }
-    else { audio.pause(); }
+    var turnOn = !soundOn();
+    localStorage.setItem("fm-sound", turnOn ? "1" : "0");
+    if (audio) {
+      if (turnOn) { audio.play().catch(function(){}); }
+      else { audio.pause(); }
+    }
     sync();
+    if (turnOn) playPing();
   });
+  // Если звук был включён ранее — попробовать возобновить музыку.
+  if (soundOn() && audio) audio.play().catch(function(){});
   sync();
 })();
 
@@ -1209,49 +1247,28 @@ function roundRect(c2, x, y, w, h, r) {
 // алиас FormSubmit (выдаётся после активации), чтобы не светить почту в коде.
 var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com";
 
-(function initDrawer() {
-  var drawer = document.getElementById("drawer");
-  if (!drawer) return;
-  var body   = document.getElementById("drawerBody");
-  var title  = document.getElementById("drawerTitle");
-  var back   = document.getElementById("drawerBack");
-  var closeB = document.getElementById("drawerClose");
-  var menuBtn = document.getElementById("menuBtn");
+(function initViews() {
+  var view  = document.getElementById("fsView");
+  if (!view) return;
+  var body  = document.getElementById("fsBody");
+  var title = document.getElementById("fsTitle");
+  var back  = document.getElementById("fsBack");
 
-  function openDrawer() { drawer.classList.remove("hidden"); requestAnimationFrame(function(){ drawer.classList.add("open"); }); }
-  function closeDrawer() { drawer.classList.remove("open"); setTimeout(function(){ drawer.classList.add("hidden"); }, 320); }
+  function openView(name) {
+    var v = VIEWS[name]; if (!v) return;
+    title.textContent = v.title;
+    body.innerHTML = ""; v.render(body); body.scrollTop = 0;
+    view.classList.remove("hidden");
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ view.classList.add("in"); }); });
+  }
+  function closeView() { view.classList.remove("in"); setTimeout(function(){ view.classList.add("hidden"); }, 360); }
 
   var VIEWS = {
-    menu: { title: "Меню", render: renderMenu },
     history: { title: "История оценок", render: renderHistory },
     glossary: { title: "Луксмакс-словарь", render: renderGlossary },
     how: { title: "Как это работает", render: renderHow },
     feedback: { title: "Обратная связь", render: renderFeedback },
   };
-  function show(view) {
-    var v = VIEWS[view] || VIEWS.menu;
-    title.textContent = v.title;
-    back.classList.toggle("hidden", view === "menu");
-    body.innerHTML = "";
-    v.render(body);
-    body.scrollTop = 0;
-  }
-
-  function renderMenu(box) {
-    var items = [
-      { v: "history",  ic: "✦", t: "История оценок",   s: "Прошлые результаты" },
-      { v: "glossary", ic: "❡", t: "Луксмакс-словарь", s: "Термины простыми словами" },
-      { v: "how",      ic: "◎", t: "Как это работает", s: "Геометрия + AI" },
-      { v: "feedback", ic: "✎", t: "Обратная связь",   s: "Пожелания и идеи" },
-    ];
-    var html = "<div class='dm-list'>";
-    items.forEach(function(it){
-      html += "<button class='dm-item' data-view='" + it.v + "'><span class='dm-ic'>" + it.ic +
-        "</span><span class='dm-tx'><b>" + it.t + "</b><i>" + it.s + "</i></span><span class='dm-arr'>→</span></button>";
-    });
-    html += "</div><button class='dm-upload' data-close='1'>↑ К загрузке фото</button>";
-    box.innerHTML = html;
-  }
 
   function renderHistory(box) {
     var hist = [];
@@ -1313,20 +1330,49 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
   }
 
   // глобальный доступ (например из iframe словаря)
-  window.fmOpenDrawer = function(view){ show(view || "menu"); openDrawer(); };
+  window.fmOpenView = function(name){ openView(name); };
+  window.fmOpenDrawer = window.fmOpenView; // обратная совместимость
 
   // навигация
-  if (menuBtn) menuBtn.addEventListener("click", function(){ show("menu"); openDrawer(); });
-  closeB.addEventListener("click", closeDrawer);
-  back.addEventListener("click", function(){ show("menu"); });
-  drawer.addEventListener("click", function(e){ if (e.target === drawer) closeDrawer(); });
-  body.addEventListener("click", function(e){
-    var item = e.target.closest("[data-view]");
-    if (item) { show(item.getAttribute("data-view")); return; }
-    if (e.target.closest("[data-close]")) closeDrawer();
+  back.addEventListener("click", closeView);
+  // плитки меню + ссылки футера с data-view
+  document.querySelectorAll("[data-view]").forEach(function(el){
+    el.addEventListener("click", function(e){ e.preventDefault(); openView(el.getAttribute("data-view")); });
   });
-  // внешние ссылки (футер) открывают конкретный раздел
-  document.querySelectorAll("[data-drawer]").forEach(function(a){
-    a.addEventListener("click", function(e){ e.preventDefault(); show(a.getAttribute("data-drawer")); openDrawer(); });
-  });
+
+  // Большая 3D-пилюля в меню: левитация + наклон за курсором.
+  var stage = document.getElementById("menuScreen");
+  var wrap  = document.getElementById("menuPillWrap");
+  if (stage && wrap) {
+    stage.addEventListener("mousemove", function(e){
+      var r = stage.getBoundingClientRect();
+      var px = (e.clientX - r.left) / r.width - 0.5;   // -0.5..0.5
+      var py = (e.clientY - r.top) / r.height - 0.5;
+      wrap.style.setProperty("--ry", (px * 50).toFixed(1) + "deg");
+      wrap.style.setProperty("--rx", (-py * 32).toFixed(1) + "deg");
+    });
+    stage.addEventListener("mouseleave", function(){
+      wrap.style.setProperty("--ry", "0deg");
+      wrap.style.setProperty("--rx", "0deg");
+    });
+  }
+
+  // Размытые пилюли на фоне меню
+  var field = document.getElementById("menuBgPills");
+  if (field) {
+    var shades = ["#e8e8e8","#9a9a9a","#2a2a2a","#f0f0f0","#555","#111"];
+    for (var i = 0; i < 12; i++) {
+      var p = document.createElement("span"); p.className = "fp-pill";
+      var w = 50 + Math.random() * 110;
+      p.style.width = w + "px"; p.style.height = (w * 0.42) + "px";
+      p.style.background = shades[i % shades.length];
+      p.style.left = (Math.random() * 100) + "%"; p.style.top = (Math.random() * 100) + "%";
+      p.style.setProperty("--rot", (Math.random() * 360) + "deg");
+      p.style.setProperty("--dx", ((Math.random() - 0.5) * 90) + "px");
+      p.style.setProperty("--dy", ((Math.random() - 0.5) * 90) + "px");
+      p.style.animationDuration = (16 + Math.random() * 16) + "s";
+      p.style.animationDelay = (-Math.random() * 20) + "s";
+      field.appendChild(p);
+    }
+  }
 })();

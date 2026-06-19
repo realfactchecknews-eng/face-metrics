@@ -1502,9 +1502,9 @@ canvas {
   .consent-actions button { width: 100%; }
 }
 
-/* Sticky-кнопки появляются только после интро+лендинга (когда показан сам апп) */
-.mute-btn, .menu-btn { opacity: 0; pointer-events: none; transition: opacity .6s ease, border-color .15s, transform .15s; }
-body.post-landing .mute-btn, body.post-landing .menu-btn { opacity: 1; pointer-events: auto; }
+/* Кнопка звука появляется после входа в меню; держим её поверх меню/вьюх */
+.mute-btn { opacity: 0; pointer-events: none; z-index: 2600; transition: opacity .6s ease, border-color .15s, transform .15s; }
+body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 
 /* ───── Баннер прошлого результата: кнопки ───── */
 .lrb-cta { margin-left: auto; font-size: 0.82rem; color: var(--accent); }
@@ -1640,3 +1640,111 @@ body.post-landing .mute-btn, body.post-landing .menu-btn { opacity: 1; pointer-e
 .how p { font-size: 0.95rem; color: var(--text-dim); line-height: 1.7; margin-bottom: 16px; }
 .how b { color: var(--text-bright); font-weight: 400; }
 .how-note { border-left: 2px solid var(--accent); padding-left: 14px; color: var(--text-mid, #888) !important; }
+
+/* ═════════  ПОЛНОЭКРАННОЕ МЕНЮ  ═════════ */
+.menu-screen {
+  position: fixed; inset: 0; z-index: 1500;
+  background: radial-gradient(ellipse at 50% 30%, #14110c 0%, #0a0a0a 60%, #050505 100%);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  opacity: 0; transform: scale(1.04);
+  transition: opacity .55s ease, transform .55s cubic-bezier(0.16,1,0.3,1);
+}
+.menu-screen.in { opacity: 1; transform: scale(1); }
+.menu-bg-pills { position: absolute; inset: -40px; overflow: hidden; pointer-events: none; }
+.menu-inner {
+  position: relative; z-index: 1; width: 100%; max-width: 560px;
+  padding: 32px 28px; text-align: center;
+  max-height: 100vh; overflow-y: auto;
+}
+.menu-pill-stage {
+  perspective: 800px; margin: 0 auto 22px;
+  animation: menuFloat 5s ease-in-out infinite;
+  width: clamp(200px, 42vmin, 380px);
+}
+@keyframes menuFloat { 0%,100%{ transform: translateY(-8px);} 50%{ transform: translateY(10px);} }
+.menu-pill-wrap {
+  --rx: 0deg; --ry: 0deg;
+  width: 100%; aspect-ratio: 84 / 35; margin: 0 auto;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform .25s ease-out;
+}
+.menu-pill-wrap .bp-pill { width: 100%; height: 100%; }
+.menu-pill-shadow {
+  width: 60%; height: 16px; margin: 18px auto 0;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.6) 0%, transparent 70%);
+  filter: blur(6px);
+}
+.menu-eyebrow { font-size: 0.7rem; letter-spacing: 0.3em; color: var(--text-dim); text-transform: uppercase; }
+.menu-title { font-size: 2.4rem; font-weight: 400; margin: 6px 0 26px; color: var(--text-bright); }
+.menu-tiles { display: grid; gap: 12px; margin-bottom: 22px; }
+.menu-tile {
+  display: flex; align-items: center; gap: 16px; text-align: left;
+  background: rgba(20,20,20,0.7); border: 1px solid var(--border, #222);
+  border-radius: 16px; padding: 18px 20px; cursor: pointer;
+  color: var(--text-bright); font-family: inherit;
+  transition: border-color .15s, transform .15s, background .15s;
+}
+.menu-tile:hover { border-color: var(--accent); transform: translateY(-2px); background: rgba(28,24,16,0.8); }
+.mt-ic { font-size: 1.5rem; color: var(--accent); width: 34px; text-align: center; flex-shrink: 0; }
+.mt-tx { display: flex; flex-direction: column; }
+.mt-tx b { font-weight: 400; font-size: 1.15rem; }
+.mt-tx i { font-style: normal; font-size: 0.82rem; color: var(--text-dim); }
+.menu-go {
+  display: inline-flex; align-items: center; gap: 12px; justify-content: center;
+  width: 100%; background: var(--accent); color: #0a0a0a; border: none;
+  border-radius: 100px; padding: 18px 28px; font-family: inherit;
+  font-size: 1.15rem; letter-spacing: 0.02em; cursor: pointer;
+  transition: opacity .15s, transform .15s;
+}
+.menu-go:hover { opacity: 0.9; transform: translateY(-2px); }
+.menu-go-arr { font-size: 1.3rem; }
+/* stagger появление содержимого */
+.menu-screen .menu-pill-stage, .menu-screen .menu-eyebrow, .menu-screen .menu-title,
+.menu-screen .menu-tile, .menu-screen .menu-go {
+  opacity: 0; transform: translateY(16px); transition: opacity .5s ease, transform .5s ease;
+}
+.menu-screen.in .menu-pill-stage { opacity: 1; transform: translateY(0); transition-delay: .05s; }
+.menu-screen.in .menu-eyebrow { opacity: 1; transform: translateY(0); transition-delay: .12s; }
+.menu-screen.in .menu-title { opacity: 1; transform: translateY(0); transition-delay: .18s; }
+.menu-screen.in .menu-tile:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: .24s; }
+.menu-screen.in .menu-tile:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: .30s; }
+.menu-screen.in .menu-tile:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: .36s; }
+.menu-screen.in .menu-tile:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: .42s; }
+.menu-screen.in .menu-go { opacity: 1; transform: translateY(0); transition-delay: .50s; }
+/* the floating menuFloat keeps working on the stage after reveal */
+.menu-screen.in .menu-pill-stage { animation: menuFloat 5s ease-in-out infinite; }
+
+/* ═════════  ПОЛНОЭКРАННЫЙ РАЗДЕЛ (fsView)  ═════════ */
+.fs-view {
+  position: fixed; inset: 0; z-index: 1700;
+  background: #0a0a0a; display: flex; flex-direction: column;
+  opacity: 0; transform: translateX(40px);
+  transition: opacity .35s ease, transform .35s cubic-bezier(0.16,1,0.3,1);
+}
+.fs-view.in { opacity: 1; transform: translateX(0); }
+.fs-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 22px; border-bottom: 1px solid var(--border, #1c1c1c);
+  flex-shrink: 0;
+}
+.fs-back {
+  background: none; border: 1px solid var(--border, #222); color: var(--text-bright);
+  border-radius: 100px; padding: 8px 16px; font-family: inherit; font-size: 0.9rem; cursor: pointer;
+  transition: border-color .15s;
+}
+.fs-back:hover { border-color: var(--accent); }
+.fs-title { font-size: 1.2rem; color: var(--text-bright); }
+.fs-spacer { flex: 1; }
+.fs-body { flex: 1; overflow-y: auto; padding: 26px; max-width: 820px; width: 100%; margin: 0 auto; }
+.fs-body .dm-iframe { width: 100%; height: 100%; min-height: 75vh; border: none; }
+
+/* Футер на экране анализа — только соглашение */
+body.analyzing #mainFooter .footer-extra { display: none; }
+
+@media (max-width: 600px) {
+  .menu-title { font-size: 1.8rem; }
+  .mt-tx b { font-size: 1.05rem; }
+  .fs-body { padding: 18px; }
+}
