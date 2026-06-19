@@ -1382,18 +1382,21 @@ canvas {
   align-items: center;
 }
 .btn-share {
+  display: block;
+  width: 100%;
   background: var(--accent);
   color: #0a0a0a;
   border: none;
-  padding: 11px 24px;
-  border-radius: 100px;
+  padding: 16px 24px;
+  margin-top: 16px;
+  border-radius: 14px;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   letter-spacing: 0.02em;
   cursor: pointer;
   transition: opacity 0.15s, transform 0.15s;
 }
-.btn-share:hover { opacity: 0.88; transform: translateY(-1px); }
+.btn-share:hover { opacity: 0.9; transform: translateY(-1px); }
 
 /* ───── Баннер прошлого результата ───── */
 .last-result-banner {
@@ -1500,8 +1503,8 @@ canvas {
 }
 
 /* Sticky-кнопки появляются только после интро+лендинга (когда показан сам апп) */
-.mute-btn { opacity: 0; pointer-events: none; transition: opacity .6s ease, border-color .15s, transform .15s; }
-body.post-landing .mute-btn { opacity: 1; pointer-events: auto; }
+.mute-btn, .menu-btn { opacity: 0; pointer-events: none; transition: opacity .6s ease, border-color .15s, transform .15s; }
+body.post-landing .mute-btn, body.post-landing .menu-btn { opacity: 1; pointer-events: auto; }
 
 /* ───── Баннер прошлого результата: кнопки ───── */
 .lrb-cta { margin-left: auto; font-size: 0.82rem; color: var(--accent); }
@@ -1572,3 +1575,68 @@ body.post-landing .mute-btn { opacity: 1; pointer-events: auto; }
 .fb-input:focus { border-color: var(--accent); }
 .fb-textarea { min-height: 120px; resize: vertical; }
 .fb-status { font-size: 0.85rem; color: var(--text-dim); min-height: 18px; }
+
+/* ───── Кнопка меню (top-right, после лендинга) ───── */
+.menu-btn {
+  position: fixed; top: 20px; right: 20px; z-index: 650;
+  background: rgba(13,13,13,0.7); backdrop-filter: blur(6px);
+  border: 1px solid var(--border, #222); color: var(--text-bright);
+  border-radius: 100px; padding: 9px 18px; font-size: 1rem; cursor: pointer;
+  font-family: inherit;
+  transition: border-color .15s;
+}
+.menu-btn:hover { border-color: var(--accent); }
+
+/* ───── Боковая шторка ───── */
+.drawer { position: fixed; inset: 0; z-index: 2200; background: rgba(0,0,0,0); transition: background .3s ease; }
+.drawer.open { background: rgba(0,0,0,0.6); }
+.drawer-panel {
+  position: absolute; top: 0; right: 0; height: 100%;
+  width: min(420px, 90vw); background: var(--bg-card, #111);
+  border-left: 1px solid rgba(196,164,107,0.25);
+  transform: translateX(100%); transition: transform .32s cubic-bezier(0.16,1,0.3,1);
+  display: flex; flex-direction: column;
+}
+.drawer.open .drawer-panel { transform: translateX(0); }
+.drawer-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 18px 20px; border-bottom: 1px solid var(--border, #1c1c1c);
+}
+.drawer-title { font-size: 1.05rem; color: var(--text-bright); flex: 1; }
+.drawer-icon { background: none; border: none; color: var(--text-dim); font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 2px 6px; }
+.drawer-icon:hover { color: var(--text-bright); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+/* меню-список */
+.dm-list { display: flex; flex-direction: column; gap: 10px; }
+.dm-item {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  background: var(--bg-dark, #0a0a0a); border: 1px solid var(--border, #1c1c1c);
+  border-radius: 12px; padding: 16px; cursor: pointer; font-family: inherit;
+  color: var(--text-bright); text-align: left; transition: border-color .15s, transform .1s;
+}
+.dm-item:hover { border-color: var(--accent); transform: translateX(2px); }
+.dm-ic { font-size: 1.3rem; color: var(--accent); width: 26px; text-align: center; }
+.dm-tx { flex: 1; display: flex; flex-direction: column; }
+.dm-tx b { font-weight: 400; font-size: 1rem; }
+.dm-tx i { font-style: normal; font-size: 0.8rem; color: var(--text-dim); }
+.dm-arr { color: var(--text-dim); }
+.dm-upload { width: 100%; margin-top: 18px; background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: 100px; padding: 12px; cursor: pointer; font-family: inherit; }
+.dm-upload:hover { background: rgba(196,164,107,0.08); }
+.dm-empty, .dm-sub { color: var(--text-dim); font-size: 0.92rem; line-height: 1.6; }
+.dm-sub { margin-bottom: 16px; }
+.dm-iframe { width: 100%; height: 100%; min-height: 70vh; border: none; background: #0a0a0a; }
+
+/* история */
+.hist-list { display: flex; flex-direction: column; }
+.hist-row { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 4px; border-bottom: 1px solid var(--border, #1c1c1c); }
+.hist-score { font-size: 1.5rem; font-weight: 300; }
+.hist-score i { font-size: 0.8rem; color: var(--text-dim); font-style: normal; }
+.hist-date { font-size: 0.82rem; color: var(--text-dim); }
+.hist-avg { margin-top: 16px; font-size: 0.88rem; color: var(--text-mid, #888); }
+.hist-avg b { color: var(--accent); }
+
+/* how */
+.how p { font-size: 0.95rem; color: var(--text-dim); line-height: 1.7; margin-bottom: 16px; }
+.how b { color: var(--text-bright); font-weight: 400; }
+.how-note { border-left: 2px solid var(--accent); padding-left: 14px; color: var(--text-mid, #888) !important; }
