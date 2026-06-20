@@ -1,14 +1,26 @@
-// Лимиты на IP, чтобы открытый воркер не слил OpenRouter-баланс.
-const LIMIT_PER_DAY = 25;
-const LIMIT_PER_HOUR = 8;
+// Лимиты, чтобы открытый воркер не слил OpenRouter-баланс.
+const LIMIT_PER_DAY = 3;     // анализов в сутки на один IP
+const LIMIT_PER_HOUR = 3;    // и не больше в час
+const GLOBAL_DAILY_CAP = 200; // суммарный потолок на весь сайт в сутки
 
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return cors(null, 204);
     if (request.method !== 'POST') return cors('Method not allowed', 405);
 
+    const today = new Date().toISOString().slice(0, 10);
+    const globalKey = `g:${today}`;
+
     // Rate limit через KV (binding RATE_LIMIT). Нет binding → лимит отключён.
     if (env.RATE_LIMIT) {
+      // Глобальный дневной потолок (защита общего кошелька).
+      const gRaw = await env.RATE_LIMIT.get(globalKey);
+      if (parseInt(gRaw || '0', 10) >= GLOBAL_DAILY_CAP) {
+        return cors(JSON.stringify({
+          text: 'Дневной лимит сервиса исчерпан. Загляните завтра — это бесплатный проект.',
+        }), 200, 'application/json');
+      }
+      // Лимит на IP.
       const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
       const reason = await checkRateLimit(env.RATE_LIMIT, ip);
       if (reason) {
@@ -22,22 +34,25 @@ export default {
     try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
     if (!body.prompt) return cors('Missing prompt', 400);
 
-    const messages = body.image
+    // Поддержка нескольких изображений: body.images = [base64, ...] (фронт + профиль),
+    // плюс обратная совместимость с одиночным body.image.
+    const imgs = Array.isArray(body.images) && body.images.length
+      ? body.images
+      : (body.image ? [body.image] : []);
+    const messages = imgs.length
       ? [{ role: 'user', content: [
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${body.image}` } },
-          { type: 'text', text: body.prompt }
+          ...imgs.map((b64) => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } })),
+          { type: 'text', text: body.prompt },
         ]}]
       : [{ role: 'user', content: body.prompt }];
 
-    // Базовое тело запроса. temperature умеренная (различает черты, не жмёт к ~5.7);
-    // seed → одно фото даёт стабильный результат. allow_fallbacks → если провайдер
-    // упал, OpenRouter пробует другого.
     function buildBody(withSeed) {
       const b = {
-        model: 'qwen/qwen2.5-vl-72b-instruct',
+        model: 'x-ai/grok-4.3',
         max_tokens: 2200,
         temperature: 0.7,
         top_p: 0.95,
+        reasoning: { effort: 'low' }, // grok-4.3 — reasoning-модель; low = быстро и дёшево
         messages,
       };
       if (withSeed) b.seed = 1337;
@@ -60,8 +75,7 @@ export default {
       } catch (err) {
         lastErr = err.message; data = null;
       }
-      const hasText = data?.choices?.[0]?.message?.content;
-      if (hasText) break;
+      if (data?.choices?.[0]?.message?.content) break;
       lastErr = data?.error?.message ?? lastErr;
       if (attempt < 2) await new Promise(r => setTimeout(r, 700));
     }
@@ -70,12 +84,17 @@ export default {
       return cors(JSON.stringify({ text: `Сервис перегружен, попробуйте ещё раз. (${lastErr})` }), 200, 'application/json');
     }
 
-    const text = data?.choices?.[0]?.message?.content ?? `Пустой ответ. Данные: ${JSON.stringify(data)}`;
-    return cors(JSON.stringify({ text }), 200, 'application/json');
+    // Глобальный счётчик инкрементим только после успешного ответа (ошибки не жгут лимит).
+    if (env.RATE_LIMIT) {
+      const gRaw = await env.RATE_LIMIT.get(globalKey);
+      await env.RATE_LIMIT.put(globalKey, String(parseInt(gRaw || '0', 10) + 1), { expirationTtl: 93600 });
+    }
+
+    return cors(JSON.stringify({ text: data.choices[0].message.content }), 200, 'application/json');
   },
 };
 
-// Возвращает причину если лимит превышен, иначе null. Инкрементит счётчики.
+// Возвращает причину если лимит превышен, иначе null. Инкрементит счётчики IP.
 async function checkRateLimit(kv, ip) {
   const now = new Date();
   const dayKey = `d:${ip}:${now.toISOString().slice(0, 10)}`;
