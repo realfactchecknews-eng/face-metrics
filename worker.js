@@ -1,6 +1,6 @@
 // Лимиты, чтобы открытый воркер не слил OpenRouter-баланс.
-const LIMIT_PER_DAY = 3;     // анализов в сутки на один IP
-const LIMIT_PER_HOUR = 3;    // и не больше в час
+const LIMIT_PER_DAY = 20;    // анализов в сутки на один IP (временно поднято для отладки; вернуть 3)
+const LIMIT_PER_HOUR = 20;   // и не больше в час
 const GLOBAL_DAILY_CAP = 200; // суммарный потолок на весь сайт в сутки
 
 export default {
