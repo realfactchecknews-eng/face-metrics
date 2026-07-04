@@ -269,3 +269,5 @@ function cors(body, status = 200, contentType = 'text/plain') {
     },
   });
 }
+
+// ci-trigger
