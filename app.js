@@ -255,6 +255,8 @@ function loadFrontFile(file) {
       document.getElementById("frontPlaceholder").classList.add("hidden");
       document.getElementById("frontThumb").classList.remove("hidden");
       analyzeBtn.classList.remove("hidden");
+      var tr = document.getElementById("toneRow");
+      if (tr) tr.classList.remove("hidden");
     };
     img.src = ev.target.result;
   };
@@ -831,25 +833,81 @@ async function callAI(metrics, shapeInfo) {
     ? "Тебе даны ДВА отдельных изображения: первое -- фронтальное фото, второе -- ПРОФИЛЬ (вид сбоку). ОБЯЗАТЕЛЬНО используй второе фото (профиль) для оценки gonial angle, ramus height, chin projection, submental angle и профиля носа (dorsum, проекция кончика). В разделах ДЖОУЛАЙН_MANDIBLE и НОС_NOSE явно опирайся на то, что видно на профиле."
     : "Дано только фронтальное фото -- профиль не приложен. Для ДЖОУЛАЙН_MANDIBLE оцени честно то, что видно анфас: bigonial width, jaw taper, chin width и фронтальную чёткость. Добавь короткую пометку '-- оценка по анфас, профиль не предоставлен.' Будь чуть консервативнее (gonial angle и проекция подбородка не полностью видны), но НЕ занижай искусственно -- хорошо очерченная челюсть анфас может получить 7-8.";
   var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: exactly average\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nРеальные лица занимают весь диапазон ~3.0-8.0. НЕ ставь всем по умолчанию 5.5-6 -- это запрещено и это главная ошибка. СНАЧАЛА реши КОНКРЕТНО для этого лица: выше оно среднего или ниже и насколько, и поставь общий балл смело (явно непривлекательное 3-4, обычное 5-6, привлекательное 7-8.5, модельное 9+). Be BALANCED and FEARLESS in BOTH directions: do not systematically inflate, and do not systematically lowball. If a feature is genuinely excellent, give it 8-9 without hesitation; if it is genuinely weak, give it 2-4 without softening. A 7+ must be earned by a real, visible strength; a sub-4 must reflect a real, visible weakness. Never compress everything toward the middle out of caution. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nОБЯЗАТЕЛЬНЫЙ РАЗБРОС: среди 8 категорий разница между самой высокой и самой низкой оценкой ДОЛЖНА быть не меньше 2.5 балла. Запрещено, чтобы все категории были в диапазоне 5-6. Общий балл НЕ привязан к 5: некрасивое лицо честно получает 3-4, очень красивое -- 7-9. НЕ ставь по умолчанию ~5.5-6 каждому человеку -- это главная ошибка, реши КОНКРЕТНО для этого лица выше оно среднего или ниже и насколько.\n\nКРАТКОСТЬ И БЕЗ ПОВТОРОВ: каждое описание под меткой -- РОВНО 1-3 предложения ТОЛЬКО про этот параметр. НЕ копируй текст между секциями, НЕ повторяй общий вывод в категориях, НЕ дублируй один и тот же анализ.\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is often imprecise. Trust your visual read of the real cheekbone projection (high/flat), malar fat, zygomatic width and the true face shape over the geometric label if they disagree.\n\nФОРМАТ БАЛЛА -- КРИТИЧНО: вместо 0.0 ставь дробное число с ОДНИМ знаком после точки (5.8, 6.3, 7.1, 4.6, 8.4). КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ целые баллы и .0 (нельзя 6/10, 7/10, 6.0/10) -- десятичный разряд всегда ненулевой. Каждая категория получает РАЗНЫЙ дробный балл. В ОТВЕТЕ НЕ ПИШИ квадратные скобки [ ], слова-плейсхолдеры или текст подсказок -- описания под каждой меткой замени СВОИМ готовым текстом про это фото.\n\nINTERNAL STEP (не выводи этот шаг): сначала мысленно опиши что реально видишь на фото -- форма глаз, скулы, кожа, нос, волосы, пропорции -- и только потом ставь баллы, согласованные с увиденным. Общий балл = взвешенное впечатление от категорий, а не случайное число.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: 0.0/10\nОбщая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.\n\nСИММЕТРИЯ: 0.0/10\nИзмеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.\n\nГЛАЗА_CANTHAL_TILT: 0.0/10\nКонкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.\n\nМИДФЕЙС_MAXILLA: 0.0/10\nМаксиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.\n\nДЖОУЛАЙН_MANDIBLE: 0.0/10\nДжоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.\n\nНОС_NOSE: 0.0/10\nНос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.\n\nГУБЫ_СКУЛЫ: 0.0/10\nГубы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.\n\nКОЖА: 0.0/10\nТекстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.\n\nГРУМИНГ_STYLE: 0.0/10\nHairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
+  // Дерзкий режим: заменяем персону на роаст-аналитика (границы сохраняем).
+  if (isEdgyTone()) {
+    prompt = prompt.replace(
+      "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating.",
+      "You are a sharp-tongued PSL-forum looksmaxxing analyst. РЕЖИМ: ДЕРЗКИЙ РОАСТ. Пиши хлёстко, иронично и мемно, как жёсткий разбор на PSL-форуме: без дежурных комплиментов, без смягчений, можно подколы и сарказм про черты лица, стрижку и стиль. При этом оценки должны оставаться ЧЕСТНЫМИ и точными (не занижай ради шутки), и ЖЁСТКИЕ ГРАНИЦЫ: никаких оскорблений по национальности/религии/полу/болезням, без пожеланий вреда, без выдуманных фактов."
+    );
+  }
+
   try {
     // Фронт и профиль шлём ОТДЕЛЬНЫМИ изображениями (не склеиваем), чтобы модель
     // явно видела профиль и учитывала его в челюсти/носе.
     var images = [oneToBase64(cleanImageCanvas || canvas)];
     if (cleanSideCanvas) images.push(oneToBase64(cleanSideCanvas));
+    var acc = getAccount();
     var res = await fetch(WORKER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: prompt, images: images })
+      body: JSON.stringify({ prompt: prompt, images: images, token: acc ? acc.token : null })
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
     stopAIHUD();
+    if (data.error) { showGate(data); return; }
     renderAIReport(data.text || "Пустой ответ.");
     aiReport.classList.remove("hidden");
+    // Обновляем чип квоты по факту списания.
+    if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
   } catch (err) {
     stopAIHUD();
     aiErrorText.textContent = "Ошибка: " + err.message;
     aiError.classList.remove("hidden");
   }
+}
+
+// Показ «гейта»: вход / подписка / оплата — вместо отчёта.
+function showGate(data) {
+  var aiError = document.getElementById("aiError");
+  var aiErrorText = document.getElementById("aiErrorText");
+  aiErrorText.textContent = data.text || "Доступ ограничен.";
+  var old = aiError.querySelector(".gate-actions");
+  if (old) old.remove();
+  var box = document.createElement("div");
+  box.className = "gate-actions";
+  if (data.error === "auth") {
+    var b = document.createElement("button");
+    b.className = "btn-primary"; b.type = "button"; b.textContent = "Войти через Telegram";
+    b.addEventListener("click", function(){ backToUploadTop(); });
+    box.appendChild(b);
+  } else if (data.error === "sub") {
+    var a = document.createElement("a");
+    a.className = "btn-primary gate-link"; a.href = "https://t.me/wwwfacerateru"; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "Подписаться на канал";
+    box.appendChild(a);
+    var hint = document.createElement("p");
+    hint.className = "gate-hint"; hint.textContent = "После подписки вернись и нажми «Анализировать» ещё раз.";
+    box.appendChild(hint);
+  } else if (data.error === "pay") {
+    ["p1","p5"].forEach(function(p){
+      var pk = (data.packs || {})[p]; if (!pk) return;
+      var b = document.createElement("button");
+      b.className = "btn-primary"; b.type = "button";
+      b.textContent = pk.label + " — " + pk.stars + "⭐";
+      b.addEventListener("click", function(){ buyPack(p); });
+      box.appendChild(b);
+    });
+  }
+  aiError.appendChild(box);
+  aiError.classList.remove("hidden");
+}
+
+function backToUploadTop() {
+  document.getElementById("analysisView").classList.add("hidden");
+  document.getElementById("uploadSection").classList.remove("hidden");
+  document.body.classList.remove("analyzing");
+  var bar = document.getElementById("accountBar");
+  if (bar) { bar.scrollIntoView({ behavior: "smooth", block: "center" }); bar.classList.add("acc-pulse"); setTimeout(function(){ bar.classList.remove("acc-pulse"); }, 1600); }
 }
 
 // Одно изображение (canvas) → base64 jpeg, с даунскейлом до maxSize.
@@ -1378,4 +1436,125 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
       field.appendChild(p);
     }
   }
+})();
+
+/* ───────────────────  Аккаунт: Telegram Login + квоты + Stars  ─────────────────── */
+var TG_BOT_USERNAME = "faceratepay_bot";
+
+function getAccount() {
+  try { return JSON.parse(localStorage.getItem("fm-tg") || "null"); } catch (e) { return null; }
+}
+function saveAccount(status) {
+  localStorage.setItem("fm-tg", JSON.stringify({ token: status.token, user: status.user }));
+}
+function clearAccount() { localStorage.removeItem("fm-tg"); }
+
+function isEdgyTone() {
+  var cb = document.getElementById("toneEdgy");
+  return cb ? cb.checked : false;
+}
+
+function updateQuotaChip(freeLeft, credits, subscribed) {
+  var q = document.getElementById("accQuota");
+  if (!q) return;
+  var parts = [];
+  if (!subscribed) parts.push("подпишись на канал → 1 free/день");
+  else parts.push("бесплатных сегодня: " + freeLeft);
+  parts.push("кредиты: " + credits);
+  q.textContent = parts.join(" · ");
+}
+
+function renderAccount(status) {
+  var out = document.getElementById("accLoggedOut");
+  var inn = document.getElementById("accLoggedIn");
+  if (!out || !inn) return;
+  if (!status || !status.user) {
+    out.classList.remove("hidden"); inn.classList.add("hidden");
+    mountTgWidget();
+    return;
+  }
+  out.classList.add("hidden"); inn.classList.remove("hidden");
+  var av = document.getElementById("accAvatar");
+  if (status.user.photo_url) { av.src = status.user.photo_url; av.style.display = ""; }
+  else av.style.display = "none";
+  document.getElementById("accName").textContent =
+    status.user.username ? "@" + status.user.username : (status.user.first_name || "Пользователь");
+  updateQuotaChip(status.freeLeft, status.credits, status.subscribed);
+}
+
+// Виджет входа Telegram (скрипт вставляется динамически в контейнер).
+var _tgWidgetMounted = false;
+function mountTgWidget() {
+  if (_tgWidgetMounted) return;
+  var wrap = document.getElementById("tgLoginWrap");
+  if (!wrap) return;
+  _tgWidgetMounted = true;
+  var s = document.createElement("script");
+  s.async = true;
+  s.src = "https://telegram.org/js/telegram-widget.js?22";
+  s.setAttribute("data-telegram-login", TG_BOT_USERNAME);
+  s.setAttribute("data-size", "large");
+  s.setAttribute("data-radius", "24");
+  s.setAttribute("data-onauth", "onTgAuth(user)");
+  s.setAttribute("data-request-access", "write");
+  wrap.appendChild(s);
+}
+
+// Колбэк виджета — глобальный.
+window.onTgAuth = function(user) {
+  fetch(WORKER_URL + "/auth", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(user),
+  }).then(function(r){ return r.json(); }).then(function(st){
+    if (st.error) { alert("Не удалось войти: " + (st.text || st.error)); return; }
+    saveAccount(st);
+    renderAccount(st);
+  }).catch(function(){ alert("Сеть недоступна, попробуйте ещё раз."); });
+};
+
+function refreshAccount() {
+  var acc = getAccount();
+  if (!acc) { renderAccount(null); return; }
+  fetch(WORKER_URL + "/me", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: acc.token }),
+  }).then(function(r){ return r.json(); }).then(function(st){
+    if (st.error) { clearAccount(); renderAccount(null); return; }
+    renderAccount(st);
+  }).catch(function(){ renderAccount({ user: acc.user, freeLeft: "?", credits: "?", subscribed: true }); });
+}
+
+// Покупка кредитов: воркер создаёт Stars-инвойс, открываем в Telegram.
+function buyPack(pack) {
+  var acc = getAccount();
+  if (!acc) { backToUploadTop(); return; }
+  fetch(WORKER_URL + "/buy", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: acc.token, pack: pack }),
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if (d.error || !d.link) { alert(d.text || "Не удалось создать счёт."); return; }
+    window.open(d.link, "_blank");
+    // Поллим баланс минуту — после оплаты чип обновится сам.
+    var tries = 0;
+    var iv = setInterval(function(){
+      refreshAccount();
+      if (++tries >= 12) clearInterval(iv);
+    }, 5000);
+  }).catch(function(){ alert("Сеть недоступна."); });
+}
+
+(function initAccount() {
+  var b1 = document.getElementById("buyP1");
+  var b5 = document.getElementById("buyP5");
+  if (b1) b1.addEventListener("click", function(){ buyPack("p1"); });
+  if (b5) b5.addEventListener("click", function(){ buyPack("p5"); });
+  var lo = document.getElementById("accLogout");
+  if (lo) lo.addEventListener("click", function(){ clearAccount(); renderAccount(null); });
+  // Дерзкий режим — запоминаем выбор.
+  var cb = document.getElementById("toneEdgy");
+  if (cb) {
+    cb.checked = localStorage.getItem("fm-tone") === "edgy";
+    cb.addEventListener("change", function(){ localStorage.setItem("fm-tone", cb.checked ? "edgy" : "soft"); });
+  }
+  refreshAccount();
 })();

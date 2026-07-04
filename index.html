@@ -16,7 +16,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=9" />
+<link rel="stylesheet" href="style.css?v=10" />
 </head>
 <body>
 
@@ -143,6 +143,30 @@
 <main class="container" id="mainContent">
 
   <section id="uploadSection">
+
+    <!-- Аккаунт: вход через Telegram / статус квоты / покупка кредитов -->
+    <div id="accountBar" class="account-bar">
+      <div id="accLoggedOut" class="acc-loggedout">
+        <div class="acc-lo-text">
+          <b>Войди через Telegram</b>
+          <i>Подписка на <a href="https://t.me/wwwfacerateru" target="_blank" rel="noopener">канал</a> = 1 бесплатный анализ в день</i>
+        </div>
+        <div id="tgLoginWrap"></div>
+      </div>
+      <div id="accLoggedIn" class="acc-loggedin hidden">
+        <img id="accAvatar" class="acc-avatar" alt="" />
+        <div class="acc-user">
+          <b id="accName"></b>
+          <i id="accQuota">…</i>
+        </div>
+        <div class="acc-actions">
+          <button id="buyP1" class="acc-buy" type="button">+1 · 30⭐</button>
+          <button id="buyP5" class="acc-buy" type="button">+5 · 100⭐</button>
+          <button id="accLogout" class="acc-logout" type="button" title="Выйти">✕</button>
+        </div>
+      </div>
+    </div>
+
     <div id="lastResultBanner" class="last-result-banner hidden">
       <span class="lrb-label">ПРОШЛЫЙ РЕЗУЛЬТАТ</span>
       <span class="lrb-score" id="lrbScore">--</span>
@@ -199,6 +223,12 @@
       </div>
 
     </div>
+
+    <label id="toneRow" class="tone-row hidden">
+      <input type="checkbox" id="toneEdgy" />
+      <span class="tone-slider"></span>
+      <span class="tone-label">🔞 Дерзкий режим — жёсткий разбор без соплей</span>
+    </label>
 
     <button id="analyzeBtn" class="btn-analyze hidden">
       <span class="btn-analyze-fill"></span>
@@ -369,6 +399,6 @@
 <button id="musicBtn" class="mute-btn" title="Звук">&#128266;</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
