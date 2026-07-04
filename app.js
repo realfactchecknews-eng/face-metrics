@@ -1454,9 +1454,13 @@ function isEdgyTone() {
   return cb ? cb.checked : false;
 }
 
-function updateQuotaChip(freeLeft, credits, subscribed) {
+function updateQuotaChip(freeLeft, credits, subscribed, unlimUntil) {
   var q = document.getElementById("accQuota");
   if (!q) return;
+  if (unlimUntil && unlimUntil > Date.now()) {
+    q.textContent = "👑 Безлимит до " + new Date(unlimUntil).toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    return;
+  }
   var parts = [];
   if (!subscribed) parts.push("подпишись на канал → 1 free/день");
   else parts.push("бесплатных сегодня: " + freeLeft);
@@ -1479,7 +1483,7 @@ function renderAccount(status) {
   else av.style.display = "none";
   document.getElementById("accName").textContent =
     status.user.username ? "@" + status.user.username : (status.user.first_name || "Пользователь");
-  updateQuotaChip(status.freeLeft, status.credits, status.subscribed);
+  updateQuotaChip(status.freeLeft, status.credits, status.subscribed, status.unlimUntil);
 }
 
 // Виджет входа Telegram (скрипт вставляется динамически в контейнер).
@@ -1605,7 +1609,7 @@ function gateThenAI(metrics, shapeInfo) {
     if (st.error === "auth") { showPaywall("auth"); return; }
     if (st.error) { showPaywall("auth"); return; }
     renderAccount(st);
-    if (st.freeLeft > 0 || st.credits > 0) { hidePaywall(); startAI(); }
+    if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); startAI(); }
     else if (!st.subscribed) showPaywall("sub");
     else showPaywall("pay", st);
   }).catch(function(){ startAI(); }); // сеть легла — пусть решает воркер
@@ -1650,10 +1654,14 @@ function showPaywall(state, st) {
     });
   } else { // pay
     title.textContent = "Бесплатный анализ на сегодня использован";
-    sub.textContent = "Возьми ещё — оплата звёздами Telegram в два тапа. Или возвращайся завтра за бесплатным.";
-    var packs = (st && st.packs) || { p1: { label: "1 анализ", stars: 30 }, p5: { label: "5 анализов", stars: 100 } };
+    sub.textContent = "Оплата звёздами Telegram в два тапа. Или возвращайся завтра за бесплатным.";
+    var packs = (st && st.packs) || {
+      p1: { label: "1 анализ", stars: 30 }, p5: { label: "5 анализов", stars: 100 },
+      d1: { label: "Безлимит на день", stars: 100 }, m1: { label: "Безлимит на месяц", stars: 500 },
+    };
     btn(packs.p1.label + " — " + packs.p1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("p1", b); });
-    btn(packs.p5.label + " — " + packs.p5.stars + "⭐ <i class='pw-hit'>выгоднее</i>", "pw-btn pw-btn-main", function(b){ buyPack("p5", b); });
+    if (packs.d1) btn("🔥 " + packs.d1.label + " — " + packs.d1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("d1", b); });
+    if (packs.m1) btn("👑 " + packs.m1.label + " — " + packs.m1.stars + "⭐/мес <i class='pw-hit'>топ</i>", "pw-btn pw-btn-main", function(b){ buyPack("m1", b); });
     btn("Я оплатил — показать результат", "pw-btn pw-btn-ghost", function(b){
       b.textContent = "Проверяю…"; pwRecheck();
     });
@@ -1678,7 +1686,7 @@ function pwRecheck(silent) {
     _gateBusy = false;
     if (st.error) { if (!silent) showPaywall("auth"); return; }
     renderAccount(st);
-    if (st.freeLeft > 0 || st.credits > 0) { hidePaywall(); startAI(); }
+    if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); startAI(); }
     else if (!silent) showPaywall(!st.subscribed ? "sub" : "pay", st);
   }).catch(function(){ _gateBusy = false; });
 }
