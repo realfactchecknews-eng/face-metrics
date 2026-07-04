@@ -11,9 +11,12 @@
 
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/день
 const FREE_PER_DAY = 1;                  // бесплатных анализов в день подписчику
-const PACKS = {                          // пакеты кредитов за Stars (XTR)
-  p1: { credits: 1, stars: 30,  label: '1 анализ' },
-  p5: { credits: 5, stars: 100, label: '5 анализов' },
+const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
+const PACKS = {                          // тарифы за Stars (XTR)
+  p1: { type: 'credits', credits: 1, stars: 30,  label: '1 анализ' },
+  p5: { type: 'credits', credits: 5, stars: 100, label: '5 анализов' },
+  d1: { type: 'unlim',  hours: 24,   stars: 100, label: 'Безлимит на день' },
+  m1: { type: 'sub',    stars: 500,  label: 'Безлимит на месяц', period: 2592000 },
 };
 const IP_LIMIT_DAY = 40;                 // страховочный лимит по IP (анти-абьюз)
 const GLOBAL_DAILY_CAP = 300;            // потолок на весь сайт в сутки
@@ -61,14 +64,16 @@ async function analyze(request, env) {
   if (!sess) return json({ error: 'auth', text: 'Войдите через Telegram, чтобы получить бесплатный анализ.' });
   const tgid = sess.id;
 
-  // Квота: подписка на канал → 1 free/день; иначе кредиты.
+  // Квота: безлимит → подписка на канал (1 free/день) → кредиты.
+  const unlimUntil = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
   const subscribed = await isSubscribed(env, tgid);
   const freeKey = `q:${tgid}:${today}`;
   const freeUsed = parseInt(await env.RATE_LIMIT.get(freeKey) || '0', 10);
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
 
   let mode = null;
-  if (subscribed && freeUsed < FREE_PER_DAY) mode = 'free';
+  if (unlimUntil > Date.now()) mode = 'unlim';
+  else if (subscribed && freeUsed < FREE_PER_DAY) mode = 'free';
   else if (credits > 0) mode = 'paid';
   else if (!subscribed) {
     return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в день.', channel: CHANNEL });
@@ -118,12 +123,12 @@ async function analyze(request, env) {
     return json({ error: 'model', text: `Сервис перегружен, попробуйте ещё раз. (${lastErr})` });
   }
 
-  // Списание ПОСЛЕ успеха: free → счётчик дня; paid → минус кредит.
+  // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик дня; paid → минус кредит.
   let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_DAY - freeUsed) : 0;
   if (mode === 'free') {
     await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 93600 });
     freeLeft = FREE_PER_DAY - freeUsed - 1;
-  } else {
+  } else if (mode === 'paid') {
     creditsLeft = credits - 1;
     await env.RATE_LIMIT.put(`credits:${tgid}`, String(creditsLeft));
   }
@@ -183,10 +188,12 @@ async function statusFor(env, user, token, fresh) {
   const subscribed = await isSubscribed(env, user.id, fresh);
   const freeUsed = parseInt(await env.RATE_LIMIT.get(`q:${user.id}:${today}`) || '0', 10);
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${user.id}`) || '0', 10);
+  const unlimUntil = parseInt(await env.RATE_LIMIT.get(`unlim:${user.id}`) || '0', 10);
   return {
     token, user, subscribed,
     freeLeft: subscribed ? Math.max(0, FREE_PER_DAY - freeUsed) : 0,
     credits, channel: CHANNEL, packs: PACKS,
+    unlimUntil: unlimUntil > Date.now() ? unlimUntil : 0,
   };
 }
 
@@ -222,20 +229,55 @@ async function buy(request, env) {
   const pack = PACKS[body.pack];
   if (!pack) return json({ error: 'pack', text: 'Неизвестный пакет.' });
 
-  const r = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/createInvoiceLink`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: `FaceRate: ${pack.label}`,
-      description: `${pack.credits} AI-анализ(а) лица на facerate.ru`,
-      payload: JSON.stringify({ tgid: sess.id, credits: pack.credits }),
-      currency: 'XTR',
-      prices: [{ label: pack.label, amount: pack.stars }],
-    }),
-  });
-  const d = await r.json();
+  const d = await createInvoice(env, sess.id, body.pack);
   if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.description || '') });
   return json({ link: d.result });
 }
+
+// Создание Stars-инвойса (ссылкой). Для месячного тарифа — подписка с автопродлением.
+async function createInvoice(env, tgid, packId) {
+  const pack = PACKS[packId];
+  const req = {
+    title: `FaceRate: ${pack.label}`,
+    description: pack.type === 'credits'
+      ? `${pack.credits} AI-анализ(а) лица на facerate.ru`
+      : pack.type === 'unlim'
+        ? 'Безлимитные анализы на 24 часа на facerate.ru'
+        : 'Безлимитные анализы на месяц (автопродление, отмена в любой момент)',
+    payload: JSON.stringify({ tgid, pack: packId }),
+    currency: 'XTR',
+    prices: [{ label: pack.label, amount: pack.stars }],
+  };
+  if (pack.type === 'sub') req.subscription_period = pack.period;
+  const r = await tgApi(env, 'createInvoiceLink', req);
+  return r;
+}
+
+function tgApi(env, method, body) {
+  return fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/${method}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(r => r.json()).catch(e => ({ ok: false, description: e.message }));
+}
+
+// ─────────────────────────── Вебхук бота: меню, промокоды, оплаты ───────────────────────────
+const MENU_KB = {
+  inline_keyboard: [
+    [{ text: '💎 Мой статус', callback_data: 'status' }],
+    [{ text: '⭐ Купить анализы / безлимит', callback_data: 'shop' }],
+    [{ text: '🎁 Ввести промокод', callback_data: 'promo' }],
+    [{ text: '🔄 Моя подписка', callback_data: 'mysub' }, { text: '🎉 Розыгрыши', callback_data: 'gw' }],
+    [{ text: '🌐 Открыть FaceRate', url: 'https://facerate.ru' }],
+  ],
+};
+const SHOP_KB = {
+  inline_keyboard: [
+    [{ text: `1 анализ — ${PACKS.p1.stars}⭐`, callback_data: 'buy:p1' }, { text: `5 — ${PACKS.p5.stars}⭐`, callback_data: 'buy:p5' }],
+    [{ text: `🔥 Безлимит на день — ${PACKS.d1.stars}⭐`, callback_data: 'buy:d1' }],
+    [{ text: `👑 Безлимит на месяц — ${PACKS.m1.stars}⭐/мес`, callback_data: 'buy:m1' }],
+    [{ text: '← Меню', callback_data: 'menu' }],
+  ],
+};
 
 async function tgWebhook(request, env) {
   // Проверка, что вебхук реально от Telegram (секретный заголовок).
@@ -244,62 +286,220 @@ async function tgWebhook(request, env) {
   }
   let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
 
-  // Подтверждаем оплату.
+  // Подтверждаем оплату (в т.ч. продления подписки).
   if (upd.pre_checkout_query) {
-    await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/answerPreCheckoutQuery`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pre_checkout_query_id: upd.pre_checkout_query.id, ok: true }),
-    });
+    await tgApi(env, 'answerPreCheckoutQuery', { pre_checkout_query_id: upd.pre_checkout_query.id, ok: true });
     return new Response('ok');
   }
 
-  // Вход с сайта: /start <код> → создаём сессию и привязываем к коду.
+  // ── Кнопки меню ──
+  if (upd.callback_query) {
+    await handleCallback(env, upd.callback_query);
+    return new Response('ok');
+  }
+
   const msg = upd.message;
-  if (msg?.text && msg.text.startsWith('/start') && msg.from && !msg.from.is_bot) {
-    const code = msg.text.split(' ')[1] || '';
+  if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
+  const chat = msg.chat.id, tgid = msg.from.id;
+
+  // ── Успешная оплата → начисление ──
+  if (msg.successful_payment) {
+    await handlePayment(env, msg);
+    return new Response('ok');
+  }
+
+  const text = (msg.text || '').trim();
+
+  // ── /start [код входа с сайта] ──
+  if (text.startsWith('/start')) {
+    const code = text.split(' ')[1] || '';
     if (/^[a-z0-9-]{10,80}$/i.test(code)) {
       const token = crypto.randomUUID() + '-' + crypto.randomUUID();
-      const user = {
-        id: msg.from.id,
-        first_name: msg.from.first_name || '',
-        username: msg.from.username || '',
-        photo_url: '',
-      };
+      const user = { id: tgid, first_name: msg.from.first_name || '', username: msg.from.username || '', photo_url: '' };
       await env.RATE_LIMIT.put(`sess:${token}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 30 });
       await env.RATE_LIMIT.put(`authcode:${code}`, JSON.stringify({ token, user }), { expirationTtl: 600 });
-      await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: msg.chat.id,
-          text: '✅ Вход выполнен! Возвращайся на сайт — страница подхватит аккаунт сама.\n\nПодписка на @wwwfacerateru даёт 1 бесплатный анализ в день.',
-        }),
-      });
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: '✅ Вход выполнен! Возвращайся на сайт — страница подхватит аккаунт сама.', reply_markup: MENU_KB });
     } else {
-      await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: msg.chat.id, text: 'Привет! Жми «Войти через Telegram» на facerate.ru — и я привяжу твой аккаунт.' }),
-      });
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: '🖤 FaceRate — AI-оценка лица по канонам луксмаксинга.\n\nПодписка на ' + CHANNEL + ' = 1 бесплатный анализ в день.', reply_markup: MENU_KB });
     }
     return new Response('ok');
   }
 
-  // Успешная оплата → начисляем кредиты.
-  const sp = upd.message?.successful_payment;
-  if (sp) {
-    try {
-      const payload = JSON.parse(sp.invoice_payload);
-      const cur = parseInt(await env.RATE_LIMIT.get(`credits:${payload.tgid}`) || '0', 10);
-      await env.RATE_LIMIT.put(`credits:${payload.tgid}`, String(cur + payload.credits));
-      await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: upd.message.chat.id,
-          text: `✅ Оплата получена! Начислено анализов: ${payload.credits}. Возвращайся на facerate.ru — баланс уже обновлён.`,
-        }),
-      });
-    } catch { /* payload сломан — молча игнор */ }
+  if (text === '/menu') {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Меню FaceRate:', reply_markup: MENU_KB });
+    return new Response('ok');
   }
+
+  // ── Админ: /addpromo КОД использований credits=N | hours=H ──
+  if (text.startsWith('/addpromo') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const m = text.match(/^\/addpromo\s+(\S+)\s+(\d+)\s+(credits|hours)=(\d+)/i);
+    if (!m) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ credits=3\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ hours=24' });
+    } else {
+      const promo = { uses: parseInt(m[2], 10) };
+      promo[m[3].toLowerCase()] = parseInt(m[4], 10);
+      await env.RATE_LIMIT.put(`promo:${m[1].toUpperCase()}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Промокод ${m[1].toUpperCase()} создан: ${m[2]} активаций, ${m[3]}=${m[4]}.\nКидай его в канал — это и есть розыгрыш.` });
+    }
+    return new Response('ok');
+  }
+
+  // ── Ожидание промокода (после кнопки 🎁) ──
+  const waiting = await env.RATE_LIMIT.get(`pmstate:${tgid}`);
+  if (waiting) {
+    await env.RATE_LIMIT.delete(`pmstate:${tgid}`);
+    await redeemPromo(env, chat, tgid, text.toUpperCase());
+    return new Response('ok');
+  }
+
+  await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Меню FaceRate:', reply_markup: MENU_KB });
   return new Response('ok');
+}
+
+async function handleCallback(env, cq) {
+  const chat = cq.message.chat.id, tgid = cq.from.id, data = cq.data || '';
+  await tgApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
+
+  if (data === 'menu') {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Меню FaceRate:', reply_markup: MENU_KB });
+  } else if (data === 'status') {
+    const today = new Date().toISOString().slice(0, 10);
+    const credits = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+    const freeUsed = parseInt(await env.RATE_LIMIT.get(`q:${tgid}:${today}`) || '0', 10);
+    const unlim = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
+    const sub = await isSubscribed(env, tgid, true);
+    let t = '💎 Твой статус:\n';
+    if (unlim > Date.now()) t += `👑 Безлимит до ${new Date(unlim).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} (МСК)\n`;
+    t += `⭐ Кредиты: ${credits}\n`;
+    t += sub ? `✅ Подписан на канал — бесплатных сегодня: ${Math.max(0, FREE_PER_DAY - freeUsed)}\n` : `❌ Не подписан на ${CHANNEL} — подпишись и получай 1 бесплатный анализ в день\n`;
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: t, reply_markup: MENU_KB });
+  } else if (data === 'shop') {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '⭐ Что берём?', reply_markup: SHOP_KB });
+  } else if (data.startsWith('buy:')) {
+    const packId = data.slice(4);
+    if (PACKS[packId]) {
+      const pack = PACKS[packId];
+      const inv = {
+        chat_id: chat,
+        title: `FaceRate: ${pack.label}`,
+        description: pack.type === 'sub' ? 'Безлимит на месяц. Автопродление — отключается в настройках Telegram в любой момент.' : pack.label + ' на facerate.ru',
+        payload: JSON.stringify({ tgid, pack: packId }),
+        currency: 'XTR',
+        prices: [{ label: pack.label, amount: pack.stars }],
+      };
+      if (pack.type === 'sub') inv.subscription_period = pack.period;
+      const r = await tgApi(env, 'sendInvoice', inv);
+      if (!r.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Не удалось выставить счёт: ' + (r.description || '') });
+    }
+  } else if (data === 'promo') {
+    await env.RATE_LIMIT.put(`pmstate:${tgid}`, '1', { expirationTtl: 300 });
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Отправь промокод одним сообщением:' });
+  } else if (data === 'mysub') {
+    const unlim = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
+    const isRec = await env.RATE_LIMIT.get(`subrec:${tgid}`);
+    let t;
+    if (unlim > Date.now()) {
+      t = `👑 Безлимит активен до ${new Date(unlim).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} (МСК).`;
+      t += isRec === '1'
+        ? '\n\n🔄 Автопродление ВКЛЮЧЕНО. Отключить: настройки Telegram → Мои звёзды → подписки (или кнопкой ниже).'
+        : '\n\nАвтопродления нет — по окончании просто купи снова.';
+    } else {
+      t = 'Активного безлимита нет. Возьми в магазине ⭐';
+    }
+    const kb = { inline_keyboard: [] };
+    if (isRec === '1') kb.inline_keyboard.push([{ text: '⛔ Отключить автопродление', callback_data: 'unsub' }]);
+    kb.inline_keyboard.push([{ text: '← Меню', callback_data: 'menu' }]);
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: t, reply_markup: kb });
+  } else if (data === 'unsub') {
+    const chg = await env.RATE_LIMIT.get(`subchg:${tgid}`);
+    if (chg) {
+      const r = await tgApi(env, 'editUserStarSubscription', { user_id: tgid, telegram_payment_charge_id: chg, is_canceled: true });
+      if (r.ok) {
+        await env.RATE_LIMIT.put(`subrec:${tgid}`, '0');
+        await tgApi(env, 'sendMessage', { chat_id: chat, text: '⛔ Автопродление отключено. Безлимит доработает оплаченный срок.', reply_markup: MENU_KB });
+      } else {
+        await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Не получилось: ' + (r.description || '') + '\nОтключи в Telegram: Настройки → Мои звёзды.', reply_markup: MENU_KB });
+      }
+    } else {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Подписка не найдена.', reply_markup: MENU_KB });
+    }
+  } else if (data === 'gw') {
+    await tgApi(env, 'sendMessage', {
+      chat_id: chat,
+      text: '🎉 Розыгрыши бесплатных анализов и безлимитов проходят в канале ' + CHANNEL + '.\n\nЛови промокоды в постах и вводи их здесь через «🎁 Ввести промокод». Кто успел — того и анализы.',
+      reply_markup: { inline_keyboard: [[{ text: '📢 Открыть канал', url: 'https://t.me/wwwfacerateru' }], [{ text: '← Меню', callback_data: 'menu' }]] },
+    });
+  }
+}
+
+async function redeemPromo(env, chat, tgid, code) {
+  if (!/^[A-Z0-9_-]{2,32}$/.test(code)) {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Это не похоже на промокод. Попробуй ещё раз через меню.', reply_markup: MENU_KB });
+    return;
+  }
+  const raw = await env.RATE_LIMIT.get(`promo:${code}`);
+  if (!raw) {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '❌ Такого промокода нет или он истёк.', reply_markup: MENU_KB });
+    return;
+  }
+  // Один промокод — один раз в руки.
+  if (await env.RATE_LIMIT.get(`promoused:${code}:${tgid}`)) {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Ты уже активировал этот промокод 😉', reply_markup: MENU_KB });
+    return;
+  }
+  const promo = JSON.parse(raw);
+  if (promo.uses <= 0) {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '😞 Увы, все активации этого промокода уже разобрали.', reply_markup: MENU_KB });
+    return;
+  }
+  promo.uses -= 1;
+  await env.RATE_LIMIT.put(`promo:${code}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
+  await env.RATE_LIMIT.put(`promoused:${code}:${tgid}`, '1', { expirationTtl: 60 * 60 * 24 * 90 });
+
+  let grant;
+  if (promo.credits) {
+    const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+    await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + promo.credits));
+    grant = `+${promo.credits} анализ(а)`;
+  } else {
+    const cur = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
+    const base = Math.max(cur, Date.now());
+    await env.RATE_LIMIT.put(`unlim:${tgid}`, String(base + (promo.hours || 24) * 3600 * 1000));
+    grant = `безлимит на ${promo.hours || 24} ч`;
+  }
+  await tgApi(env, 'sendMessage', { chat_id: chat, text: `🎉 Промокод активирован: ${grant}! Открывай facerate.ru и пользуйся.`, reply_markup: MENU_KB });
+}
+
+async function handlePayment(env, msg) {
+  const sp = msg.successful_payment;
+  try {
+    const payload = JSON.parse(sp.invoice_payload);
+    const tgid = payload.tgid || msg.from.id;
+    const pack = PACKS[payload.pack];
+    let note = '';
+    if (payload.credits && !pack) {
+      // старый формат payload {tgid, credits}
+      const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+      await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + payload.credits));
+      note = `начислено анализов: ${payload.credits}`;
+    } else if (pack?.type === 'credits') {
+      const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+      await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + pack.credits));
+      note = `начислено анализов: ${pack.credits}`;
+    } else if (pack?.type === 'unlim') {
+      const cur = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
+      const until = Math.max(cur, Date.now()) + pack.hours * 3600 * 1000;
+      await env.RATE_LIMIT.put(`unlim:${tgid}`, String(until));
+      note = `👑 безлимит до ${new Date(until).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} (МСК)`;
+    } else if (pack?.type === 'sub') {
+      const until = (sp.subscription_expiration_date ? sp.subscription_expiration_date * 1000 : Date.now() + 30 * 24 * 3600 * 1000);
+      await env.RATE_LIMIT.put(`unlim:${tgid}`, String(until));
+      await env.RATE_LIMIT.put(`subchg:${tgid}`, sp.telegram_payment_charge_id || '');
+      await env.RATE_LIMIT.put(`subrec:${tgid}`, sp.is_recurring ? '1' : '0');
+      note = `👑 месячный безлимит до ${new Date(until).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} (МСК)` + (sp.is_recurring ? ', автопродление включено' : '');
+    }
+    await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: `✅ Оплата получена! ${note}.\nВозвращайся на facerate.ru — всё уже обновлено.`, reply_markup: MENU_KB });
+  } catch { /* payload сломан — молча игнор */ }
 }
 
 // ─────────────────────────── Утилиты ───────────────────────────
