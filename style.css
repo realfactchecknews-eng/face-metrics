@@ -1910,3 +1910,7 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 /* ───── Кнопка языка (над кнопкой звука) ───── */
 .lang-btn { bottom: 76px; font-size: 0.78rem; font-weight: 400; letter-spacing: 0.05em; }
 @media (max-width: 600px) { .lang-btn { bottom: 64px; } }
+
+/* Кнопка «карточку в Telegram» — вторая рядом с шерингом */
+.btn-share-tg { background: none; border: 1px solid var(--accent); color: var(--accent); margin-top: 10px; }
+.btn-share-tg:hover { background: rgba(196,164,107,0.12); }

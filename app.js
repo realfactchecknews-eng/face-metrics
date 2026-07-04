@@ -77,6 +77,7 @@ var I18N = {
     pwEyebrow: "SCAN COMPLETE",
     lastReportEyebrow: "PREVIOUS REPORT",
     share: "Share result",
+    tgCard: "📩 Send card to Telegram", tgCardSending: "Sending…", tgCardOk: "✅ Sent! Check your Telegram", tgCardErr: "Failed — try again",
     consentTitle: "Terms of Use",
     consentBody: "<p>By pressing “I agree” you confirm that:</p><ul>" +
       "<li>you are <b>18 or older</b>;</li>" +
@@ -152,6 +153,7 @@ var I18N = {
     pwEyebrow: "СКАНИРОВАНИЕ ЗАВЕРШЕНО",
     lastReportEyebrow: "ПРОШЛЫЙ ОТЧЁТ",
     share: "Поделиться результатом",
+    tgCard: "📩 Карточку в Telegram", tgCardSending: "Отправляю…", tgCardOk: "✅ Готово! Проверь Telegram", tgCardErr: "Не вышло — ещё раз",
     consentTitle: "Пользовательское соглашение",
     consentBody: "<p>Нажимая «Принимаю», вы подтверждаете, что:</p><ul>" +
       "<li>вам <b>исполнилось 18 лет</b>;</li>" +
@@ -233,7 +235,7 @@ function applyLang() {
     ["#aiRecs .eyebrow", "recsEyebrow"],
     ["#paywall .pw-box > .eyebrow", "pwEyebrow"],
     ["#lastResultModal .eyebrow", "lastReportEyebrow"],
-    ["#shareBtn", "share"],
+    ["#shareBtn", "share"], ["#tgCardBtn", "tgCard"],
     ["#consentModal .consent-title", "consentTitle"],
     [".consent-check-row span", "consentCheck"],
     ["#consentAccept", "consentAccept"], ["#consentDecline", "consentDecline"],
@@ -586,6 +588,8 @@ resetBtn.addEventListener("click", function() {
   analyzeBtn.classList.add("hidden");
   var sb = document.getElementById("shareBtn");
   if (sb) sb.classList.add("hidden");
+  var tb = document.getElementById("tgCardBtn");
+  if (tb) tb.classList.add("hidden");
   clearReport();
 });
 
@@ -1188,6 +1192,7 @@ function parseAIReport(text) {
 
 function renderAIReport(text) {
   var parsed  = parseAIReport(text);
+  window._fmParsed = parsed; // для share-карточки
   var scoreEl = document.getElementById("overallScoreNum");
   document.getElementById("overallDesc").textContent = parsed.overallDesc;
   var flash = document.createElement("div");
@@ -1249,6 +1254,8 @@ function renderAIReport(text) {
     saveLastResult(parsed.overall, text);
     var sb = document.getElementById("shareBtn");
     if (sb) sb.classList.remove("hidden");
+    var tb = document.getElementById("tgCardBtn");
+    if (tb) tb.classList.remove("hidden");
   }
 }
 
@@ -1368,94 +1375,216 @@ function esc(s) { return String(s).replace(/[&<>]/g, function(m){ return ({"&":"
 })();
 
 // Рисует фирменную чёрную пилюлю (капсулу) с бликом.
+// Золотая фирменная пилюля (капсула) для карточки.
+(function initTgCard() {
+  var b = document.getElementById("tgCardBtn");
+  if (!b) return;
+  b.addEventListener("click", function() {
+    var acc = getAccount();
+    if (!acc) { backToUploadTop(); return; }
+    b.disabled = true; b.textContent = t("tgCardSending");
+    buildShareCard().then(function(blob) {
+      var fr = new FileReader();
+      fr.onload = function() {
+        var b64 = String(fr.result).split(",")[1];
+        fetch(WORKER_URL + "/sendcard", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: acc.token, image: b64 }),
+        }).then(function(r){ return r.json(); }).then(function(d) {
+          b.disabled = false;
+          b.textContent = d.ok ? t("tgCardOk") : t("tgCardErr");
+          setTimeout(function(){ b.textContent = t("tgCard"); }, 3500);
+        }).catch(function() { b.disabled = false; b.textContent = t("tgCardErr"); });
+      };
+      fr.readAsDataURL(blob);
+    });
+  });
+})();
+
 function drawBrandPill(g, cx, cy, w, h) {
   var x = cx - w / 2, y = cy - h / 2, r = h / 2;
   var grad = g.createLinearGradient(0, y, 0, y + h);
-  grad.addColorStop(0, "#4a4a4a"); grad.addColorStop(0.35, "#262626");
-  grad.addColorStop(0.7, "#0d0d0d"); grad.addColorStop(1, "#000");
+  grad.addColorStop(0, "#e8cf96"); grad.addColorStop(0.45, "#c4a46b");
+  grad.addColorStop(1, "#7a5f30");
   g.save();
   roundRect(g, x, y, w, h, r); g.fillStyle = grad; g.fill();
-  // блик сверху
-  g.beginPath(); roundRect(g, x + w * 0.14, y + h * 0.16, w * 0.46, h * 0.26, h * 0.13);
-  g.fillStyle = "rgba(255,255,255,0.34)"; g.fill();
-  // центральный шов
-  g.beginPath(); g.moveTo(cx, y + h * 0.16); g.lineTo(cx, y + h * 0.84);
-  g.strokeStyle = "rgba(0,0,0,0.5)"; g.lineWidth = 2; g.stroke();
+  // блик
+  g.beginPath(); roundRect(g, x + w * 0.12, y + h * 0.14, w * 0.5, h * 0.3, h * 0.15);
+  g.fillStyle = "rgba(255,255,255,0.5)"; g.fill();
+  // шов
+  g.beginPath(); g.moveTo(cx, y + h * 0.15); g.lineTo(cx, y + h * 0.85);
+  g.strokeStyle = "rgba(40,28,10,0.55)"; g.lineWidth = 2; g.stroke();
   g.restore();
 }
 
+// Люкс-карточка результата 1080×1560: бренд, фото с сеткой и брекетами,
+// крупный балл, бары категорий, summary + POTENTIAL, facerate.ru.
 function buildShareCard() {
   return new Promise(function(resolve) {
     var src = cleanImageCanvas || canvas;
-    var W = 1080, H = 1350;
+    var parsed = window._fmParsed || { overall: null, overallDesc: "", categories: [] };
+    var W = 1080, H = 1560;
     var c = document.createElement("canvas");
     c.width = W; c.height = H;
     var g = c.getContext("2d");
+    var GOLD = "#c4a46b", GOLD_HI = "#e8cf96", DIM = "#8a7f6a", TXT = "#e8e2d6";
 
-    // фон + золотая рамка
-    g.fillStyle = "#0a0a0a"; g.fillRect(0, 0, W, H);
-    g.strokeStyle = "rgba(196,164,107,0.22)"; g.lineWidth = 2;
-    g.strokeRect(24, 24, W - 48, H - 48);
+    function ls(px) { try { g.letterSpacing = px + "px"; } catch (e) {} }
 
-    g.textAlign = "center";
+    // фон: почти чёрный + мягкое золотое свечение сверху
+    g.fillStyle = "#050505"; g.fillRect(0, 0, W, H);
+    var glow = g.createRadialGradient(W / 2, 0, 80, W / 2, 0, 900);
+    glow.addColorStop(0, "rgba(196,164,107,0.10)"); glow.addColorStop(1, "rgba(196,164,107,0)");
+    g.fillStyle = glow; g.fillRect(0, 0, W, 900);
+    // внешняя золотая рамка
+    g.strokeStyle = "rgba(196,164,107,0.35)"; g.lineWidth = 2;
+    roundRect(g, 22, 22, W - 44, H - 44, 30); g.stroke();
 
-    // header: пилюля + вордмарк
-    drawBrandPill(g, W / 2 - 150, 92, 70, 30);
-    g.fillStyle = "#f0ece6";
-    g.font = "400 46px Georgia, serif";
-    g.fillText("FACERATE", W / 2 + 30, 106);
-    g.fillStyle = "#888";
-    g.font = "400 20px Georgia, serif";
-    g.fillText("A I   A E S T H E T I C   A N A L Y S I S", W / 2, 150);
-
-    // фото
-    var side = 460, ix = (W - side) / 2, iy = 190;
-    var s = Math.min(src.width, src.height);
-    g.save();
-    roundRect(g, ix, iy, side, side, 26); g.clip();
-    g.drawImage(src, (src.width - s) / 2, (src.height - s) / 2, s, s, ix, iy, side, side);
-    g.restore();
-    g.strokeStyle = "rgba(196,164,107,0.45)"; g.lineWidth = 1.5;
-    roundRect(g, ix, iy, side, side, 26); g.stroke();
-
-    // общий балл — балл + «/10» как одна центрированная группа (без съезжания)
-    var score = (document.getElementById("overallScoreNum").textContent || "--");
-    var by = iy + side + 130;
+    // ── Шапка: пилюля + FACERATE ──
     g.textAlign = "left"; g.textBaseline = "alphabetic";
-    var scoreFont = "300 150px Georgia, serif", denomFont = "300 50px Georgia, serif";
-    g.font = scoreFont; var wScore = g.measureText(score).width;
-    g.font = denomFont; var wDenom = g.measureText("/10").width;
-    var gap = 8, startX = W / 2 - (wScore + gap + wDenom) / 2;
-    g.font = scoreFont; g.fillStyle = "#f0ece6"; g.fillText(score, startX, by);
-    g.font = denomFont; g.fillStyle = "#888"; g.fillText("/10", startX + wScore + gap, by);
+    g.font = "bold 66px Georgia, 'Times New Roman', serif"; ls(4);
+    var brandW = g.measureText("FACERATE").width;
+    var pillW = 84, gap = 26;
+    var startX = (W - (pillW + gap + brandW)) / 2;
+    drawBrandPill(g, startX + pillW / 2, 96, pillW, 36);
+    var brandGrad = g.createLinearGradient(0, 60, 0, 115);
+    brandGrad.addColorStop(0, "#f4ead2"); brandGrad.addColorStop(1, "#cbb789");
+    g.fillStyle = brandGrad;
+    g.fillText("FACERATE", startX + pillW + gap, 118);
+    ls(0);
     g.textAlign = "center";
-    g.fillStyle = "#c4a46b";
-    g.font = "400 26px Georgia, serif";
-    g.fillText(t("shareCardTag"), W / 2, by + 44);
+    g.font = "24px Georgia, serif"; ls(9);
+    g.fillStyle = DIM;
+    g.fillText("AI AESTHETIC ANALYSIS", W / 2, 158); ls(0);
 
-    // категории из DOM (две колонки)
-    var rows = Array.prototype.slice.call(document.querySelectorAll("#categoryScores .score-row"));
-    var cats = rows.map(function(r) {
-      var n = r.querySelector(".score-name"), v = r.querySelector(".score-val");
-      return { name: n ? n.textContent.trim() : "", val: v ? v.textContent.replace(/\/10.*/, "").trim() : "" };
-    }).filter(function(x) { return x.name; }).slice(0, 8);
-
-    var cy0 = by + 96, colW = (W - 160) / 2, lh = 46;
-    g.font = "400 24px Georgia, serif";
-    cats.forEach(function(cat, i) {
-      var col = i % 2, rowi = Math.floor(i / 2);
-      var x = 80 + col * colW, y = cy0 + rowi * lh;
-      g.textAlign = "left";  g.fillStyle = "#aaa";
-      g.fillText(cat.name.length > 18 ? cat.name.slice(0, 17) + "…" : cat.name, x, y);
-      g.textAlign = "right"; g.fillStyle = "#c4a46b";
-      g.fillText(cat.val, x + colW - 30, y);
+    // ── Фото со скруглением, сеткой точек и брекетами ──
+    var px = 120, py = 195, pw = W - 240, ph = 500, pr = 26;
+    g.save();
+    roundRect(g, px, py, pw, ph, pr); g.clip();
+    // cover-crop
+    var scale = Math.max(pw / src.width, ph / src.height);
+    var dw = src.width * scale, dh = src.height * scale;
+    g.drawImage(src, px + (pw - dw) / 2, py + (ph - dh) / 2, dw, dh);
+    // затемнение краёв
+    var vg = g.createRadialGradient(px + pw / 2, py + ph / 2, ph * 0.35, px + pw / 2, py + ph / 2, ph * 0.95);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.55)");
+    g.fillStyle = vg; g.fillRect(px, py, pw, ph);
+    // сетка точек
+    g.fillStyle = "rgba(196,164,107,0.14)";
+    for (var gy = py + 22; gy < py + ph - 10; gy += 34) {
+      for (var gx = px + 22; gx < px + pw - 10; gx += 34) {
+        g.beginPath(); g.arc(gx, gy, 1.6, 0, Math.PI * 2); g.fill();
+      }
+    }
+    g.restore();
+    g.strokeStyle = "rgba(196,164,107,0.4)"; g.lineWidth = 1.5;
+    roundRect(g, px, py, pw, ph, pr); g.stroke();
+    // угловые брекеты
+    var bl = 38, bo = 14;
+    g.strokeStyle = "rgba(196,164,107,0.9)"; g.lineWidth = 3; g.lineCap = "round";
+    [[px - bo, py - bo, 1, 1], [px + pw + bo, py - bo, -1, 1], [px - bo, py + ph + bo, 1, -1], [px + pw + bo, py + ph + bo, -1, -1]].forEach(function(k) {
+      g.beginPath();
+      g.moveTo(k[0] + k[2] * bl, k[1]); g.lineTo(k[0], k[1]); g.lineTo(k[0], k[1] + k[3] * bl);
+      g.stroke();
     });
 
-    // футер: адрес
+    // ── Общий балл ──
+    var score = parsed.overall !== null ? parsed.overall.toFixed(1) : (document.getElementById("overallScoreNum").textContent || "--");
+    var by = py + ph + 175;
+    g.textAlign = "left";
+    var scoreFont = "180px Georgia, serif", denomFont = "58px Georgia, serif";
+    g.font = scoreFont; var wS = g.measureText(score).width;
+    g.font = denomFont; var wD = g.measureText("/10").width;
+    var sx = W / 2 - (wS + 14 + wD) / 2;
+    var sg = g.createLinearGradient(0, by - 140, 0, by);
+    sg.addColorStop(0, "#f0dfae"); sg.addColorStop(1, "#b3924f");
+    g.font = scoreFont; g.fillStyle = sg; g.fillText(score, sx, by);
+    g.font = denomFont; g.fillStyle = "#6f6858"; g.fillText("/10", sx + wS + 14, by);
     g.textAlign = "center";
-    g.fillStyle = "#f0ece6";
-    g.font = "400 40px Georgia, serif";
-    g.fillText("facerate.ru", W / 2, H - 70);
+    g.font = "27px Georgia, serif"; ls(10); g.fillStyle = GOLD;
+    g.fillText("OVERALL PSL SCORE", W / 2, by + 52); ls(0);
+    // разделитель с ромбом
+    var dy = by + 88;
+    var lg = g.createLinearGradient(W / 2 - 260, 0, W / 2 + 260, 0);
+    lg.addColorStop(0, "rgba(196,164,107,0)"); lg.addColorStop(0.5, "rgba(196,164,107,0.8)"); lg.addColorStop(1, "rgba(196,164,107,0)");
+    g.strokeStyle = lg; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(W / 2 - 260, dy); g.lineTo(W / 2 + 260, dy); g.stroke();
+    g.save(); g.translate(W / 2, dy); g.rotate(Math.PI / 4);
+    g.fillStyle = GOLD_HI; g.fillRect(-5, -5, 10, 10); g.restore();
+
+    // ── Категории: 2 колонки, бары ──
+    var cats = (parsed.categories || []).slice(0, 8);
+    var cy0 = dy + 60, rowH = 92, colW = 425;
+    var cols = [{ x: 105 }, { x: 105 + colW + 30 }];
+    g.textBaseline = "alphabetic";
+    cats.forEach(function(cat, i) {
+      var col = cols[i % 2], row = Math.floor(i / 2);
+      var x = col.x, y = cy0 + row * rowH;
+      // ромб-буллет
+      g.save(); g.translate(x + 9, y + 2); g.rotate(Math.PI / 4);
+      g.strokeStyle = GOLD; g.lineWidth = 2; g.strokeRect(-6, -6, 12, 12); g.restore();
+      // название
+      g.textAlign = "left"; g.font = "27px Georgia, serif"; g.fillStyle = TXT; ls(1);
+      var name = cat.label.length > 22 ? cat.label.slice(0, 21) + "…" : cat.label;
+      g.fillText(name, x + 32, y + 11); ls(0);
+      // бар
+      var bw = colW - 130, bx = x + 32, byy = y + 32;
+      g.fillStyle = "#1d1912"; roundRect(g, bx, byy, bw, 7, 3.5); g.fill();
+      var fillW = Math.max(8, bw * Math.min(cat.score, 10) / 10);
+      var bg2 = g.createLinearGradient(bx, 0, bx + fillW, 0);
+      bg2.addColorStop(0, "#8a6c38"); bg2.addColorStop(1, GOLD_HI);
+      g.fillStyle = bg2; roundRect(g, bx, byy, fillW, 7, 3.5); g.fill();
+      g.beginPath(); g.arc(bx + fillW, byy + 3.5, 5, 0, Math.PI * 2); g.fillStyle = GOLD_HI; g.fill();
+      // балл
+      g.textAlign = "right"; g.font = "33px Georgia, serif"; g.fillStyle = "#e6d3a3";
+      g.fillText(cat.score.toFixed(1), x + colW - 20, y + 40);
+    });
+
+    // ── Summary + POTENTIAL ──
+    var sy = cy0 + Math.ceil(cats.length / 2) * rowH + 18;
+    var sh = 128;
+    g.fillStyle = "rgba(255,255,255,0.025)";
+    roundRect(g, 90, sy, W - 180, sh, 18); g.fill();
+    g.strokeStyle = "rgba(196,164,107,0.22)"; g.lineWidth = 1;
+    roundRect(g, 90, sy, W - 180, sh, 18); g.stroke();
+    // стрелка-глиф
+    g.strokeStyle = GOLD; g.lineWidth = 2.5; g.lineCap = "round";
+    g.beginPath(); g.moveTo(122, sy + 78); g.lineTo(142, sy + 58); g.lineTo(154, sy + 68); g.lineTo(176, sy + 44); g.stroke();
+    g.beginPath(); g.moveTo(176, sy + 44); g.lineTo(176, sy + 56); g.moveTo(176, sy + 44); g.lineTo(164, sy + 44); g.stroke();
+    // текст
+    g.textAlign = "left";
+    g.font = "22px Georgia, serif"; ls(6); g.fillStyle = GOLD;
+    g.fillText("ANALYSIS SUMMARY", 205, sy + 46); ls(0);
+    var ov = parsed.overall || 0;
+    var potential = ov >= 7.5 ? "HIGH" : ov >= 6 ? "GOOD" : ov >= 4.5 ? "MODERATE" : "LOW";
+    var summary = (parsed.overallDesc || "").replace(/\s+/g, " ").trim();
+    var s1 = summary.slice(0, 52), s2 = "";
+    if (summary.length > 52) {
+      var cut = summary.lastIndexOf(" ", 52); if (cut < 30) cut = 52;
+      s1 = summary.slice(0, cut);
+      s2 = summary.slice(cut + 1, cut + 54) + (summary.length > cut + 54 ? "…" : "");
+    }
+    g.font = "23px Georgia, serif"; g.fillStyle = "#b6ac9a";
+    g.fillText(s1, 205, sy + 80);
+    if (s2) g.fillText(s2, 205, sy + 108);
+    // бейдж POTENTIAL
+    var bwd = 185, bx2 = W - 90 - 24 - bwd, by2 = sy + 24;
+    g.strokeStyle = "rgba(196,164,107,0.55)"; g.lineWidth = 1.5;
+    roundRect(g, bx2, by2, bwd, sh - 48, 12); g.stroke();
+    g.textAlign = "center";
+    g.font = "17px Georgia, serif"; ls(5); g.fillStyle = DIM;
+    g.fillText("POTENTIAL", bx2 + bwd / 2, by2 + 32); ls(0);
+    g.font = "30px Georgia, serif"; ls(3); g.fillStyle = GOLD_HI;
+    g.fillText(potential, bx2 + bwd / 2, by2 + 66); ls(0);
+
+    // ── Футер ──
+    g.font = "46px Georgia, serif"; ls(2);
+    var fg = g.createLinearGradient(0, H - 100, 0, H - 55);
+    fg.addColorStop(0, "#eddcab"); fg.addColorStop(1, "#b3924f");
+    g.fillStyle = fg;
+    g.fillText("facerate.ru", W / 2, H - 66); ls(0);
+    g.font = "20px Georgia, serif"; ls(6); g.fillStyle = "#6f6858";
+    g.fillText("Ascend & Forget", W / 2, H - 34); ls(0);
 
     c.toBlob(function(b) { resolve(b); }, "image/png");
   });
