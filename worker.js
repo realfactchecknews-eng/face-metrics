@@ -26,6 +26,7 @@ export default {
     try {
       if (path === '/tg-webhook') return await tgWebhook(request, env);
       if (path === '/auth')       return await authTg(request, env);
+      if (path === '/authpoll')   return await authPoll(request, env);
       if (path === '/me')         return await me(request, env);
       if (path === '/buy')        return await buy(request, env);
       return await analyze(request, env);
@@ -157,16 +158,29 @@ async function authTg(request, env) {
   return json(await statusFor(env, user, token));
 }
 
+// Вход через сообщение боту: сайт открывает t.me/бот?start=КОД, юзер жмёт Start,
+// вебхук привязывает КОД к сессии, сайт забирает её отсюда поллингом.
+async function authPoll(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const code = String(body.code || '');
+  if (!/^[a-z0-9-]{10,80}$/i.test(code)) return json({ error: 'code' });
+  const raw = await env.RATE_LIMIT.get(`authcode:${code}`);
+  if (!raw) return json({ pending: true });
+  await env.RATE_LIMIT.delete(`authcode:${code}`);
+  const { token, user } = JSON.parse(raw);
+  return json(await statusFor(env, user, token));
+}
+
 async function me(request, env) {
   let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
   const sess = await getSession(env, body.token);
   if (!sess) return json({ error: 'auth' });
-  return json(await statusFor(env, sess, body.token));
+  return json(await statusFor(env, sess, body.token, !!body.fresh));
 }
 
-async function statusFor(env, user, token) {
+async function statusFor(env, user, token, fresh) {
   const today = new Date().toISOString().slice(0, 10);
-  const subscribed = await isSubscribed(env, user.id);
+  const subscribed = await isSubscribed(env, user.id, fresh);
   const freeUsed = parseInt(await env.RATE_LIMIT.get(`q:${user.id}:${today}`) || '0', 10);
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${user.id}`) || '0', 10);
   return {
@@ -182,11 +196,14 @@ async function getSession(env, token) {
   return raw ? JSON.parse(raw) : null;
 }
 
-// Подписка на канал (кэш 5 минут, чтобы не дёргать Bot API на каждый чих).
-async function isSubscribed(env, tgid) {
+// Подписка на канал (кэш 5 минут; fresh=true — принудительная проверка,
+// например после «Я подписался» на пейволле).
+async function isSubscribed(env, tgid, fresh) {
   const cacheKey = `sub:${tgid}`;
-  const cached = await env.RATE_LIMIT.get(cacheKey);
-  if (cached !== null) return cached === '1';
+  if (!fresh) {
+    const cached = await env.RATE_LIMIT.get(cacheKey);
+    if (cached !== null) return cached === '1';
+  }
   let ok = false;
   try {
     const r = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/getChatMember?chat_id=${encodeURIComponent(CHANNEL)}&user_id=${tgid}`);
@@ -233,6 +250,36 @@ async function tgWebhook(request, env) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pre_checkout_query_id: upd.pre_checkout_query.id, ok: true }),
     });
+    return new Response('ok');
+  }
+
+  // Вход с сайта: /start <код> → создаём сессию и привязываем к коду.
+  const msg = upd.message;
+  if (msg?.text && msg.text.startsWith('/start') && msg.from && !msg.from.is_bot) {
+    const code = msg.text.split(' ')[1] || '';
+    if (/^[a-z0-9-]{10,80}$/i.test(code)) {
+      const token = crypto.randomUUID() + '-' + crypto.randomUUID();
+      const user = {
+        id: msg.from.id,
+        first_name: msg.from.first_name || '',
+        username: msg.from.username || '',
+        photo_url: '',
+      };
+      await env.RATE_LIMIT.put(`sess:${token}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 30 });
+      await env.RATE_LIMIT.put(`authcode:${code}`, JSON.stringify({ token, user }), { expirationTtl: 600 });
+      await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: msg.chat.id,
+          text: '✅ Вход выполнен! Возвращайся на сайт — страница подхватит аккаунт сама.\n\nПодписка на @wwwfacerateru даёт 1 бесплатный анализ в день.',
+        }),
+      });
+    } else {
+      await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: msg.chat.id, text: 'Привет! Жми «Войти через Telegram» на facerate.ru — и я привяжу твой аккаунт.' }),
+      });
+    }
     return new Response('ok');
   }
 
