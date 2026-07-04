@@ -1423,7 +1423,7 @@ function buildShareCard() {
   return new Promise(function(resolve) {
     var src = cleanImageCanvas || canvas;
     var parsed = window._fmParsed || { overall: null, overallDesc: "", categories: [] };
-    var W = 1080, H = 1560;
+    var W = 1080, H = 1680;
     var c = document.createElement("canvas");
     c.width = W; c.height = H;
     var g = c.getContext("2d");
