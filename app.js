@@ -49,6 +49,224 @@ const HUD_TOKENS = [
   "MSR:0.974","malar+","0xF2A4B1","0xA3C788","0xD1B9","0x8E2F4C",
 ];
 
+/* ═══════════════════  i18n: английский по умолчанию, RU опционально  ═══════════════════ */
+var I18N = {
+  en: {
+    begin: "START ANALYSIS",
+    menuTitle: "Menu",
+    tHistory: "Score history", tHistorySub: "Your past results",
+    tGlossary: "Looksmax glossary", tGlossarySub: "Terms explained simply",
+    tHow: "How it works", tHowSub: "Geometry + AI",
+    tFeedback: "Feedback", tFeedbackSub: "Ideas & requests",
+    goAnalysis: "Go to analysis",
+    back: "← Back",
+    front: "FRONT", profile: "PROFILE", required: "required", optional: "optional",
+    frontTitle: "Frontal photo", frontHint: "Face straight · Even lighting",
+    sideTitle: "Profile photo", sideHint: "For accurate jawline scoring", sideHint2: "↑ analysis accuracy",
+    chooseFile: "Choose file", addFile: "Add",
+    analyze: "ANALYZE",
+    tone: "🔞 Savage mode — brutal roast, no sugar-coating",
+    accLoTitle: "Log in with Telegram",
+    accLoSub: "Subscribe to the <a href='https://t.me/wwwfacerateru' target='_blank' rel='noopener'>channel</a> = 1 free analysis per day",
+    lastLabel: "LAST RESULT", lastCta: "Open report →",
+    toMenu: "← Menu", reset: "Upload another",
+    scanning: "Scanning face geometry…",
+    scoreEyebrow: "OVERALL SCORE · PSL RATING",
+    recsEyebrow: "LOOKSMAXXING RECOMMENDATIONS",
+    detailEyebrow: "DETAILED BREAKDOWN",
+    pwEyebrow: "SCAN COMPLETE",
+    lastReportEyebrow: "PREVIOUS REPORT",
+    share: "Share result",
+    consentTitle: "Terms of Use",
+    consentBody: "<p>By pressing “I agree” you confirm that:</p><ul>" +
+      "<li>you are <b>18 or older</b>;</li>" +
+      "<li>this service is <b>for entertainment</b>; its scores are a subjective AI heuristic, <b>not</b> medical, psychological or any professional diagnosis, and not objective truth;</li>" +
+      "<li>face geometry is computed in your browser, but <b>the photo itself is sent</b> to a third-party AI service (OpenRouter) to generate the report; the service does not store photos after processing;</li>" +
+      "<li>you upload <b>only your own image</b> or a photo of a person <b>who gave consent</b>; no photos of minors or third parties without consent;</li>" +
+      "<li>you consent to processing of the uploaded image for these purposes and may stop using the service at any time;</li>" +
+      "<li>you use the service at your own risk; <b>the administration is not liable</b> for your decisions or any consequences based on the results.</li></ul>" +
+      "<p class='consent-full-link'><a href='terms.html' target='_blank' rel='noopener'>Full terms →</a><br/><a href='privacy.html' target='_blank' rel='noopener'>Privacy policy →</a></p>",
+    consentCheck: "I have read and accept the terms",
+    consentAccept: "I agree", consentDecline: "Cancel",
+    footTech: "FaceRate · Face geometry processed locally · AI via secure Cloudflare Worker",
+    footLinks: "<a href='#' data-view='glossary' style='color:#c4a46b;text-decoration:none'>Looksmax glossary</a>&nbsp;·&nbsp;<a href='#' data-view='history' style='color:#c4a46b;text-decoration:none'>Score history</a>&nbsp;·&nbsp;<a href='#' data-view='feedback' style='color:#c4a46b;text-decoration:none'>Feedback</a>",
+    footLegal: "<a href='terms.html' style='color:#888;text-decoration:none'>Terms of use</a>&nbsp;·&nbsp;<a href='privacy.html' style='color:#888;text-decoration:none'>Privacy policy</a>",
+    // dynamic
+    pwReady: "Your report is ready",
+    pwLoginSub: "Log in with Telegram to unlock the result. One tap — no phone number, no password.",
+    pwLoginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
+    pwSubTitle: "Unlock your result for free",
+    pwSubSub: "Subscribing to our channel gives you 1 free analysis every day.",
+    pwSubBtn: "<span class='tg-ic'>✈</span> Subscribe to the channel",
+    pwSubCheck: "I subscribed — show my result",
+    pwPayTitle: "Free analysis used for today",
+    pwPaySub: "Pay with Telegram Stars in two taps. Or come back tomorrow for a free one.",
+    pwPaid: "I paid — show my result",
+    pwChecking: "Checking…",
+    packP1: "1 analysis", packP5: "5 analyses", packD1: "Day unlimited", packM1: "Month unlimited",
+    waitTg: "Waiting for Telegram…",
+    loginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
+    chipSub: "subscribe to channel → 1 free/day", chipFree: "free today: ", chipCredits: "credits: ",
+    chipUnlim: "👑 Unlimited until ",
+    gateHint: "After subscribing, come back and press “Analyze” again.",
+    invoiceCreating: "Creating invoice…", invoiceOpening: "Opening Telegram…", invoiceErr: "Error, try again", netErr: "Network unavailable",
+    histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
+    histAvg: "Average score: ", histCount: " · analyses: ",
+    howHtml: "<div class='how'>" +
+      "<p><b>1. Geometry — locally.</b> MediaPipe finds 468 facial landmarks right in your browser and computes proportions (cheekbones, jaw, fWHR, symmetry). The photo never leaves your device at this step.</p>" +
+      "<p><b>2. AI scoring.</b> The photo and metrics go to a secure server that queries a vision model. It returns a PSL score, an 8-category breakdown and recommendations.</p>" +
+      "<p><b>3. Result.</b> Save it, share the card, and compare with past attempts in History.</p>" +
+      "<p class='how-note'>This is an entertainment service. The score is a subjective heuristic, not objective truth. Mild asymmetry is normal for everyone.</p></div>",
+    fbSub: "What should we improve? What's missing? Found a bug? Tell us — it really helps.",
+    fbName: "Name or nick (optional)", fbEmail: "Email for reply (optional)", fbMsg: "Your message…",
+    fbSend: "Send", fbSending: "Sending…", fbOk: "Thank you! Message sent.", fbErr: "Could not send. Try later.",
+    labelSym: "Symmetry", labelLips: "Lips / Cheekbones",
+    shareCardTag: "PSL RATING · facerate.ru", shareText: "My PSL rating — facerate.ru",
+    errNoFace: "Could not detect a face. Try another photo — the face should look at the camera in good lighting.",
+    errGeneric: "Analysis error. Try refreshing the page.",
+    emptyAnswer: "Empty response.",
+  },
+  ru: {
+    begin: "НАЧАТЬ АНАЛИЗ",
+    menuTitle: "Меню",
+    tHistory: "История оценок", tHistorySub: "Прошлые результаты",
+    tGlossary: "Луксмакс-словарь", tGlossarySub: "Термины простыми словами",
+    tHow: "Как это работает", tHowSub: "Геометрия + AI",
+    tFeedback: "Обратная связь", tFeedbackSub: "Пожелания и идеи",
+    goAnalysis: "Перейти к анализу",
+    back: "← Назад",
+    front: "ФРОНТ", profile: "ПРОФИЛЬ", required: "обязательно", optional: "опционально",
+    frontTitle: "Фронтальное фото", frontHint: "Лицо прямо · Равномерный свет",
+    sideTitle: "Фото профиля", sideHint: "Для точной оценки челюсти", sideHint2: "↑ точность анализа",
+    chooseFile: "Выбрать файл", addFile: "Добавить",
+    analyze: "АНАЛИЗИРОВАТЬ",
+    tone: "🔞 Дерзкий режим — жёсткий разбор без соплей",
+    accLoTitle: "Войди через Telegram",
+    accLoSub: "Подписка на <a href='https://t.me/wwwfacerateru' target='_blank' rel='noopener'>канал</a> = 1 бесплатный анализ в день",
+    lastLabel: "ПРОШЛЫЙ РЕЗУЛЬТАТ", lastCta: "Открыть отчёт →",
+    toMenu: "← Меню", reset: "Загрузить другое",
+    scanning: "Сканирование геометрии лица…",
+    scoreEyebrow: "ОБЩАЯ ОЦЕНКА · PSL РЕЙТИНГ",
+    recsEyebrow: "РЕКОМЕНДАЦИИ ПО ЛУКСМАКСИНГУ",
+    detailEyebrow: "ДЕТАЛЬНЫЙ АНАЛИЗ",
+    pwEyebrow: "СКАНИРОВАНИЕ ЗАВЕРШЕНО",
+    lastReportEyebrow: "ПРОШЛЫЙ ОТЧЁТ",
+    share: "Поделиться результатом",
+    consentTitle: "Пользовательское соглашение",
+    consentBody: "<p>Нажимая «Принимаю», вы подтверждаете, что:</p><ul>" +
+      "<li>вам <b>исполнилось 18 лет</b>;</li>" +
+      "<li>сервис носит <b>развлекательный характер</b>, его оценки — субъективная эвристика нейросети, а <b>не</b> диагноз и не объективная истина;</li>" +
+      "<li>геометрия считается в браузере, но <b>фото отправляется</b> на сторонний AI-сервис (OpenRouter) для формирования отчёта; фото не хранится после обработки;</li>" +
+      "<li>вы загружаете <b>только своё изображение</b> либо фото человека, <b>давшего согласие</b>; без фото несовершеннолетних и третьих лиц без согласия;</li>" +
+      "<li>вы даёте согласие на обработку изображения и можете прекратить использование в любой момент;</li>" +
+      "<li>вы используете сервис на свой риск; <b>администрация не несёт ответственности</b> за ваши решения и последствия.</li></ul>" +
+      "<p class='consent-full-link'><a href='terms.html' target='_blank' rel='noopener'>Полный текст соглашения →</a><br/><a href='privacy.html' target='_blank' rel='noopener'>Политика конфиденциальности →</a></p>",
+    consentCheck: "Я прочитал(а) и принимаю условия",
+    consentAccept: "Принимаю", consentDecline: "Отмена",
+    footTech: "FaceRate · Геометрия локально · AI через защищённый Cloudflare Worker",
+    footLinks: "<a href='#' data-view='glossary' style='color:#c4a46b;text-decoration:none'>Луксмакс-словарь</a>&nbsp;·&nbsp;<a href='#' data-view='history' style='color:#c4a46b;text-decoration:none'>История оценок</a>&nbsp;·&nbsp;<a href='#' data-view='feedback' style='color:#c4a46b;text-decoration:none'>Обратная связь</a>",
+    footLegal: "<a href='terms.html' style='color:#888;text-decoration:none'>Пользовательское соглашение</a>&nbsp;·&nbsp;<a href='privacy.html' style='color:#888;text-decoration:none'>Политика конфиденциальности</a>",
+    pwReady: "Твой отчёт готов",
+    pwLoginSub: "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.",
+    pwLoginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
+    pwSubTitle: "Открой результат бесплатно",
+    pwSubSub: "Подписка на наш канал даёт 1 бесплатный анализ каждый день.",
+    pwSubBtn: "<span class='tg-ic'>✈</span> Подписаться на канал",
+    pwSubCheck: "Я подписался — показать результат",
+    pwPayTitle: "Бесплатный анализ на сегодня использован",
+    pwPaySub: "Оплата звёздами Telegram в два тапа. Или возвращайся завтра за бесплатным.",
+    pwPaid: "Я оплатил — показать результат",
+    pwChecking: "Проверяю…",
+    packP1: "1 анализ", packP5: "5 анализов", packD1: "Безлимит на день", packM1: "Безлимит на месяц",
+    waitTg: "Жду подтверждения в Telegram…",
+    loginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
+    chipSub: "подпишись на канал → 1 free/день", chipFree: "бесплатных сегодня: ", chipCredits: "кредиты: ",
+    chipUnlim: "👑 Безлимит до ",
+    gateHint: "После подписки вернись и нажми «Анализировать» ещё раз.",
+    invoiceCreating: "Создаю счёт…", invoiceOpening: "Открываю Telegram…", invoiceErr: "Ошибка, ещё раз", netErr: "Сеть недоступна",
+    histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
+    histAvg: "Средний балл: ", histCount: " · оценок: ",
+    howHtml: "<div class='how'>" +
+      "<p><b>1. Геометрия — локально.</b> MediaPipe находит 468 точек лица прямо в браузере и считает пропорции.</p>" +
+      "<p><b>2. AI-оценка.</b> Фото и метрики уходят на защищённый сервер → vision-модель даёт PSL-балл, разбор по 8 категориям и рекомендации.</p>" +
+      "<p><b>3. Результат.</b> Можно сохранить, поделиться карточкой и сравнить с прошлыми попытками.</p>" +
+      "<p class='how-note'>Это развлекательный сервис. Оценка — субъективная эвристика. Лёгкая асимметрия — норма у всех.</p></div>",
+    fbSub: "Что улучшить? Чего не хватает? Нашли ошибку? Напишите — это реально помогает.",
+    fbName: "Имя или ник (необязательно)", fbEmail: "Email для ответа (необязательно)", fbMsg: "Ваше сообщение…",
+    fbSend: "Отправить", fbSending: "Отправка…", fbOk: "Спасибо! Сообщение отправлено.", fbErr: "Не удалось отправить. Попробуйте позже.",
+    labelSym: "Симметрия", labelLips: "Губы / Скулы",
+    shareCardTag: "PSL РЕЙТИНГ · facerate.ru", shareText: "Мой PSL рейтинг — facerate.ru",
+    errNoFace: "Не удалось распознать лицо. Попробуйте другое фото — лицо должно быть направлено в камеру.",
+    errGeneric: "Ошибка при анализе. Попробуйте обновить страницу.",
+    emptyAnswer: "Пустой ответ.",
+  },
+};
+
+function lang() { return localStorage.getItem("fm-lang") || "en"; }
+function t(key) { return (I18N[lang()] && I18N[lang()][key]) || I18N.en[key] || key; }
+function setLang(l) { localStorage.setItem("fm-lang", l); applyLang(); }
+
+// Применяет язык к статичному DOM (селектор → ключ; html-ключи через innerHTML).
+function applyLang() {
+  var TXT = [
+    ["#beginBtn .btn-begin-inner span:first-child", "begin"],
+    [".menu-title", "menuTitle"],
+    [".menu-tile[data-view='history'] .mt-tx b", "tHistory"], [".menu-tile[data-view='history'] .mt-tx i", "tHistorySub"],
+    [".menu-tile[data-view='glossary'] .mt-tx b", "tGlossary"], [".menu-tile[data-view='glossary'] .mt-tx i", "tGlossarySub"],
+    [".menu-tile[data-view='how'] .mt-tx b", "tHow"], [".menu-tile[data-view='how'] .mt-tx i", "tHowSub"],
+    [".menu-tile[data-view='feedback'] .mt-tx b", "tFeedback"], [".menu-tile[data-view='feedback'] .mt-tx i", "tFeedbackSub"],
+    ["#menuGoBtn span:first-child", "goAnalysis"],
+    ["#fsBack", "back"],
+    [".upload-slot:nth-child(1) .slot-eyebrow", "front"], [".upload-slot:nth-child(2) .slot-eyebrow", "profile"],
+    [".slot-required", "required"], [".slot-optional", "optional"],
+    ["#frontPlaceholder .upload-title", "frontTitle"], ["#frontPlaceholder .upload-hint", "frontHint"],
+    ["#chooseFileBtn", "chooseFile"],
+    ["#sidePlaceholder .upload-title", "sideTitle"],
+    ["#chooseSideBtn", "addFile"],
+    ["#analyzeBtn .btn-analyze-text", "analyze"],
+    [".tone-label", "tone"],
+    ["#accLoggedOut .acc-lo-text b", "accLoTitle"],
+    [".lrb-label", "lastLabel"], [".lrb-cta", "lastCta"],
+    ["#toMenuBtn", "toMenu"], ["#resetBtn", "reset"],
+    ["#loading p", "scanning"],
+    [".score-hero .eyebrow", "scoreEyebrow"],
+    ["#aiRecs .eyebrow", "recsEyebrow"],
+    ["#paywall .pw-box > .eyebrow", "pwEyebrow"],
+    ["#lastResultModal .eyebrow", "lastReportEyebrow"],
+    ["#shareBtn", "share"],
+    ["#consentModal .consent-title", "consentTitle"],
+    [".consent-check-row span", "consentCheck"],
+    ["#consentAccept", "consentAccept"], ["#consentDecline", "consentDecline"],
+  ];
+  var HTML = [
+    ["#accLoggedOut .acc-lo-text i", "accLoSub"],
+    ["#consentModal .consent-body", "consentBody"],
+    ["#mainFooter .footer-extra:first-child", "footTech"],
+    ["#mainFooter .footer-extra:nth-of-type(2)", "footLinks"],
+    ["#mainFooter .container > p:last-child", "footLegal"],
+  ];
+  TXT.forEach(function(p){ var el = document.querySelector(p[0]); if (el) el.textContent = t(p[1]); });
+  HTML.forEach(function(p){ var el = document.querySelector(p[0]); if (el) el.innerHTML = t(p[1]); });
+  // hints профиля (их два <p>)
+  var hints = document.querySelectorAll("#sidePlaceholder .upload-hint");
+  if (hints[0]) hints[0].textContent = t("sideHint");
+  if (hints[1]) hints[1].textContent = t("sideHint2");
+  // переключатель
+  var lb = document.getElementById("langBtn");
+  if (lb) lb.textContent = lang() === "en" ? "RU" : "EN";
+  document.documentElement.lang = lang();
+  // футер-ссылки пересобраны — перевесить обработчики data-view
+  document.querySelectorAll("#mainFooter [data-view]").forEach(function(a){
+    a.addEventListener("click", function(e){ e.preventDefault(); if (window.fmOpenView) window.fmOpenView(a.getAttribute("data-view")); });
+  });
+}
+
+(function initLang() {
+  applyLang();
+  var lb = document.getElementById("langBtn");
+  if (lb) lb.addEventListener("click", function(){ setLang(lang() === "en" ? "ru" : "en"); });
+})();
+
 // DOM refs
 const fileInput     = document.getElementById("fileInput");
 const sideInput     = document.getElementById("sideInput");
@@ -577,7 +795,7 @@ async function processImage(img, sideImage) {
     var results = fl.detect(cleanImageCanvas);
     loadingCard.classList.add("hidden");
     if (!results.faceLandmarks || !results.faceLandmarks.length) {
-      showError("Не удалось распознать лицо. Попробуйте другое фото -- лицо должно быть направлено в камеру и хорошо освещено."); return;
+      showError(t("errNoFace")); return;
     }
     var raw = results.faceLandmarks[0];
     var w   = canvas.width, h = canvas.height;
@@ -590,7 +808,7 @@ async function processImage(img, sideImage) {
     });
   } catch (err) {
     console.error(err);
-    showError("Ошибка при анализе. Попробуйте обновить страницу.");
+    showError(t("errGeneric"));
   }
 }
 
@@ -831,8 +1049,8 @@ async function callAI(metrics, shapeInfo) {
   var cbJawRatio = (metrics.cheekboneWidth / metrics.jawWidth).toFixed(2);
   var jawInstruction = hasSide
     ? "Тебе даны ДВА отдельных изображения: первое -- фронтальное фото, второе -- ПРОФИЛЬ (вид сбоку). ОБЯЗАТЕЛЬНО используй второе фото (профиль) для оценки gonial angle, ramus height, chin projection, submental angle и профиля носа (dorsum, проекция кончика). В разделах ДЖОУЛАЙН_MANDIBLE и НОС_NOSE явно опирайся на то, что видно на профиле."
-    : "Дано только фронтальное фото -- профиль не приложен. Для ДЖОУЛАЙН_MANDIBLE оцени честно то, что видно анфас: bigonial width, jaw taper, chin width и фронтальную чёткость. Добавь короткую пометку '-- оценка по анфас, профиль не предоставлен.' Будь чуть консервативнее (gonial angle и проекция подбородка не полностью видны), но НЕ занижай искусственно -- хорошо очерченная челюсть анфас может получить 7-8.";
-  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English, but write all explanatory text in Russian.\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: exactly average\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nРеальные лица занимают весь диапазон ~3.0-8.0. НЕ ставь всем по умолчанию 5.5-6 -- это запрещено и это главная ошибка. СНАЧАЛА реши КОНКРЕТНО для этого лица: выше оно среднего или ниже и насколько, и поставь общий балл смело (явно непривлекательное 3-4, обычное 5-6, привлекательное 7-8.5, модельное 9+). Be BALANCED and FEARLESS in BOTH directions: do not systematically inflate, and do not systematically lowball. If a feature is genuinely excellent, give it 8-9 without hesitation; if it is genuinely weak, give it 2-4 without softening. A 7+ must be earned by a real, visible strength; a sub-4 must reflect a real, visible weakness. Never compress everything toward the middle out of caution. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nОБЯЗАТЕЛЬНЫЙ РАЗБРОС: среди 8 категорий разница между самой высокой и самой низкой оценкой ДОЛЖНА быть не меньше 2.5 балла. Запрещено, чтобы все категории были в диапазоне 5-6. Общий балл НЕ привязан к 5: некрасивое лицо честно получает 3-4, очень красивое -- 7-9. НЕ ставь по умолчанию ~5.5-6 каждому человеку -- это главная ошибка, реши КОНКРЕТНО для этого лица выше оно среднего или ниже и насколько.\n\nКРАТКОСТЬ И БЕЗ ПОВТОРОВ: каждое описание под меткой -- РОВНО 1-3 предложения ТОЛЬКО про этот параметр. НЕ копируй текст между секциями, НЕ повторяй общий вывод в категориях, НЕ дублируй один и тот же анализ.\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is often imprecise. Trust your visual read of the real cheekbone projection (high/flat), malar fat, zygomatic width and the true face shape over the geometric label if they disagree.\n\nФОРМАТ БАЛЛА -- КРИТИЧНО: вместо 0.0 ставь дробное число с ОДНИМ знаком после точки (5.8, 6.3, 7.1, 4.6, 8.4). КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ целые баллы и .0 (нельзя 6/10, 7/10, 6.0/10) -- десятичный разряд всегда ненулевой. Каждая категория получает РАЗНЫЙ дробный балл. В ОТВЕТЕ НЕ ПИШИ квадратные скобки [ ], слова-плейсхолдеры или текст подсказок -- описания под каждой меткой замени СВОИМ готовым текстом про это фото.\n\nINTERNAL STEP (не выводи этот шаг): сначала мысленно опиши что реально видишь на фото -- форма глаз, скулы, кожа, нос, волосы, пропорции -- и только потом ставь баллы, согласованные с увиденным. Общий балл = взвешенное впечатление от категорий, а не случайное число.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: 0.0/10\nОбщая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.\n\nСИММЕТРИЯ: 0.0/10\nИзмеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.\n\nГЛАЗА_CANTHAL_TILT: 0.0/10\nКонкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.\n\nМИДФЕЙС_MAXILLA: 0.0/10\nМаксиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.\n\nДЖОУЛАЙН_MANDIBLE: 0.0/10\nДжоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.\n\nНОС_NOSE: 0.0/10\nНос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.\n\nГУБЫ_СКУЛЫ: 0.0/10\nГубы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.\n\nКОЖА: 0.0/10\nТекстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.\n\nГРУМИНГ_STYLE: 0.0/10\nHairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
+    : "Дано только фронтальное фото -- профиль не приложен. Для ДЖОУЛАЙН_MANDIBLE оцени честно то, что видно анфас: bigonial width, jaw taper, chin width и фронтальную чёткость. Добавь короткую пометку '" + (lang() === "ru" ? "-- оценка по анфас, профиль не предоставлен." : "-- frontal-only estimate, no profile provided.") + "' Будь чуть консервативнее (gonial angle и проекция подбородка не полностью видны), но НЕ занижай искусственно -- хорошо очерченная челюсть анфас может получить 7-8.";
+  var prompt = "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating. Use looksmaxxing terminology in English." + (lang() === "ru" ? " Write all explanatory text in Russian." : " Write ALL explanatory text and recommendations in ENGLISH (the section hints below are in Russian -- they are only hints; your actual text must be English). Keep the metric label keys (ОБЩИЙ_БАЛЛ, СИММЕТРИЯ etc.) EXACTLY as given -- do not translate the keys.") + "\n\nScoring calibration -- use the FULL 1-10 range and ACTUALLY DIFFERENTIATE between features (do not give everything the same score):\n- 1-3: clear flaw in that area\n- 4: below average\n- 5: exactly average\n- 6: slightly above average\n- 7: clearly above average, attractive\n- 8: very good, uncommon\n- 9-10: exceptional, model-tier / rare near-perfection\nРеальные лица занимают весь диапазон ~3.0-8.0. НЕ ставь всем по умолчанию 5.5-6 -- это запрещено и это главная ошибка. СНАЧАЛА реши КОНКРЕТНО для этого лица: выше оно среднего или ниже и насколько, и поставь общий балл смело (явно непривлекательное 3-4, обычное 5-6, привлекательное 7-8.5, модельное 9+). Be BALANCED and FEARLESS in BOTH directions: do not systematically inflate, and do not systematically lowball. If a feature is genuinely excellent, give it 8-9 without hesitation; if it is genuinely weak, give it 2-4 without softening. A 7+ must be earned by a real, visible strength; a sub-4 must reflect a real, visible weakness. Never compress everything toward the middle out of caution. Scores must vary across categories -- identical or near-identical scores everywhere is wrong.\n\nОБЯЗАТЕЛЬНЫЙ РАЗБРОС: среди 8 категорий разница между самой высокой и самой низкой оценкой ДОЛЖНА быть не меньше 2.5 балла. Запрещено, чтобы все категории были в диапазоне 5-6. Общий балл НЕ привязан к 5: некрасивое лицо честно получает 3-4, очень красивое -- 7-9. НЕ ставь по умолчанию ~5.5-6 каждому человеку -- это главная ошибка, реши КОНКРЕТНО для этого лица выше оно среднего или ниже и насколько.\n\nКРАТКОСТЬ И БЕЗ ПОВТОРОВ: каждое описание под меткой -- РОВНО 1-3 предложения ТОЛЬКО про этот параметр. НЕ копируй текст между секциями, НЕ повторяй общий вывод в категориях, НЕ дублируй один и тот же анализ.\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is often imprecise. Trust your visual read of the real cheekbone projection (high/flat), malar fat, zygomatic width and the true face shape over the geometric label if they disagree.\n\nФОРМАТ БАЛЛА -- КРИТИЧНО: вместо 0.0 ставь дробное число с ОДНИМ знаком после точки (5.8, 6.3, 7.1, 4.6, 8.4). КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ целые баллы и .0 (нельзя 6/10, 7/10, 6.0/10) -- десятичный разряд всегда ненулевой. Каждая категория получает РАЗНЫЙ дробный балл. В ОТВЕТЕ НЕ ПИШИ квадратные скобки [ ], слова-плейсхолдеры или текст подсказок -- описания под каждой меткой замени СВОИМ готовым текстом про это фото.\n\nINTERNAL STEP (не выводи этот шаг): сначала мысленно опиши что реально видишь на фото -- форма глаз, скулы, кожа, нос, волосы, пропорции -- и только потом ставь баллы, согласованные с увиденным. Общий балл = взвешенное впечатление от категорий, а не случайное число.\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports.\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (ideal 1.2-1.35)\n- Forehead: " + Math.round(metrics.foreheadWidth) + "px | Bizygomatic: " + Math.round(metrics.cheekboneWidth) + "px | Bigonial: " + Math.round(metrics.jawWidth) + "px\n\n" + jawInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\nОБЩИЙ_БАЛЛ: 0.0/10\nОбщая оценка внешности по калибровке выше. Честный, но взвешенный вердикт: сначала сильные стороны, затем слабые. 3-4 предложения.\n\nСИММЕТРИЯ: 0.0/10\nИзмеренная симметрия = " + sym + "%. Переведи её в балл строго по шкале: 98-100%=9-10, 95-97%=8, 90-94%=7, 85-89%=6, 80-84%=5, ниже 80%=4 или меньше. Идеальная симметрия редка -- НЕ завышай. Разбери конкретику на фото: orbital tilt, mandibular deviation, видимые перекосы.\n\nГЛАЗА_CANTHAL_TILT: 0.0/10\nКонкретно: canthal tilt (положительный/отрицательный/нейтральный), hunter eyes vs prey eyes, lid hooding, orbital rim projection, IPD vs норма, scleral show.\n\nМИДФЕЙС_MAXILLA: 0.0/10\nМаксиллярная проекция (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.\n\nДЖОУЛАЙН_MANDIBLE: 0.0/10\nДжоулайн: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.\n\nНОС_NOSE: 0.0/10\nНос: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.\n\nГУБЫ_СКУЛЫ: 0.0/10\nГубы: соотношение 1:1.6, vermillion, philtrum, Cupid's bow. Скулы: cheekbone projection, malar fat pad.\n\nКОЖА: 0.0/10\nТекстура, tone evenness, pores, acne/scarring, skin laxity, estimated skin age.\n\nГРУМИНГ_STYLE: 0.0/10\nHairline, hair density, hairstyle совместимость, brow grooming, facial hair, общее впечатление.\n\nРЕКОМЕНДАЦИИ:\nДай 8-9 конкретных, подробных рекомендаций именно под это лицо. Каждая -- ОДНОЙ строкой, пронумерована, 1-2 предложения с объяснением ПОЧЕМУ это сработает для этих пропорций и какой даст эффект. Сначала Softmax (стрижка/укладка под форму лица, борода/щетина, брови, уход за кожей, осанка/позирование, удачные ракурсы для фото, вес/процент жира), затем Hardmax (процедуры) с обоснованием и реалистичным результатом. Без общих фраз -- только применимое к этому человеку.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
   // Дерзкий режим: заменяем персону на роаст-аналитика (границы сохраняем).
   if (isEdgyTone()) {
     prompt = prompt.replace(
@@ -855,7 +1073,7 @@ async function callAI(metrics, shapeInfo) {
     var data = await res.json();
     stopAIHUD();
     if (data.error) { showGate(data); return; }
-    renderAIReport(data.text || "Пустой ответ.");
+    renderAIReport(data.text || t("emptyAnswer"));
     aiReport.classList.remove("hidden");
     // Обновляем чип квоты по факту списания.
     if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
@@ -943,12 +1161,12 @@ function parseAIReport(text) {
   var overallM = text.match(/ОБЩИЙ_БАЛЛ:\s*(\d+(?:\.\d+)?)\/(10)\s*\n([\s\S]*?)(?=\n[Ѐ-ӿ_A-Z]+:|$)/);
   if (overallM) { result.overall = parseFloat(overallM[1]); result.overallDesc = overallM[3].trim(); }
   var cats = [
-    { key:"СИММЕТРИЯ",          label:"Симметрия" },
+    { key:"СИММЕТРИЯ",          label:t("labelSym") },
     { key:"ГЛАЗА_CANTHAL_TILT", label:"Canthal Tilt / Eyes" },
     { key:"МИДФЕЙС_MAXILLA",    label:"Midface / Maxilla" },
     { key:"ДЖОУЛАЙН_MANDIBLE",  label:"Jawline / Mandible" },
     { key:"НОС_NOSE",              label:"Nose" },
-    { key:"ГУБЫ_СКУЛЫ",        label:"Губы / Скулы" },
+    { key:"ГУБЫ_СКУЛЫ",        label:t("labelLips") },
     { key:"КОЖА",               label:"Skin" },
     { key:"ГРУМИНГ_STYLE",      label:"Grooming / Style" },
   ];
@@ -994,7 +1212,7 @@ function renderAIReport(text) {
   catContainer.innerHTML = "";
   if (parsed.categories.length > 0) {
     var eyebrow = document.createElement("span");
-    eyebrow.className = "eyebrow"; eyebrow.textContent = "ДЕТАЛЬНЫЙ АНАЛИЗ";
+    eyebrow.className = "eyebrow"; eyebrow.textContent = t("detailEyebrow");
     catContainer.appendChild(eyebrow);
     parsed.categories.forEach(function(cat, idx) {
       var row = document.createElement("div"); row.className = "score-row";
@@ -1120,7 +1338,7 @@ function renderReportInto(box, text, score, date) {
             "<p class='lr-txt'>" + esc(cat.text) + "</p></div>";
   });
   if (p.recommendations.length) {
-    html += "<div class='lr-recs'><span class='eyebrow'>РЕКОМЕНДАЦИИ</span><ol>";
+    html += "<div class='lr-recs'><span class='eyebrow'>" + (lang() === "ru" ? "РЕКОМЕНДАЦИИ" : "RECOMMENDATIONS") + "</span><ol>";
     p.recommendations.forEach(function(r){ html += "<li>" + esc(r) + "</li>"; });
     html += "</ol></div>";
   }
@@ -1138,7 +1356,7 @@ function esc(s) { return String(s).replace(/[&<>]/g, function(m){ return ({"&":"
     var file = new File([blob], "facerate.png", { type: "image/png" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: "FaceRate", text: "Мой PSL рейтинг — facerate.ru" });
+        await navigator.share({ files: [file], title: "FaceRate", text: t("shareText") });
         return;
       } catch (e) { /* отмена → скачивание */ }
     }
@@ -1213,7 +1431,7 @@ function buildShareCard() {
     g.textAlign = "center";
     g.fillStyle = "#c4a46b";
     g.font = "400 26px Georgia, serif";
-    g.fillText("PSL РЕЙТИНГ", W / 2, by + 44);
+    g.fillText(t("shareCardTag"), W / 2, by + 44);
 
     // категории из DOM (две колонки)
     var rows = Array.prototype.slice.call(document.querySelectorAll("#categoryScores .score-row"));
@@ -1334,7 +1552,7 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
   function renderHistory(box) {
     var hist = [];
     try { hist = JSON.parse(localStorage.getItem("fm-history") || "[]"); } catch (e) {}
-    if (!hist.length) { box.innerHTML = "<p class='dm-empty'>Пока нет оценок. Загрузите фото — результат сохранится здесь.</p>"; return; }
+    if (!hist.length) { box.innerHTML = "<p class='dm-empty'>" + t("histEmpty") + "</p>"; return; }
     var html = "<div class='hist-list'>";
     hist.forEach(function(h){
       var d = h.date ? new Date(h.date).toLocaleString("ru-RU", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
@@ -1345,48 +1563,42 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
     html += "</div>";
     if (hist.length > 1) {
       var avg = hist.reduce(function(a,b){ return a + b.score; }, 0) / hist.length;
-      html += "<p class='hist-avg'>Средний балл: <b>" + avg.toFixed(1) + "</b> · оценок: " + hist.length + "</p>";
+      html += "<p class='hist-avg'>" + t("histAvg") + "<b>" + avg.toFixed(1) + "</b>" + t("histCount") + hist.length + "</p>";
     }
     box.innerHTML = html;
   }
 
   function renderGlossary(box) {
-    box.innerHTML = "<iframe class='dm-iframe' src='glossary.html'></iframe>";
+    box.innerHTML = "<iframe class='dm-iframe' src='" + (lang() === "ru" ? "glossary.html" : "glossary-en.html") + "'></iframe>";
   }
 
   function renderHow(box) {
-    box.innerHTML =
-      "<div class='how'>" +
-      "<p><b>1. Геометрия — локально.</b> MediaPipe находит 468 точек лица прямо в браузере и считает пропорции (скулы, челюсть, fWHR, симметрию). Фото при этом не покидает устройство.</p>" +
-      "<p><b>2. AI-оценка.</b> Фото и метрики уходят на защищённый сервер, который обращается к vision-модели. Она даёт PSL-балл, разбор по 8 категориям и рекомендации.</p>" +
-      "<p><b>3. Результат.</b> Можно сохранить, поделиться карточкой и сравнить с прошлыми попытками в Истории.</p>" +
-      "<p class='how-note'>Это развлекательный сервис. Оценка — субъективная эвристика, а не объективная истина. Лёгкая асимметрия — норма у всех.</p>" +
-      "</div>";
+    box.innerHTML = t("howHtml");
   }
 
   function renderFeedback(box) {
     box.innerHTML =
-      "<p class='dm-sub'>Что улучшить? Чего не хватает? Нашли ошибку? Напишите — это реально помогает.</p>" +
+      "<p class='dm-sub'>" + t("fbSub") + "</p>" +
       "<form id='fbForm' class='fb-form'>" +
-      "<input class='fb-input' name='name' type='text' placeholder='Имя или ник (необязательно)' />" +
-      "<input class='fb-input' name='email' type='email' placeholder='Email для ответа (необязательно)' />" +
-      "<textarea class='fb-input fb-textarea' name='message' placeholder='Ваше сообщение…' required></textarea>" +
+      "<input class='fb-input' name='name' type='text' placeholder='" + t("fbName") + "' />" +
+      "<input class='fb-input' name='email' type='email' placeholder='" + t("fbEmail") + "' />" +
+      "<textarea class='fb-input fb-textarea' name='message' placeholder='" + t("fbMsg") + "' required></textarea>" +
       "<div class='fb-status' id='fbStatus'></div>" +
-      "<button class='btn-primary' type='submit' style='width:100%'>Отправить</button>" +
+      "<button class='btn-primary' type='submit' style='width:100%'>" + t("fbSend") + "</button>" +
       "</form>";
     var form = box.querySelector("#fbForm"), status = box.querySelector("#fbStatus");
     form.addEventListener("submit", function(e){
       e.preventDefault();
-      status.style.color = "var(--text-dim)"; status.textContent = "Отправка…";
+      status.style.color = "var(--text-dim)"; status.textContent = t("fbSending");
       fetch(FEEDBACK_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({ name: form.name.value || "—", email: form.email.value || "—", message: form.message.value, _subject: "FaceRate: обратная связь" }),
       }).then(function(r){ return r.json(); }).then(function(d){
         if (d && (d.success === "true" || d.success === true)) {
-          status.style.color = "#c4a46b"; status.textContent = "Спасибо! Сообщение отправлено."; form.reset();
+          status.style.color = "#c4a46b"; status.textContent = t("fbOk"); form.reset();
         } else { throw new Error("fail"); }
-      }).catch(function(){ status.style.color = "#ff5555"; status.textContent = "Не удалось отправить. Попробуйте позже."; });
+      }).catch(function(){ status.style.color = "#ff5555"; status.textContent = t("fbErr"); });
     });
   }
 
@@ -1458,13 +1670,13 @@ function updateQuotaChip(freeLeft, credits, subscribed, unlimUntil) {
   var q = document.getElementById("accQuota");
   if (!q) return;
   if (unlimUntil && unlimUntil > Date.now()) {
-    q.textContent = "👑 Безлимит до " + new Date(unlimUntil).toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    q.textContent = t("chipUnlim") + new Date(unlimUntil).toLocaleString(lang() === "ru" ? "ru-RU" : "en-US", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
     return;
   }
   var parts = [];
-  if (!subscribed) parts.push("подпишись на канал → 1 free/день");
-  else parts.push("бесплатных сегодня: " + freeLeft);
-  parts.push("кредиты: " + credits);
+  if (!subscribed) parts.push(t("chipSub"));
+  else parts.push(t("chipFree") + freeLeft);
+  parts.push(t("chipCredits") + credits);
   q.textContent = parts.join(" · ");
 }
 
@@ -1496,7 +1708,7 @@ function mountTgWidget() {
   var b = document.createElement("button");
   b.type = "button";
   b.className = "tg-login-btn";
-  b.innerHTML = "<span class='tg-ic'>✈</span> Войти через Telegram";
+  b.innerHTML = t("loginBtn");
   b.addEventListener("click", function(){ startTgLogin(b); });
   wrap.appendChild(b);
 }
@@ -1505,14 +1717,14 @@ function startTgLogin(btn) {
   var code = crypto.randomUUID();
   // window.open СИНХРОННО в клике — иначе мобильные браузеры режут попап.
   window.open("https://t.me/" + TG_BOT_USERNAME + "?start=" + code, "_blank");
-  if (btn) { btn.disabled = true; btn.innerHTML = "<span class='tg-spin'></span> Жду подтверждения в Telegram…"; }
+  if (btn) { btn.disabled = true; btn.innerHTML = "<span class='tg-spin'></span> " + t("waitTg"); }
   if (_authPollTimer) clearInterval(_authPollTimer);
   var tries = 0;
   _authPollTimer = setInterval(function() {
     tries++;
     if (tries > 60) { // ~2.5 мин
       clearInterval(_authPollTimer); _authPollTimer = null;
-      if (btn) { btn.disabled = false; btn.innerHTML = "<span class='tg-ic'>✈</span> Войти через Telegram"; }
+      if (btn) { btn.disabled = false; btn.innerHTML = t("loginBtn"); }
       return;
     }
     fetch(WORKER_URL + "/authpoll", {
@@ -1553,14 +1765,14 @@ function refreshAccount() {
 function buyPack(pack, btn) {
   var acc = getAccount();
   if (!acc) { backToUploadTop(); return; }
-  if (btn) { btn.disabled = true; btn.textContent = "Создаю счёт…"; }
+  if (btn) { btn.disabled = true; btn.textContent = t("invoiceCreating"); }
   fetch(WORKER_URL + "/buy", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: acc.token, pack: pack }),
+    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang() }),
   }).then(function(r){ return r.json(); }).then(function(d){
     if (btn) btn.disabled = false;
-    if (d.error || !d.link) { if (btn) btn.textContent = "Ошибка, ещё раз"; return; }
-    if (btn) btn.textContent = "Открываю Telegram…";
+    if (d.error || !d.link) { if (btn) btn.textContent = t("invoiceErr"); return; }
+    if (btn) btn.textContent = t("invoiceOpening");
     window.location.href = d.link;
     // Поллим баланс — после возврата из Telegram чип обновится сам.
     var tries = 0;
@@ -1570,7 +1782,7 @@ function buyPack(pack, btn) {
       if (pw && !pw.classList.contains("hidden")) pwRecheck(true);
       if (++tries >= 24) clearInterval(iv);
     }, 5000);
-  }).catch(function(){ if (btn) { btn.disabled = false; btn.textContent = "Сеть недоступна"; } });
+  }).catch(function(){ if (btn) { btn.disabled = false; btn.textContent = t("netErr"); } });
 }
 
 (function initAccount() {
@@ -1638,32 +1850,32 @@ function showPaywall(state, st) {
   }
 
   if (state === "auth") {
-    title.textContent = "Твой отчёт готов";
-    sub.textContent = "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.";
-    btn("<span class='tg-ic'>✈</span> Войти через Telegram", "pw-btn pw-btn-main", function(b){ startTgLogin(b); });
+    title.textContent = t("pwReady");
+    sub.textContent = t("pwLoginSub");
+    btn(t("pwLoginBtn"), "pw-btn pw-btn-main", function(b){ startTgLogin(b); });
   } else if (state === "sub") {
-    title.textContent = "Открой результат бесплатно";
-    sub.textContent = "Подписка на наш канал даёт 1 бесплатный анализ каждый день.";
+    title.textContent = t("pwSubTitle");
+    sub.textContent = t("pwSubSub");
     var a = document.createElement("a");
     a.className = "pw-btn pw-btn-main"; a.href = "https://t.me/wwwfacerateru";
     a.target = "_blank"; a.rel = "noopener";
-    a.innerHTML = "<span class='tg-ic'>✈</span> Подписаться на канал";
+    a.innerHTML = t("pwSubBtn");
     actions.appendChild(a);
-    btn("Я подписался — показать результат", "pw-btn pw-btn-ghost", function(b){
-      b.textContent = "Проверяю…"; pwRecheck();
+    btn(t("pwSubCheck"), "pw-btn pw-btn-ghost", function(b){
+      b.textContent = t("pwChecking"); pwRecheck();
     });
   } else { // pay
-    title.textContent = "Бесплатный анализ на сегодня использован";
-    sub.textContent = "Оплата звёздами Telegram в два тапа. Или возвращайся завтра за бесплатным.";
+    title.textContent = t("pwPayTitle");
+    sub.textContent = t("pwPaySub");
     var packs = (st && st.packs) || {
       p1: { label: "1 анализ", stars: 30 }, p5: { label: "5 анализов", stars: 100 },
       d1: { label: "Безлимит на день", stars: 100 }, m1: { label: "Безлимит на месяц", stars: 500 },
     };
-    btn(packs.p1.label + " — " + packs.p1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("p1", b); });
-    if (packs.d1) btn("🔥 " + packs.d1.label + " — " + packs.d1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("d1", b); });
-    if (packs.m1) btn("👑 " + packs.m1.label + " — " + packs.m1.stars + "⭐/мес <i class='pw-hit'>топ</i>", "pw-btn pw-btn-main", function(b){ buyPack("m1", b); });
-    btn("Я оплатил — показать результат", "pw-btn pw-btn-ghost", function(b){
-      b.textContent = "Проверяю…"; pwRecheck();
+    btn(t("packP1") + " — " + packs.p1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("p1", b); });
+    if (packs.d1) btn("🔥 " + t("packD1") + " — " + packs.d1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("d1", b); });
+    if (packs.m1) btn("👑 " + t("packM1") + " — " + packs.m1.stars + "⭐/mo <i class='pw-hit'>top</i>", "pw-btn pw-btn-main", function(b){ buyPack("m1", b); });
+    btn(t("pwPaid"), "pw-btn pw-btn-ghost", function(b){
+      b.textContent = t("pwChecking"); pwRecheck();
     });
   }
 

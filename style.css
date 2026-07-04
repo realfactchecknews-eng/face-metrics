@@ -1906,3 +1906,7 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   .pw-title { font-size: 1.4rem; }
   .tg-login-btn { width: 100%; justify-content: center; }
 }
+
+/* ───── Кнопка языка (над кнопкой звука) ───── */
+.lang-btn { bottom: 76px; font-size: 0.78rem; font-weight: 400; letter-spacing: 0.05em; }
+@media (max-width: 600px) { .lang-btn { bottom: 64px; } }
