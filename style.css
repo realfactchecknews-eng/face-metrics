@@ -1748,3 +1748,68 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   .mt-tx b { font-size: 1.05rem; }
   .fs-body { padding: 18px; }
 }
+
+/* ───── Панель аккаунта (Telegram) ───── */
+.account-bar {
+  background: var(--bg-card);
+  border: 1px solid var(--border, #222);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+}
+.account-bar.acc-pulse { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(196,164,107,0.25); transition: box-shadow .3s; }
+.acc-loggedout { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.acc-lo-text b { font-weight: 400; font-size: 1.05rem; color: var(--text-bright); display: block; }
+.acc-lo-text i { font-style: normal; font-size: 0.82rem; color: var(--text-dim); }
+.acc-lo-text a { color: var(--accent); }
+.acc-loggedin { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.acc-avatar { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border, #222); }
+.acc-user { display: flex; flex-direction: column; min-width: 0; }
+.acc-user b { font-weight: 400; color: var(--text-bright); }
+.acc-user i { font-style: normal; font-size: 0.78rem; color: var(--text-dim); }
+.acc-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.acc-buy {
+  background: none; border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 100px; padding: 7px 14px; font-family: inherit; font-size: 0.82rem;
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.acc-buy:hover { background: var(--accent); color: #0a0a0a; }
+.acc-logout {
+  background: none; border: 1px solid var(--border, #222); color: var(--text-dim);
+  border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 0.8rem;
+}
+.acc-logout:hover { color: var(--text-bright); border-color: #555; }
+
+/* ───── Гейт (вход/подписка/оплата) в блоке ошибки ───── */
+.gate-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
+.gate-actions .btn-primary { cursor: pointer; }
+.gate-link { text-decoration: none; display: inline-block; }
+.gate-hint { width: 100%; font-size: 0.8rem; color: var(--text-dim); margin-top: 4px; }
+
+/* ───── Тумблер дерзкого режима ───── */
+.tone-row {
+  display: flex; align-items: center; gap: 12px;
+  margin: 4px 0 14px; cursor: pointer; user-select: none;
+  position: relative; z-index: 1;
+}
+.tone-row input { display: none; }
+.tone-slider {
+  width: 44px; height: 24px; border-radius: 100px; flex-shrink: 0;
+  background: #222; border: 1px solid var(--border, #333); position: relative;
+  transition: background .2s, border-color .2s;
+}
+.tone-slider::after {
+  content: ''; position: absolute; top: 2px; left: 3px; width: 17px; height: 17px;
+  border-radius: 50%; background: #666; transition: transform .2s, background .2s;
+}
+.tone-row input:checked + .tone-slider { background: rgba(196,164,107,0.25); border-color: var(--accent); }
+.tone-row input:checked + .tone-slider::after { transform: translateX(19px); background: var(--accent); }
+.tone-label { font-size: 0.88rem; color: var(--text-dim); }
+.tone-row input:checked ~ .tone-label { color: var(--text-bright); }
+
+@media (max-width: 600px) {
+  .acc-loggedout { flex-direction: column; align-items: flex-start; }
+  .acc-actions { margin-left: 0; width: 100%; }
+}
