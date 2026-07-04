@@ -16,7 +16,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=10" />
+<link rel="stylesheet" href="style.css?v=11" />
 </head>
 <body>
 
@@ -383,6 +383,21 @@
   </div>
 </div>
 
+<!-- PAYWALL: показывается после сканирования, перед генерацией отчёта -->
+<div id="paywall" class="paywall hidden">
+  <div class="pw-box">
+    <div class="pw-mock" aria-hidden="true">
+      <div class="pw-mock-score">?.?<span>/10</span></div>
+      <div class="pw-mock-bars"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <span class="eyebrow" style="margin-bottom:10px">СКАНИРОВАНИЕ ЗАВЕРШЕНО</span>
+    <h2 class="pw-title" id="pwTitle">Твой отчёт готов</h2>
+    <p class="pw-sub" id="pwSub"></p>
+    <div class="pw-actions" id="pwActions"></div>
+    <button class="pw-close" id="pwClose" type="button">&times;</button>
+  </div>
+</div>
+
 <!-- LAST RESULT MODAL -->
 <div id="lastResultModal" class="lr-overlay hidden">
   <div class="lr-box">
@@ -399,6 +414,6 @@
 <button id="musicBtn" class="mute-btn" title="Звук">&#128266;</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

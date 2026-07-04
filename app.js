@@ -586,7 +586,7 @@ async function processImage(img, sideImage) {
     var shapeInfo = classifyFaceShape(metrics);
     runFaceAnimation(lm, metrics, function() {
       resultsDiv.classList.remove("hidden");
-      callAI(metrics, shapeInfo);
+      gateThenAI(metrics, shapeInfo);
     });
   } catch (err) {
     console.error(err);
@@ -1483,34 +1483,53 @@ function renderAccount(status) {
 }
 
 // Виджет входа Telegram (скрипт вставляется динамически в контейнер).
-var _tgWidgetMounted = false;
+// Вход через сообщение боту: открываем t.me/бот?start=КОД (одно нажатие Start
+// в Telegram, без номера телефона), затем поллим /authpoll до привязки.
+var _authPollTimer = null;
 function mountTgWidget() {
-  if (_tgWidgetMounted) return;
   var wrap = document.getElementById("tgLoginWrap");
-  if (!wrap) return;
-  _tgWidgetMounted = true;
-  var s = document.createElement("script");
-  s.async = true;
-  s.src = "https://telegram.org/js/telegram-widget.js?22";
-  s.setAttribute("data-telegram-login", TG_BOT_USERNAME);
-  s.setAttribute("data-size", "large");
-  s.setAttribute("data-radius", "24");
-  s.setAttribute("data-onauth", "onTgAuth(user)");
-  s.setAttribute("data-request-access", "write");
-  wrap.appendChild(s);
+  if (!wrap || wrap.childElementCount) return;
+  var b = document.createElement("button");
+  b.type = "button";
+  b.className = "tg-login-btn";
+  b.innerHTML = "<span class='tg-ic'>✈</span> Войти через Telegram";
+  b.addEventListener("click", function(){ startTgLogin(b); });
+  wrap.appendChild(b);
 }
 
-// Колбэк виджета — глобальный.
-window.onTgAuth = function(user) {
-  fetch(WORKER_URL + "/auth", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(user),
-  }).then(function(r){ return r.json(); }).then(function(st){
-    if (st.error) { alert("Не удалось войти: " + (st.text || st.error)); return; }
-    saveAccount(st);
-    renderAccount(st);
-  }).catch(function(){ alert("Сеть недоступна, попробуйте ещё раз."); });
-};
+function startTgLogin(btn) {
+  var code = crypto.randomUUID();
+  // window.open СИНХРОННО в клике — иначе мобильные браузеры режут попап.
+  window.open("https://t.me/" + TG_BOT_USERNAME + "?start=" + code, "_blank");
+  if (btn) { btn.disabled = true; btn.innerHTML = "<span class='tg-spin'></span> Жду подтверждения в Telegram…"; }
+  if (_authPollTimer) clearInterval(_authPollTimer);
+  var tries = 0;
+  _authPollTimer = setInterval(function() {
+    tries++;
+    if (tries > 60) { // ~2.5 мин
+      clearInterval(_authPollTimer); _authPollTimer = null;
+      if (btn) { btn.disabled = false; btn.innerHTML = "<span class='tg-ic'>✈</span> Войти через Telegram"; }
+      return;
+    }
+    fetch(WORKER_URL + "/authpoll", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code }),
+    }).then(function(r){ return r.json(); }).then(function(st){
+      if (st && st.token) {
+        clearInterval(_authPollTimer); _authPollTimer = null;
+        saveAccount(st);
+        renderAccount(st);
+        onLoginSuccess(st);
+      }
+    }).catch(function(){});
+  }, 2500);
+}
+
+// Если логин случился, пока открыт пейволл — сразу перепроверяем доступ.
+function onLoginSuccess(st) {
+  var pw = document.getElementById("paywall");
+  if (pw && !pw.classList.contains("hidden")) pwRecheck();
+}
 
 function refreshAccount() {
   var acc = getAccount();
@@ -1525,22 +1544,29 @@ function refreshAccount() {
 }
 
 // Покупка кредитов: воркер создаёт Stars-инвойс, открываем в Telegram.
-function buyPack(pack) {
+// location.href вместо window.open — попап после fetch блокируется на мобилах
+// (из-за этого кнопки покупки казались «некликабельными»).
+function buyPack(pack, btn) {
   var acc = getAccount();
   if (!acc) { backToUploadTop(); return; }
+  if (btn) { btn.disabled = true; btn.textContent = "Создаю счёт…"; }
   fetch(WORKER_URL + "/buy", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: acc.token, pack: pack }),
   }).then(function(r){ return r.json(); }).then(function(d){
-    if (d.error || !d.link) { alert(d.text || "Не удалось создать счёт."); return; }
-    window.open(d.link, "_blank");
-    // Поллим баланс минуту — после оплаты чип обновится сам.
+    if (btn) btn.disabled = false;
+    if (d.error || !d.link) { if (btn) btn.textContent = "Ошибка, ещё раз"; return; }
+    if (btn) btn.textContent = "Открываю Telegram…";
+    window.location.href = d.link;
+    // Поллим баланс — после возврата из Telegram чип обновится сам.
     var tries = 0;
     var iv = setInterval(function(){
       refreshAccount();
-      if (++tries >= 12) clearInterval(iv);
+      var pw = document.getElementById("paywall");
+      if (pw && !pw.classList.contains("hidden")) pwRecheck(true);
+      if (++tries >= 24) clearInterval(iv);
     }, 5000);
-  }).catch(function(){ alert("Сеть недоступна."); });
+  }).catch(function(){ if (btn) { btn.disabled = false; btn.textContent = "Сеть недоступна"; } });
 }
 
 (function initAccount() {
@@ -1557,4 +1583,111 @@ function buyPack(pack) {
     cb.addEventListener("change", function(){ localStorage.setItem("fm-tone", cb.checked ? "edgy" : "soft"); });
   }
   refreshAccount();
+})();
+
+/* ───────────────────  Гейт перед генерацией: пейволл  ─────────────────── */
+var _pendingAnalysis = null;   // {metrics, shapeInfo} — ждёт прохода гейта
+var _gateBusy = false;
+
+function fetchStatus(fresh) {
+  var acc = getAccount();
+  if (!acc) return Promise.resolve({ error: "auth" });
+  return fetch(WORKER_URL + "/me", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: acc.token, fresh: fresh ? 1 : 0 }),
+  }).then(function(r){ return r.json(); });
+}
+
+// Скан завершён → проверяем доступ; есть — генерим, нет — красивый пейволл.
+function gateThenAI(metrics, shapeInfo) {
+  _pendingAnalysis = { metrics: metrics, shapeInfo: shapeInfo };
+  fetchStatus(false).then(function(st) {
+    if (st.error === "auth") { showPaywall("auth"); return; }
+    if (st.error) { showPaywall("auth"); return; }
+    renderAccount(st);
+    if (st.freeLeft > 0 || st.credits > 0) { hidePaywall(); startAI(); }
+    else if (!st.subscribed) showPaywall("sub");
+    else showPaywall("pay", st);
+  }).catch(function(){ startAI(); }); // сеть легла — пусть решает воркер
+}
+
+function startAI() {
+  if (!_pendingAnalysis) return;
+  var p = _pendingAnalysis; _pendingAnalysis = null;
+  callAI(p.metrics, p.shapeInfo);
+}
+
+function showPaywall(state, st) {
+  var pw = document.getElementById("paywall");
+  var title = document.getElementById("pwTitle");
+  var sub = document.getElementById("pwSub");
+  var actions = document.getElementById("pwActions");
+  if (!pw) { startAI(); return; }
+  actions.innerHTML = "";
+
+  function btn(label, cls, fn) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = cls; b.innerHTML = label;
+    b.addEventListener("click", function(){ fn(b); });
+    actions.appendChild(b);
+    return b;
+  }
+
+  if (state === "auth") {
+    title.textContent = "Твой отчёт готов";
+    sub.textContent = "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.";
+    btn("<span class='tg-ic'>✈</span> Войти через Telegram", "pw-btn pw-btn-main", function(b){ startTgLogin(b); });
+  } else if (state === "sub") {
+    title.textContent = "Открой результат бесплатно";
+    sub.textContent = "Подписка на наш канал даёт 1 бесплатный анализ каждый день.";
+    var a = document.createElement("a");
+    a.className = "pw-btn pw-btn-main"; a.href = "https://t.me/wwwfacerateru";
+    a.target = "_blank"; a.rel = "noopener";
+    a.innerHTML = "<span class='tg-ic'>✈</span> Подписаться на канал";
+    actions.appendChild(a);
+    btn("Я подписался — показать результат", "pw-btn pw-btn-ghost", function(b){
+      b.textContent = "Проверяю…"; pwRecheck();
+    });
+  } else { // pay
+    title.textContent = "Бесплатный анализ на сегодня использован";
+    sub.textContent = "Возьми ещё — оплата звёздами Telegram в два тапа. Или возвращайся завтра за бесплатным.";
+    var packs = (st && st.packs) || { p1: { label: "1 анализ", stars: 30 }, p5: { label: "5 анализов", stars: 100 } };
+    btn(packs.p1.label + " — " + packs.p1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("p1", b); });
+    btn(packs.p5.label + " — " + packs.p5.stars + "⭐ <i class='pw-hit'>выгоднее</i>", "pw-btn pw-btn-main", function(b){ buyPack("p5", b); });
+    btn("Я оплатил — показать результат", "pw-btn pw-btn-ghost", function(b){
+      b.textContent = "Проверяю…"; pwRecheck();
+    });
+  }
+
+  pw.classList.remove("hidden");
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ pw.classList.add("in"); }); });
+}
+
+function hidePaywall() {
+  var pw = document.getElementById("paywall");
+  if (!pw) return;
+  pw.classList.remove("in");
+  setTimeout(function(){ pw.classList.add("hidden"); }, 350);
+}
+
+// Перепроверка доступа (свежая проверка подписки) → генерим или обновляем пейволл.
+function pwRecheck(silent) {
+  if (_gateBusy) return;
+  _gateBusy = true;
+  fetchStatus(true).then(function(st) {
+    _gateBusy = false;
+    if (st.error) { if (!silent) showPaywall("auth"); return; }
+    renderAccount(st);
+    if (st.freeLeft > 0 || st.credits > 0) { hidePaywall(); startAI(); }
+    else if (!silent) showPaywall(!st.subscribed ? "sub" : "pay", st);
+  }).catch(function(){ _gateBusy = false; });
+}
+
+(function initPaywall() {
+  var x = document.getElementById("pwClose");
+  if (x) x.addEventListener("click", function(){
+    hidePaywall();
+    _pendingAnalysis = null;
+    backToUploadTop();
+  });
 })();
