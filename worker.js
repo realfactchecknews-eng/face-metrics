@@ -33,6 +33,7 @@ export default {
       if (path === '/authpoll')   return await authPoll(request, env);
       if (path === '/me')         return await me(request, env);
       if (path === '/buy')        return await buy(request, env);
+      if (path === '/sendcard')   return await sendCard(request, env);
       return await analyze(request, env);
     } catch (e) {
       return json({ error: 'server', text: 'Внутренняя ошибка: ' + e.message });
@@ -233,6 +234,24 @@ async function buy(request, env) {
   const d = await createInvoice(env, sess.id, body.pack, body.lang === 'ru' ? 'ru' : 'en');
   if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.description || '') });
   return json({ link: d.result });
+}
+
+// Отправка share-карточки ботом в личку пользователя (PNG multipart).
+async function sendCard(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const sess = await getSession(env, body.token);
+  if (!sess) return json({ error: 'auth' });
+  if (!body.image || body.image.length > 2_800_000) return json({ error: 'img', text: 'Bad image' });
+  const bin = Uint8Array.from(atob(body.image), (ch) => ch.charCodeAt(0));
+  const L = await userLang(env, sess.id);
+  const fd = new FormData();
+  fd.append('chat_id', String(sess.id));
+  fd.append('caption', L === 'ru' ? 'Твоя карточка FaceRate 🖤 facerate.ru' : 'Your FaceRate card 🖤 facerate.ru');
+  fd.append('photo', new Blob([bin], { type: 'image/png' }), 'facerate.png');
+  const r = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd })
+    .then(x => x.json()).catch(e => ({ ok: false, description: e.message }));
+  if (!r.ok) return json({ error: 'send', text: r.description || 'send failed' });
+  return json({ ok: true });
 }
 
 // Создание Stars-инвойса (ссылкой). Для месячного тарифа — подписка с автопродлением.
