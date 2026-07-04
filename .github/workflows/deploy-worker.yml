@@ -2,8 +2,10 @@ name: Deploy Cloudflare Worker
 
 # Автодеплой воркера: при пуше изменений worker.js/wrangler.toml в master
 # воркер выкатывается в Cloudflare сам, без локального `wrangler deploy`.
-# Требуется один раз добавить секрет CLOUDFLARE_API_TOKEN в настройках репо
-# (Settings → Secrets and variables → Actions). См. README → "Автодеплой воркера".
+# Требуется секрет CLOUDFLARE_API_TOKEN (Settings → Secrets and variables → Actions).
+#
+# Деплой напрямую через npm+wrangler: cloudflare/wrangler-action@v3 падал
+# на установке wrangler под Node 24 (`npx --no-install wrangler --version`).
 
 on:
   push:
@@ -19,10 +21,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
+      - uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          # accountId нужен, только если у токена доступ к нескольким аккаунтам.
-          # Тогда добавь секрет CLOUDFLARE_ACCOUNT_ID и раскомментируй строку:
-          # accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          node-version: 20
+      - name: Install wrangler
+        run: npm install -g wrangler@4
+      - name: Deploy to Cloudflare Workers
+        run: wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Если у токена доступ к нескольким аккаунтам — добавь секрет и раскомментируй:
+          # CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
