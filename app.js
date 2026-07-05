@@ -1693,6 +1693,7 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
   function openView(name) {
     var v = VIEWS[name]; if (!v) return;
     title.textContent = t(v.titleKey);
+    body.classList.toggle("fs-body-full", name === "glossary"); // iframe во всю ширину
     body.innerHTML = ""; v.render(body); body.scrollTop = 0;
     view.classList.remove("hidden");
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ view.classList.add("in"); }); });
