@@ -126,6 +126,7 @@ var I18N = {
     errNoFace: "Could not detect a face. Try another photo — the face should look at the camera in good lighting.",
     errGeneric: "Analysis error. Try refreshing the page.",
     emptyAnswer: "Empty response.",
+    gateRestricted: "Access restricted.", errPrefix: "Error: ",
   },
   ru: {
     begin: "НАЧАТЬ АНАЛИЗ",
@@ -201,6 +202,7 @@ var I18N = {
     errNoFace: "Не удалось распознать лицо. Попробуйте другое фото — лицо должно быть направлено в камеру.",
     errGeneric: "Ошибка при анализе. Попробуйте обновить страницу.",
     emptyAnswer: "Пустой ответ.",
+    gateRestricted: "Доступ ограничен.", errPrefix: "Ошибка: ",
   },
 };
 
@@ -1083,7 +1085,7 @@ async function callAI(metrics, shapeInfo) {
     if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
   } catch (err) {
     stopAIHUD();
-    aiErrorText.textContent = "Ошибка: " + err.message;
+    aiErrorText.textContent = t("errPrefix") + err.message;
     aiError.classList.remove("hidden");
   }
 }
@@ -1092,31 +1094,32 @@ async function callAI(metrics, shapeInfo) {
 function showGate(data) {
   var aiError = document.getElementById("aiError");
   var aiErrorText = document.getElementById("aiErrorText");
-  aiErrorText.textContent = data.text || "Доступ ограничен.";
+  aiErrorText.textContent = data.text || t("gateRestricted");
   var old = aiError.querySelector(".gate-actions");
   if (old) old.remove();
   var box = document.createElement("div");
   box.className = "gate-actions";
   if (data.error === "auth") {
     var b = document.createElement("button");
-    b.className = "btn-primary"; b.type = "button"; b.textContent = "Войти через Telegram";
+    b.className = "btn-primary"; b.type = "button"; b.innerHTML = t("pwLoginBtn");
     b.addEventListener("click", function(){ backToUploadTop(); });
     box.appendChild(b);
   } else if (data.error === "sub") {
     var a = document.createElement("a");
     a.className = "btn-primary gate-link"; a.href = "https://t.me/wwwfacerateru"; a.target = "_blank"; a.rel = "noopener";
-    a.textContent = "Подписаться на канал";
+    a.innerHTML = t("pwSubBtn");
     box.appendChild(a);
     var hint = document.createElement("p");
-    hint.className = "gate-hint"; hint.textContent = "После подписки вернись и нажми «Анализировать» ещё раз.";
+    hint.className = "gate-hint"; hint.textContent = t("gateHint");
     box.appendChild(hint);
   } else if (data.error === "pay") {
-    ["p1","p5"].forEach(function(p){
+    var pkLabels = { p1: t("packP1"), p5: t("packP5"), d1: t("packD1"), m1: t("packM1") };
+    ["p1","d1","m1"].forEach(function(p){
       var pk = (data.packs || {})[p]; if (!pk) return;
       var b = document.createElement("button");
       b.className = "btn-primary"; b.type = "button";
-      b.textContent = pk.label + " — " + pk.stars + "⭐";
-      b.addEventListener("click", function(){ buyPack(p); });
+      b.textContent = pkLabels[p] + " — " + pk.stars + "⭐";
+      b.addEventListener("click", function(){ buyPack(p, b); });
       box.appendChild(b);
     });
   }
@@ -1664,7 +1667,7 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
 
   function openView(name) {
     var v = VIEWS[name]; if (!v) return;
-    title.textContent = v.title;
+    title.textContent = t(v.titleKey);
     body.innerHTML = ""; v.render(body); body.scrollTop = 0;
     view.classList.remove("hidden");
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ view.classList.add("in"); }); });
@@ -1672,10 +1675,10 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
   function closeView() { view.classList.remove("in"); setTimeout(function(){ view.classList.add("hidden"); }, 360); }
 
   var VIEWS = {
-    history: { title: "История оценок", render: renderHistory },
-    glossary: { title: "Луксмакс-словарь", render: renderGlossary },
-    how: { title: "Как это работает", render: renderHow },
-    feedback: { title: "Обратная связь", render: renderFeedback },
+    history: { titleKey: "tHistory", render: renderHistory },
+    glossary: { titleKey: "tGlossary", render: renderGlossary },
+    how: { titleKey: "tHow", render: renderHow },
+    feedback: { titleKey: "tFeedback", render: renderFeedback },
   };
 
   function renderHistory(box) {
@@ -1684,7 +1687,7 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
     if (!hist.length) { box.innerHTML = "<p class='dm-empty'>" + t("histEmpty") + "</p>"; return; }
     var html = "<div class='hist-list'>";
     hist.forEach(function(h){
-      var d = h.date ? new Date(h.date).toLocaleString("ru-RU", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+      var d = h.date ? new Date(h.date).toLocaleString(lang() === "ru" ? "ru-RU" : "en-US", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
       var col = h.score >= 7.5 ? "#c4a46b" : h.score >= 5.5 ? "#f0ece6" : "#888";
       html += "<div class='hist-row'><span class='hist-score' style='color:" + col + "'>" + Number(h.score).toFixed(1) +
         "<i>/10</i></span><span class='hist-date'>" + d + "</span></div>";
