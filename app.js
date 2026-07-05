@@ -806,6 +806,15 @@ async function processImage(img, sideImage) {
     var raw = results.faceLandmarks[0];
     var w   = canvas.width, h = canvas.height;
     var lm  = raw.map(function(p) { return { x: p.x * w, y: p.y * h }; });
+    // Рамка лица (нормализованная 0..1) для правильного кропа share-карточки.
+    (function(){
+      var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+      for (var i = 0; i < raw.length; i++) {
+        if (raw[i].x < minx) minx = raw[i].x; if (raw[i].x > maxx) maxx = raw[i].x;
+        if (raw[i].y < miny) miny = raw[i].y; if (raw[i].y > maxy) maxy = raw[i].y;
+      }
+      window._fmFaceBox = { x: minx, y: miny, w: maxx - minx, h: maxy - miny };
+    })();
     var metrics   = computeFaceMetrics(lm);
     var shapeInfo = classifyFaceShape(metrics);
     runFaceAnimation(lm, metrics, function() {
@@ -1464,10 +1473,26 @@ function buildShareCard() {
     var px = 120, py = 195, pw = W - 240, ph = 500, pr = 26;
     g.save();
     roundRect(g, px, py, pw, ph, pr); g.clip();
-    // cover-crop
-    var scale = Math.max(pw / src.width, ph / src.height);
-    var dw = src.width * scale, dh = src.height * scale;
-    g.drawImage(src, px + (pw - dw) / 2, py + (ph - dh) / 2, dw, dh);
+    // Кроп с привязкой к лицу (если рамка есть) — иначе cover по центру.
+    var fb = window._fmFaceBox;
+    if (fb && fb.w > 0 && fb.h > 0) {
+      var boxAR = pw / ph;
+      // Центр лица чуть выше геометрического (акцент на глаза/скулы).
+      var fcx = fb.x + fb.w / 2, fcy = fb.y + fb.h * 0.42;
+      // Желаемая высота кропа: лицо + запас на волосы и шею. AR = как у окна.
+      var rh = fb.h * 2.15, rw = rh * boxAR;
+      // Не больше самого фото (сохраняем пропорцию, без искажений).
+      if (rw > src.width)  { rw = src.width;  rh = rw / boxAR; }
+      if (rh > src.height) { rh = src.height; rw = rh * boxAR; }
+      // Центрируем на лице и держим в пределах изображения.
+      var rx = Math.max(0, Math.min(fcx - rw / 2, src.width - rw));
+      var ry = Math.max(0, Math.min(fcy - rh / 2, src.height - rh));
+      g.drawImage(src, rx, ry, rw, rh, px, py, pw, ph);
+    } else {
+      var scale = Math.max(pw / src.width, ph / src.height);
+      var dw = src.width * scale, dh = src.height * scale;
+      g.drawImage(src, px + (pw - dw) / 2, py + (ph - dh) * 0.35, dw, dh);
+    }
     // затемнение краёв
     var vg = g.createRadialGradient(px + pw / 2, py + ph / 2, ph * 0.35, px + pw / 2, py + ph / 2, ph * 0.95);
     vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.55)");
@@ -1502,7 +1527,7 @@ function buildShareCard() {
     var sg = g.createLinearGradient(0, by - 140, 0, by);
     sg.addColorStop(0, "#f0dfae"); sg.addColorStop(1, "#b3924f");
     g.font = scoreFont; g.fillStyle = sg; g.fillText(score, sx, by);
-    g.font = denomFont; g.fillStyle = "#6f6858"; g.fillText("/10", sx + wS + 14, by);
+    g.font = denomFont; g.fillStyle = "#6f6858"; g.fillText("/10", sx + wS + 14, by - 8);
     g.textAlign = "center";
     g.font = "27px Georgia, serif"; ls(10); g.fillStyle = GOLD;
     g.fillText("OVERALL PSL SCORE", W / 2, by + 52); ls(0);
@@ -1526,21 +1551,21 @@ function buildShareCard() {
       // ромб-буллет
       g.save(); g.translate(x + 9, y + 2); g.rotate(Math.PI / 4);
       g.strokeStyle = GOLD; g.lineWidth = 2; g.strokeRect(-6, -6, 12, 12); g.restore();
-      // название
+      // название + балл на ОДНОЙ линии (название слева, балл справа)
+      g.textBaseline = "alphabetic";
       g.textAlign = "left"; g.font = "27px Georgia, serif"; g.fillStyle = TXT; ls(1);
-      var name = cat.label.length > 22 ? cat.label.slice(0, 21) + "…" : cat.label;
-      g.fillText(name, x + 32, y + 11); ls(0);
-      // бар
-      var bw = colW - 130, bx = x + 32, byy = y + 32;
+      var name = cat.label.length > 20 ? cat.label.slice(0, 19) + "…" : cat.label;
+      g.fillText(name, x + 32, y + 10); ls(0);
+      g.textAlign = "right"; g.font = "31px Georgia, serif"; g.fillStyle = "#ecdaa8";
+      g.fillText(cat.score.toFixed(1), x + colW - 18, y + 11);
+      // бар под ними
+      var bw = colW - 50, bx = x + 32, byy = y + 34;
       g.fillStyle = "#1d1912"; roundRect(g, bx, byy, bw, 7, 3.5); g.fill();
       var fillW = Math.max(8, bw * Math.min(cat.score, 10) / 10);
       var bg2 = g.createLinearGradient(bx, 0, bx + fillW, 0);
       bg2.addColorStop(0, "#8a6c38"); bg2.addColorStop(1, GOLD_HI);
       g.fillStyle = bg2; roundRect(g, bx, byy, fillW, 7, 3.5); g.fill();
       g.beginPath(); g.arc(bx + fillW, byy + 3.5, 5, 0, Math.PI * 2); g.fillStyle = GOLD_HI; g.fill();
-      // балл
-      g.textAlign = "right"; g.font = "33px Georgia, serif"; g.fillStyle = "#e6d3a3";
-      g.fillText(cat.score.toFixed(1), x + colW - 20, y + 40);
     });
 
     // ── Summary + POTENTIAL ──
