@@ -1,150 +1,479 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Face Metrics — анализ пропорций лица</title>
-<link rel="stylesheet" href="style.css" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>FaceRate</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<meta name="description" content="AI face rating: PSL score, facial geometry and personalized looksmaxxing recommendations." />
+
+<!-- OG / превью при шере в мессенджерах и соцсетях -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="FaceRate — AI Aesthetic Analysis" />
+<meta property="og:description" content="Find out your PSL rating. AI face analysis + facial geometry." />
+<meta property="og:image" content="https://facerate.ru/og.png" />
+<meta property="og:url" content="https://facerate.ru/" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css?v=18" />
 </head>
 <body>
 
-  <header class="site-header">
-    <div class="container">
-      <h1>Face Metrics</h1>
-      <p class="subtitle">Геометрический анализ пропорций и симметрии лица — для подбора стрижки и стиля</p>
+<!-- INTRO OVERLAY -->
+<div id="introOverlay">
+  <div class="intro-corners">
+    <span class="ic ic-tl"></span><span class="ic ic-tr"></span>
+    <span class="ic ic-bl"></span><span class="ic ic-br"></span>
+  </div>
+  <div class="intro-body">
+    <div class="intro-label">EST. 2025</div>
+    <h1 class="intro-title">
+      <span class="iw" id="iw1">ASCEND</span>
+      <span class="ia">&amp;</span>
+      <span class="iw" id="iw2">FORGET</span>
+    </h1>
+    <p class="intro-tagline">AI &middot; POWERED &middot; AESTHETIC &middot; ANALYSIS</p>
+    <div class="intro-line"></div>
+  </div>
+</div>
+
+<!-- LANDING SECTION -->
+<div id="landingSection">
+  <div class="land-scan-bg"></div>
+  <div class="land-corners">
+    <span class="lc lc-tl"></span><span class="lc lc-tr"></span>
+    <span class="lc lc-bl"></span><span class="lc lc-br"></span>
+  </div>
+  <div class="land-inner">
+
+    <div class="land-top">
+      <p class="land-brand">ASCEND &amp; FORGET</p>
+      <p class="land-quote" id="landQuote"></p>
     </div>
-  </header>
 
-  <main class="container">
-
-    <section id="aiSettings" class="card ai-settings-card">
-      <div class="ai-settings-header" id="aiSettingsToggle">
-        <span>Настройки ИИ-анализа</span>
-        <span class="toggle-icon" id="toggleIcon">▸</span>
+    <!-- Black pill -->
+    <div class="bp-scene ls-a" id="bpScene" style="--d:0.38s">
+      <div class="bp-pill-wrap" id="bpPillWrap">
+        <div class="bp-pill"></div>
       </div>
-      <div id="aiSettingsBody" class="ai-settings-body hidden">
-        <p class="hint">
-          Укажи URL своего Cloudflare Worker — после анализа лица Claude даст персональные рекомендации.
-          Код воркера лежит в <code>worker.js</code> в репозитории.
-          Фото никуда не отправляется — только числа метрик.
-        </p>
-        <div class="settings-row">
-          <input id="workerUrlInput" type="url"
-            placeholder="https://face-metrics-ai.your-name.workers.dev"
-            class="settings-input" />
-          <button id="saveWorkerUrl" class="btn btn-primary">Сохранить</button>
+      <div class="bp-pill-shd"></div>
+      <p class="bp-legend" id="bpLegend">TAKE THE BLACK PILL</p>
+    </div>
+
+    <div class="land-stats">
+      <div class="land-stat ls-a" style="--d:0.05s">
+        <span class="lst-num" data-target="468">0</span>
+        <span class="lst-label">LANDMARKS</span>
+      </div>
+      <div class="land-stat ls-a" style="--d:0.15s">
+        <span class="lst-num" data-target="8">0</span>
+        <span class="lst-label">CATEGORIES</span>
+      </div>
+      <div class="land-stat ls-a" style="--d:0.25s">
+        <span class="lst-num" data-target="92" data-suffix="%">0%</span>
+        <span class="lst-label">SYM TARGET</span>
+      </div>
+      <div class="land-stat ls-a" style="--d:0.35s">
+        <span class="lst-num" data-decimal="1" data-target="1.618">0.000</span>
+        <span class="lst-label">GOLDEN RATIO</span>
+      </div>
+    </div>
+
+    <div class="land-fact-block ls-a" style="--d:0.55s">
+      <span class="land-fact-eye">LOOKSMAXX INSIGHT</span>
+      <div class="land-fact-wrap">
+        <div class="land-fact-bar"></div>
+        <p class="land-fact" id="landFact"></p>
+      </div>
+    </div>
+
+    <button id="beginBtn" class="btn-begin ls-a" style="--d:0.75s">
+      <span class="btn-begin-fill"></span>
+      <span class="btn-begin-inner">
+        <span>НАЧАТЬ АНАЛИЗ</span>
+        <span class="btn-begin-arr">&rarr;</span>
+      </span>
+    </button>
+
+  </div>
+</div>
+
+<!-- FULL-SCREEN MENU HUB (после «Начать анализ») -->
+<div id="menuScreen" class="menu-screen hidden">
+  <div class="menu-bg-pills" id="menuBgPills" aria-hidden="true"></div>
+  <div class="menu-inner">
+    <div class="menu-pill-stage" id="menuPillStage">
+      <div class="menu-pill-wrap" id="menuPillWrap">
+        <div class="bp-pill"></div>
+      </div>
+      <div class="menu-pill-shadow"></div>
+    </div>
+    <p class="menu-eyebrow">ASCEND &amp; FORGET</p>
+    <h2 class="menu-title">Меню</h2>
+    <div class="menu-tiles">
+      <button class="menu-tile menu-tile-hot" id="compareTile"><span class="mt-ic">⚔️</span><span class="mt-tx"><b data-i18n="tCompare">Who mogs?</b><i data-i18n="tCompareSub">Face-off: compare two faces</i></span></button>
+      <button class="menu-tile" data-view="history"><span class="mt-ic">✦</span><span class="mt-tx"><b>История оценок</b><i>Прошлые результаты</i></span></button>
+      <button class="menu-tile" data-view="glossary"><span class="mt-ic">❡</span><span class="mt-tx"><b>Луксмакс-словарь</b><i>Термины простыми словами</i></span></button>
+      <button class="menu-tile" data-view="how"><span class="mt-ic">◎</span><span class="mt-tx"><b>Как это работает</b><i>Геометрия + AI</i></span></button>
+      <button class="menu-tile" data-view="feedback"><span class="mt-ic">✎</span><span class="mt-tx"><b>Обратная связь</b><i>Пожелания и идеи</i></span></button>
+    </div>
+    <button id="menuGoBtn" class="menu-go"><span>Перейти к анализу</span><span class="menu-go-arr">&rarr;</span></button>
+  </div>
+</div>
+
+<!-- FULL-SCREEN VIEW (история / словарь / как / обратная связь) -->
+<div id="fsView" class="fs-view hidden">
+  <div class="fs-head">
+    <button id="fsBack" class="fs-back" type="button">&larr; Назад</button>
+    <span id="fsTitle" class="fs-title"></span>
+    <span class="fs-spacer"></span>
+  </div>
+  <div id="fsBody" class="fs-body"></div>
+</div>
+
+<!-- MAIN APP -->
+<header class="site-header" id="mainHeader">
+  <div class="container">
+    <p class="brand-eyebrow">ASCEND &amp; FORGET</p>
+    <h1>Aesthetic Analysis</h1>
+    <p class="subtitle">AI-powered looksmaxxing report &middot; PSL rating &middot; Personalized recommendations</p>
+  </div>
+</header>
+
+<main class="container" id="mainContent">
+
+  <section id="uploadSection">
+
+    <!-- Аккаунт: вход через Telegram / статус квоты / покупка кредитов -->
+    <div id="accountBar" class="account-bar">
+      <div id="accLoggedOut" class="acc-loggedout">
+        <div class="acc-lo-text">
+          <b>Войди через Telegram</b>
+          <i>Подписка на <a href="https://t.me/wwwfacerateru" target="_blank" rel="noopener">канал</a> = 1 бесплатный анализ в день</i>
         </div>
-        <p id="workerStatus" class="hint" style="margin-top:8px;"></p>
+        <div id="tgLoginWrap"></div>
       </div>
-    </section>
+      <div id="accLoggedIn" class="acc-loggedin hidden">
+        <img id="accAvatar" class="acc-avatar" alt="" />
+        <div class="acc-user">
+          <b id="accName"></b>
+          <i id="accQuota">…</i>
+        </div>
+        <div class="acc-actions">
+          <button id="buyP1" class="acc-buy" type="button">+1 · 30⭐</button>
+          <button id="buyP5" class="acc-buy" type="button">+5 · 100⭐</button>
+          <button id="accLogout" class="acc-logout" type="button" title="Выйти">✕</button>
+        </div>
+      </div>
+    </div>
 
-    <section id="disclaimer" class="card disclaimer">
-      <h2>Как это работает</h2>
-      <p>
-        Инструмент измеряет геометрические пропорции лица (соотношение третей,
-        ширину скул/лба/челюсти, симметрию относитеньно центральной оси) и
-        на основе этих чисел определяет общую форму лица и даёт справочные
-        рекомендации по стрижкам, которые обычно сочетаются с такой формой.
-      </p>
-      <p>
-        <strong>Это не оценка привлекательности.</strong> Модель не делает никаких
-        выводов о красоте или желательности лица — только измеряет геометрию.
-      </p>
-      <p>
-        Вся обработка происходит локально в вашем браузере. Фото никуда не
-        отправляется, не сохраняется и не покидает устройство.
-      </p>
-    </section>
+    <div id="lastResultBanner" class="last-result-banner hidden">
+      <span class="lrb-label">ПРОШЛЫЙ РЕЗУЛЬТАТ</span>
+      <span class="lrb-score" id="lrbScore">--</span>
+      <span class="lrb-cta">Открыть отчёт →</span>
+      <button class="lrb-dismiss" type="button" title="Скрыть">&times;</button>
+    </div>
 
-    <section id="upload-section" class="card">
-      <h2>1. Загрузите фото</h2>
-      <p class="hint">Лицо должно быть направлено прямо в камеру, при равномерном освещении, без сильного наклона головы.</p>
+    <!-- летающие размытые пилюли на фоне загрузки -->
+    <div class="pill-field" id="pillField" aria-hidden="true"></div>
 
-      <div class="upload-area" id="uploadArea">
-        <input type="file" id="fileInput" accept="image/*" hidden />
-        <button id="chooseFileBtn" class="btn btn-primary">Выбрать фото</button>
-        <p class="upload-hint">или перетащите файл сюда</p>
+    <div class="upload-grid">
+
+      <!-- Front photo (required) -->
+      <div class="upload-slot">
+        <div class="slot-header">
+          <span class="slot-eyebrow">ФРОНТ</span>
+          <span class="slot-tag slot-required">обязательно</span>
+        </div>
+        <div class="upload-area" id="frontArea">
+          <input type="file" id="fileInput" accept="image/*" hidden />
+          <div class="upload-inner" id="frontPlaceholder">
+            <div class="upload-icon">&#9678;</div>
+            <p class="upload-title">Фронтальное фото</p>
+            <p class="upload-hint">Лицо прямо &middot; Равномерный свет</p>
+            <button id="chooseFileBtn" class="btn btn-primary" style="margin-top:16px">Выбрать файл</button>
+          </div>
+          <div class="upload-thumb hidden" id="frontThumb">
+            <img id="frontThumbImg" alt="" />
+            <button class="thumb-remove" id="frontRemove" type="button">&#10005;</button>
+          </div>
+        </div>
       </div>
 
-      <div id="previewWrap" class="preview-wrap hidden">
+      <!-- Side profile photo (optional) -->
+      <div class="upload-slot">
+        <div class="slot-header">
+          <span class="slot-eyebrow">ПРОФИЛЬ</span>
+          <span class="slot-tag slot-optional">опционально</span>
+        </div>
+        <div class="upload-area upload-area-opt" id="sideArea">
+          <input type="file" id="sideInput" accept="image/*" hidden />
+          <div class="upload-inner" id="sidePlaceholder">
+            <div class="upload-icon upload-icon-dim">&#9678;</div>
+            <p class="upload-title upload-title-dim">Фото профиля</p>
+            <p class="upload-hint">Для точной оценки челюсти</p>
+            <p class="upload-hint upload-hint-gold">&uarr; точность анализа</p>
+            <button id="chooseSideBtn" class="btn" style="margin-top:14px;font-size:.78rem;padding:10px 22px">Добавить</button>
+          </div>
+          <div class="upload-thumb hidden" id="sideThumb">
+            <img id="sideThumbImg" alt="" />
+            <button class="thumb-remove" id="sideRemove" type="button">&#10005;</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <label id="toneRow" class="tone-row hidden">
+      <input type="checkbox" id="toneEdgy" />
+      <span class="tone-slider"></span>
+      <span class="tone-label">🔞 Дерзкий режим — жёсткий разбор без соплей</span>
+    </label>
+
+    <button id="analyzeBtn" class="btn-analyze hidden">
+      <span class="btn-analyze-fill"></span>
+      <span class="btn-analyze-inner">
+        <span class="btn-analyze-text">АНАЛИЗИРОВАТЬ</span>
+        <span class="btn-analyze-arr">&#8594;</span>
+      </span>
+    </button>
+  </section>
+
+  <div id="analysisView" class="hidden">
+    <div class="photo-card">
+      <div class="canvas-wrap">
         <canvas id="canvas"></canvas>
-        <button id="resetBtn" class="btn btn-secondary">Загрузить другое фото</button>
+        <span class="cf cf-tl"></span><span class="cf cf-tr"></span>
+        <span class="cf cf-bl"></span><span class="cf cf-br"></span>
+        <span class="canvas-glow"></span>
       </div>
-    </section>
-
-    <section id="loading" class="card hidden">
-      <p>Анализируем геометрию лица…</p>
-      <div class="spinner"></div>
-    </section>
-
-    <section id="results" class="card hidden">
-      <h2>2. Результаты анализа</h2>
-
-      <div class="result-grid">
-        <div class="metric-box">
-          <h3>Форма лица</h3>
-          <p id="faceShape" class="metric-value">—</p>
-        </div>
-        <div class="metric-box">
-          <h3>Симметрия</h3>
-          <p id="symmetryScore" class="metric-value">—</p>
-          <p class="metric-note">Чем ближе к 100%, тем более симметричны левая и правая половины лица</p>
-        </div>
-        <div class="metric-box">
-          <h3>Пропорции третей лица</h3>
-          <p id="thirdsRatio" class="metric-value">—</p>
-          <p class="metric-note">Лоб / нос / нижняя часть. В классическом каноне трети примерно равны</p>
-        </div>
-        <div class="metric-box">
-          <h3>Соотношение ширины и высоты лица</h3>
-          <p id="widthHeightRatio" class="metric-value">—</p>
-        </div>
-        <div class="metric-box">
-          <h3>Ширина скул / челюсти / лба</h3>
-          <p id="zoneWidths" class="metric-value">—</p>
-        </div>
+      <div class="photo-actions">
+        <button id="toMenuBtn" class="btn-reset" type="button">&larr; Меню</button>
+        <button id="resetBtn" class="btn-reset">Загрузить другое</button>
       </div>
-
-      <div id="aiResults" class="ai-results hidden">
-        <h2>ИИ-рекомендации <span class="ai-badge">Claude</span></h2>
-        <div id="aiContent" class="ai-content"></div>
-      </div>
-
-      <div id="recommendations" class="recommendations">
-        <h2>Базовые рекомендации</h2>
-        <div id="haircutRecs" class="rec-block">
-          <h3>По форме лица: стрижка и укладка</h3>
-          <ul id="haircutList"></ul>
-        </div>
-        <div id="styleRecs" class="rec-block">
-          <h3>Общие заметки по стилю</h3>
-          <ul id="styleList"></ul>
-        </div>
-      </div>
-
-      <p class="caveat">
-        ИИ-рекомендации и базовые правила — справочные, а не персональная консультация.
-        Лучший результат даст очный стилист.
-      </p>
-    </section>
-
-    <section id="errorBox" class="card error hidden">
-      <p id="errorText"></p>
-    </section>
-
-  </main>
-
-  <footer class="site-footer">
-    <div class="container">
-      <p>Обработка изображений происходит полностью на стороне браузера (on-device).
-      Ничего не отправляется на сервер и не сохраняется после закрытия страницы.</p>
     </div>
-  </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="metrics.js"></script>
-  <script src="recommendations.js"></script>
-  <script src="app.js"></script>
+    <div id="loading" class="loading-card hidden">
+      <div class="scan-spinner">
+        <div class="scan-ring"></div>
+        <div class="scan-ring scan-ring-2"></div>
+        <div class="scan-dot"></div>
+      </div>
+      <p>Сканирование геометрии лица&hellip;</p>
+    </div>
+
+    <div id="results" class="hidden">
+
+      <!-- AI HUD loading animation -->
+      <div id="aiLoading" class="ai-hud-card hidden">
+        <div class="hud-corners">
+          <span class="hc hc-tl"></span><span class="hc hc-tr"></span>
+          <span class="hc hc-bl"></span><span class="hc hc-br"></span>
+        </div>
+        <div class="hud-header">
+          <span class="hud-dot"></span>
+          <span class="hud-label">AI ANALYSIS IN PROGRESS</span>
+          <span class="hud-label-side" id="hudSideLabel"></span>
+        </div>
+        <div class="hud-phase-row">
+          <span class="hud-caret">&#8250;</span>
+          <span class="hud-phase" id="hudPhase">INITIALIZING</span>
+        </div>
+        <div class="hud-bar-row">
+          <div class="hud-bar-track"><div class="hud-bar-fill" id="hudBarFill"></div></div>
+          <span class="hud-bar-pct" id="hudBarPct">0%</span>
+        </div>
+        <div class="hud-stream" id="hudStream"></div>
+      </div>
+
+      <div id="aiReport" class="hidden">
+        <div class="score-hero card">
+          <span class="eyebrow">ОБЩАЯ ОЦЕНКА &middot; PSL РЕЙТИНГ</span>
+          <div class="score-ring-wrap">
+            <svg class="score-ring-svg" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="100" cy="100" r="82" stroke="#141414" stroke-width="1"/>
+              <circle id="scoreRingArc" cx="100" cy="100" r="82"
+                      stroke="#c4a46b" stroke-width="1.2"
+                      stroke-dasharray="516" stroke-dashoffset="516"
+                      stroke-linecap="round"
+                      transform="rotate(-90 100 100)"/>
+            </svg>
+            <div class="score-num-inner">
+              <span id="overallScoreNum" class="overall-num">--</span>
+              <span class="overall-denom">/10</span>
+            </div>
+          </div>
+          <p id="overallDesc" class="overall-desc"></p>
+        </div>
+        <div id="categoryScores" class="card scores-card"></div>
+        <div id="aiRecs" class="card recs-card hidden">
+          <span class="eyebrow">РЕКОМЕНДАЦИИ ПО ЛУКСМАКСИНГУ</span>
+          <ol id="recsList" class="recs-list"></ol>
+        </div>
+        <button id="shareBtn" class="btn-share js-share hidden" type="button">Поделиться результатом</button>
+        <button id="tgCardBtn" class="btn-share btn-share-tg hidden" type="button">Send card to Telegram</button>
+      </div>
+
+      <div id="aiError" class="card ai-error-card hidden">
+        <p id="aiErrorText" class="error-text"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="errorBox" class="card error hidden">
+    <p id="errorText"></p>
+  </div>
+
+  <!-- WHO MOGS: сравнение двух лиц -->
+  <section id="compareSection" class="hidden">
+    <div class="cmp-head">
+      <button id="cmpBackBtn" class="btn-reset" type="button">&larr; Menu</button>
+      <h2 class="cmp-title" data-i18n="cmpTitle">Who mogs?</h2>
+      <span style="width:60px"></span>
+    </div>
+    <p class="cmp-sub" data-i18n="cmpSub">Upload two faces — AI decides who mogs whom. 1 credit.</p>
+
+    <div id="cmpSetup">
+      <div class="cmp-grid">
+        <div class="cmp-slot" id="cmpSlotA">
+          <input type="file" id="cmpInputA" accept="image/*" hidden />
+          <div class="cmp-ph" id="cmpPhA">
+            <div class="upload-icon">◎</div>
+            <p class="upload-title">Face A</p>
+          </div>
+          <div class="cmp-thumb hidden" id="cmpThumbA"><img id="cmpImgA" alt="" /></div>
+          <span class="cmp-badge">A</span>
+        </div>
+        <div class="cmp-vs">VS</div>
+        <div class="cmp-slot" id="cmpSlotB">
+          <input type="file" id="cmpInputB" accept="image/*" hidden />
+          <div class="cmp-ph" id="cmpPhB">
+            <div class="upload-icon">◎</div>
+            <p class="upload-title">Face B</p>
+          </div>
+          <div class="cmp-thumb hidden" id="cmpThumbB"><img id="cmpImgB" alt="" /></div>
+          <span class="cmp-badge">B</span>
+        </div>
+      </div>
+      <button id="cmpRunBtn" class="btn-analyze hidden">
+        <span class="btn-analyze-fill"></span>
+        <span class="btn-analyze-inner">
+          <span class="btn-analyze-text" data-i18n="cmpRun">FACE-OFF</span>
+          <span class="btn-analyze-arr">⚔️</span>
+        </span>
+      </button>
+      <p id="cmpErr" class="cmp-err hidden"></p>
+    </div>
+
+    <div id="cmpLoading" class="ai-hud-card hidden" style="justify-content:center">
+      <div class="hud-header"><span class="hud-dot"></span><span class="hud-label" data-i18n="cmpLoading">DECIDING WHO MOGS…</span></div>
+    </div>
+
+    <div id="cmpResult" class="hidden">
+      <div class="photo-card"><div class="canvas-wrap" style="border:none;background:none"><canvas id="cmpCanvas"></canvas></div></div>
+      <div class="photo-actions">
+        <button id="cmpShareBtn" class="btn-share" type="button" data-i18n="share">Share result</button>
+        <button id="cmpTgBtn" class="btn-share btn-share-tg" type="button" data-i18n="tgCard">📩 Send card to Telegram</button>
+      </div>
+      <button id="cmpAgainBtn" class="btn-reset" type="button" style="margin:14px auto 0;display:block" data-i18n="cmpAgain">↻ New face-off</button>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer" id="mainFooter">
+  <div class="container">
+    <p class="footer-extra">FaceRate &middot; Face geometry processed locally &middot; AI via secure Cloudflare Worker</p>
+    <p class="footer-extra" style="margin-top:10px">
+      <a href="#" data-view="glossary" style="color:#c4a46b;text-decoration:none">Луксмакс-словарь</a>
+      &nbsp;&middot;&nbsp;
+      <a href="#" data-view="history" style="color:#c4a46b;text-decoration:none">История оценок</a>
+      &nbsp;&middot;&nbsp;
+      <a href="#" data-view="feedback" style="color:#c4a46b;text-decoration:none">Обратная связь</a>
+    </p>
+    <p style="margin-top:8px">
+      <a href="terms.html" style="color:#888;text-decoration:none">Пользовательское соглашение</a>
+      &nbsp;&middot;&nbsp;
+      <a href="privacy.html" style="color:#888;text-decoration:none">Политика конфиденциальности</a>
+    </p>
+  </div>
+</footer>
+
+<!-- CONSENT MODAL (показывается один раз перед первым анализом) -->
+<div id="consentModal" class="consent-overlay hidden">
+  <div class="consent-box">
+    <span class="eyebrow">ПЕРЕД НАЧАЛОМ</span>
+    <h2 class="consent-title">Пользовательское соглашение</h2>
+    <div class="consent-body">
+      <p>Нажимая «Принимаю», вы подтверждаете, что:</p>
+      <ul>
+        <li>вам <b>исполнилось 18 лет</b>;</li>
+        <li>сервис носит <b>развлекательный характер</b>, его оценки — это
+            субъективная эвристика нейросети, а <b>не</b> медицинская, психологическая
+            или иная профессиональная диагностика и не объективная истина;</li>
+        <li>геометрия лица считается в вашем браузере, но <b>само фото
+            отправляется</b> на сторонний AI-сервис (OpenRouter) для формирования
+            отчёта; сервис не хранит фотографии после обработки;</li>
+        <li>вы загружаете <b>только собственное изображение</b> либо фото лица,
+            <b>давшего на это согласие</b>; вы не загружаете фотографии
+            несовершеннолетних и третьих лиц без их согласия;</li>
+        <li>вы даёте согласие на обработку загруженного изображения в указанных
+            целях и понимаете, что можете прекратить использование в любой момент;</li>
+        <li>вы используете сервис на свой риск и принимаете, что
+            <b>администрация не несёт ответственности</b> за ваши решения и любые
+            последствия, основанные на результатах.</li>
+      </ul>
+      <p class="consent-full-link">
+        <a href="terms.html" target="_blank" rel="noopener">Полный текст соглашения →</a><br/>
+        <a href="privacy.html" target="_blank" rel="noopener">Политика конфиденциальности →</a>
+      </p>
+    </div>
+    <label class="consent-check-row">
+      <input type="checkbox" id="consentCheck" />
+      <span>Я прочитал(а) и принимаю условия</span>
+    </label>
+    <div class="consent-actions">
+      <button id="consentDecline" class="btn-reset">Отмена</button>
+      <button id="consentAccept" class="btn-primary" disabled>Принимаю</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAYWALL: показывается после сканирования, перед генерацией отчёта -->
+<div id="paywall" class="paywall hidden">
+  <div class="pw-box">
+    <div class="pw-mock" aria-hidden="true">
+      <div class="pw-mock-score">?.?<span>/10</span></div>
+      <div class="pw-mock-bars"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <span class="eyebrow" style="margin-bottom:10px">СКАНИРОВАНИЕ ЗАВЕРШЕНО</span>
+    <h2 class="pw-title" id="pwTitle">Твой отчёт готов</h2>
+    <p class="pw-sub" id="pwSub"></p>
+    <div class="pw-actions" id="pwActions"></div>
+    <button class="pw-close" id="pwClose" type="button">&times;</button>
+  </div>
+</div>
+
+<!-- LAST RESULT MODAL -->
+<div id="lastResultModal" class="lr-overlay hidden">
+  <div class="lr-box">
+    <button id="lastResultClose" class="lr-close" type="button">&times;</button>
+    <span class="eyebrow">ПРОШЛЫЙ ОТЧЁТ</span>
+    <div id="lastResultBody"></div>
+  </div>
+</div>
+
+<!-- Фоновая музыка (положи royalty-free трек в music.mp3) -->
+<audio id="bgMusic" loop preload="none" src="music.mp3"></audio>
+
+<!-- Единая кнопка звука (музыка + уведомления) -->
+<button id="musicBtn" class="mute-btn" title="Sound">&#128266;</button>
+
+<!-- Переключатель языка -->
+<button id="langBtn" class="mute-btn lang-btn" title="Language">RU</button>
+
+<!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
+<script src="app.js?v=18"></script>
 </body>
 </html>
