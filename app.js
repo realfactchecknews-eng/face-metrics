@@ -824,12 +824,12 @@ async function processImage(img, sideImage) {
     var raw = results.faceLandmarks[0];
     var w   = canvas.width, h = canvas.height;
     var lm  = raw.map(function(p) { return { x: p.x * w, y: p.y * h }; });
-    // Рамка лица (нормализованная 0..1) для правильного кропа share-карточки.
+    // Рамка лица в пикселях (не нормализованных 0..1!) для правильного кропа share-карточки.
     (function(){
       var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
-      for (var i = 0; i < raw.length; i++) {
-        if (raw[i].x < minx) minx = raw[i].x; if (raw[i].x > maxx) maxx = raw[i].x;
-        if (raw[i].y < miny) miny = raw[i].y; if (raw[i].y > maxy) maxy = raw[i].y;
+      for (var i = 0; i < lm.length; i++) {
+        if (lm[i].x < minx) minx = lm[i].x; if (lm[i].x > maxx) maxx = lm[i].x;
+        if (lm[i].y < miny) miny = lm[i].y; if (lm[i].y > maxy) maxy = lm[i].y;
       }
       window._fmFaceBox = { x: minx, y: miny, w: maxx - minx, h: maxy - miny };
     })();

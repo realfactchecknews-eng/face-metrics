@@ -838,6 +838,12 @@ function adminPanelKb() {
     [{ text: '← Меню', callback_data: 'menu' }],
   ]};
 }
+const ADMIN_BTN = '⚙️ Admin';
+// Постоянная клавиатура внизу экрана — не пропадает между сообщениями,
+// поэтому админу никогда не нужно печатать /admin или /close руками.
+function adminReplyKb() {
+  return { keyboard: [[{ text: ADMIN_BTN }]], resize_keyboard: true, is_persistent: true };
+}
 async function showTicketsKb(env) {
   const list = await getList(env, 'suptickets');
   if (!list.length) return { text: '📂 Открытых чатов нет.', kb: { inline_keyboard: [[{ text: '← Admin', callback_data: 'admin' }]] } };
@@ -1000,11 +1006,13 @@ async function supportWebhook(request, env) {
 
   const isAdmin = isAdminId(env, fromId);
 
-  if (isAdmin && (text === '/admin')) {
+  if (isAdmin && (text === '/admin' || text === ADMIN_BTN)) {
+    // Тап по кнопке снимает «прилипающий» ответ конкретному юзеру, чтобы не отправить туда случайный текст.
+    await env.RATE_LIMIT.delete(`admtarget:${fromId}`);
     await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: '⚙️ Панель модератора:', reply_markup: adminPanelKb() });
     return new Response('ok');
   }
-  // Оператор закрывает диалог: /close <id>
+  // Оператор закрывает диалог: /close <id> (текстовая команда — оставлена для подстраховки, основной способ — кнопка ✖)
   if (isAdmin && text.startsWith('/close')) {
     const uid = (text.split(' ')[1] || '').trim();
     if (uid) {
@@ -1038,6 +1046,8 @@ async function supportWebhook(request, env) {
 
   if (text === '/start' || text === '/menu') {
     await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: SUP[L].hello, reply_markup: supMenuKb(L, isAdmin) });
+    // Отдельным сообщением — постоянная кнопка «⚙️ Admin» внизу экрана (не пропадает, живёт независимо от инлайн-кнопок).
+    if (isAdmin) await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: '⌨️ Кнопка модератора закреплена внизу.', reply_markup: adminReplyKb() });
     return new Response('ok');
   }
 
