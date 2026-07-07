@@ -86,12 +86,12 @@ var I18N = {
       "<li>you upload <b>only your own image</b> or a photo of a person <b>who gave consent</b>; no photos of minors or third parties without consent;</li>" +
       "<li>you consent to processing of the uploaded image for these purposes and may stop using the service at any time;</li>" +
       "<li>you use the service at your own risk; <b>the administration is not liable</b> for your decisions or any consequences based on the results.</li></ul>" +
-      "<p class='consent-full-link'><a href='terms.html' target='_blank' rel='noopener'>Full terms →</a><br/><a href='privacy.html' target='_blank' rel='noopener'>Privacy policy →</a></p>",
+      "<p class='consent-full-link'><a href='terms-en.html' target='_blank' rel='noopener'>Full terms →</a><br/><a href='privacy-en.html' target='_blank' rel='noopener'>Privacy policy →</a></p>",
     consentCheck: "I have read and accept the terms",
     consentAccept: "I agree", consentDecline: "Cancel",
     footTech: "FaceRate · Face geometry processed locally · AI via secure Cloudflare Worker",
     footLinks: "<a href='#' data-view='glossary' style='color:#c4a46b;text-decoration:none'>Looksmax glossary</a>&nbsp;·&nbsp;<a href='#' data-view='history' style='color:#c4a46b;text-decoration:none'>Score history</a>&nbsp;·&nbsp;<a href='#' data-view='feedback' style='color:#c4a46b;text-decoration:none'>Feedback</a>",
-    footLegal: "<a href='terms.html' style='color:#888;text-decoration:none'>Terms of use</a>&nbsp;·&nbsp;<a href='privacy.html' style='color:#888;text-decoration:none'>Privacy policy</a>",
+    footLegal: "<a href='terms-en.html' style='color:#888;text-decoration:none'>Terms of use</a>&nbsp;·&nbsp;<a href='privacy-en.html' style='color:#888;text-decoration:none'>Privacy policy</a>",
     // dynamic
     pwReady: "Your report is ready",
     pwLoginSub: "Log in with Telegram to unlock the result. One tap — no phone number, no password.",
