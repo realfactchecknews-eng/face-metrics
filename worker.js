@@ -16,14 +16,21 @@ const CHANNEL = '@wwwfacerateru';        // канал, подписка на к
 const FREE_PER_DAY = 1;                  // бесплатных анализов в день подписчику
 const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
 const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
-  p1: { type: 'credits', credits: 1, stars: 30,  rub: 99,  label: '1 анализ', labelEn: '1 analysis' },
-  p5: { type: 'credits', credits: 5, stars: 100, rub: 299, label: '5 анализов', labelEn: '5 analyses' },
-  d1: { type: 'unlim',  hours: 24,   stars: 100, rub: 299, label: 'Безлимит на день', labelEn: 'Day unlimited' },
+  p1: { type: 'credits', credits: 1, stars: 29,  rub: 49,  label: '1 анализ', labelEn: '1 analysis' },
+  p5: { type: 'credits', credits: 5, stars: 99,  rub: 149, label: '5 анализов', labelEn: '5 analyses' },
+  d1: { type: 'unlim',  hours: 24,   stars: 99,  rub: 149, label: 'Безлимит на день', labelEn: 'Day unlimited' },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 500, rub: 990, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
+  m1: { type: 'unlim',  hours: 720,  stars: 499, rub: 749, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
 };
+// Способы оплаты, доступные при заданных секретах (stars — всегда).
+function enabledMethods(env) {
+  const m = ['stars'];
+  if (env.YUKASSA_PROVIDER_TOKEN) m.push('rub');
+  if (env.CRYPTOBOT_TOKEN) m.push('crypto');
+  return m;
+}
 function packLabel(pack, L) { return L === 'ru' ? pack.label : pack.labelEn; }
 const IP_LIMIT_DAY = 40;                 // страховочный лимит по IP (анти-абьюз)
 const GLOBAL_DAILY_CAP = 300;            // потолок на весь сайт в сутки
@@ -201,7 +208,7 @@ async function statusFor(env, user, token, fresh) {
   return {
     token, user, subscribed,
     freeLeft: subscribed ? Math.max(0, FREE_PER_DAY - freeUsed) : 0,
-    credits, channel: CHANNEL, packs: PACKS,
+    credits, channel: CHANNEL, packs: PACKS, methods: enabledMethods(env),
     unlimUntil: unlimUntil > Date.now() ? unlimUntil : 0,
   };
 }
@@ -488,13 +495,22 @@ function menuKb(L) {
     [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
   ]};
 }
-function shopKb(L) {
+// Шаг 1: выбор способа оплаты.
+function methodKb(L, env) {
   const b = BL[L];
+  const rows = [[{ text: b.payStars, callback_data: 'mth:stars' }]];
+  if (env.YUKASSA_PROVIDER_TOKEN) rows.push([{ text: b.payCard, callback_data: 'mth:rub' }]);
+  if (env.CRYPTOBOT_TOKEN) rows.push([{ text: b.payCrypto, callback_data: 'mth:crypto' }]);
+  rows.push([{ text: b.kbBack, callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+// Шаг 2: тарифы с ценой в валюте выбранного способа.
+function packsKb(method, L) {
+  const price = (p) => method === 'stars' ? `${p.stars}⭐` : `${p.rub}₽`;
+  const row = (id, emoji) => [{ text: `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`, callback_data: `pay:${id}:${method}` }];
   return { inline_keyboard: [
-    [{ text: b.shop1(PACKS.p1.stars), callback_data: 'buy:p1' }, { text: b.shop5(PACKS.p5.stars), callback_data: 'buy:p5' }],
-    [{ text: b.shopD(PACKS.d1.stars), callback_data: 'buy:d1' }],
-    [{ text: b.shopM(PACKS.m1.stars), callback_data: 'buy:m1' }],
-    [{ text: b.kbBack, callback_data: 'menu' }],
+    row('p1', ''), row('p5', ''), row('d1', '🔥 '), row('m1', '👑 '),
+    [{ text: BL[L].kbBack, callback_data: 'shop' }],
   ]};
 }
 
@@ -605,18 +621,12 @@ async function handleCallback(env, cq) {
     t += sub ? b.statusSub(Math.max(0, FREE_PER_DAY - freeUsed)) : b.statusNoSub;
     await tgApi(env, 'sendMessage', { chat_id: chat, text: t, reply_markup: menuKb(L) });
   } else if (data === 'shop') {
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.shopTitle, reply_markup: shopKb(L) });
-  } else if (data.startsWith('buy:')) {
-    // Шаг 1: выбор способа оплаты для пакета.
-    const packId = data.slice(4);
-    const pack = PACKS[packId];
-    if (pack) {
-      const rows = [[{ text: `${b.payStars} — ${pack.stars}⭐`, callback_data: `pay:${packId}:stars` }]];
-      if (env.YUKASSA_PROVIDER_TOKEN) rows.push([{ text: `${b.payCard} — ${pack.rub}₽`, callback_data: `pay:${packId}:rub` }]);
-      if (env.CRYPTOBOT_TOKEN) rows.push([{ text: `${b.payCrypto} — ${pack.rub}₽`, callback_data: `pay:${packId}:crypto` }]);
-      rows.push([{ text: b.kbBack, callback_data: 'shop' }]);
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: `${b.payPick}\n${packLabel(pack, L)}`, reply_markup: { inline_keyboard: rows } });
-    }
+    // Шаг 1: выбор способа оплаты.
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: methodKb(L, env) });
+  } else if (data.startsWith('mth:')) {
+    // Шаг 2: тарифы под выбранный способ.
+    const method = data.slice(4);
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.shopTitle, reply_markup: packsKb(method, L) });
   } else if (data.startsWith('pay:')) {
     // Шаг 2: выставление счёта выбранным способом.
     const [, packId, method] = data.split(':');
