@@ -89,8 +89,6 @@ var I18N = {
       "<p class='consent-full-link'><a href='terms-en.html' target='_blank' rel='noopener'>Full terms →</a><br/><a href='privacy-en.html' target='_blank' rel='noopener'>Privacy policy →</a></p>",
     consentCheck: "I have read and accept the terms",
     consentAccept: "I agree", consentDecline: "Cancel",
-    footTech: "FaceRate · Face geometry processed locally · AI via secure Cloudflare Worker",
-    footLinks: "<a href='#' data-view='glossary' style='color:#c4a46b;text-decoration:none'>Looksmax glossary</a>&nbsp;·&nbsp;<a href='#' data-view='history' style='color:#c4a46b;text-decoration:none'>Score history</a>&nbsp;·&nbsp;<a href='#' data-view='feedback' style='color:#c4a46b;text-decoration:none'>Feedback</a>",
     footLegal: "<a href='terms-en.html' style='color:#888;text-decoration:none'>Terms of use</a>&nbsp;·&nbsp;<a href='privacy-en.html' style='color:#888;text-decoration:none'>Privacy policy</a>",
     // dynamic
     pwReady: "Your report is ready",
@@ -174,8 +172,6 @@ var I18N = {
       "<p class='consent-full-link'><a href='terms.html' target='_blank' rel='noopener'>Полный текст соглашения →</a><br/><a href='privacy.html' target='_blank' rel='noopener'>Политика конфиденциальности →</a></p>",
     consentCheck: "Я прочитал(а) и принимаю условия",
     consentAccept: "Принимаю", consentDecline: "Отмена",
-    footTech: "FaceRate · Геометрия локально · AI через защищённый Cloudflare Worker",
-    footLinks: "<a href='#' data-view='glossary' style='color:#c4a46b;text-decoration:none'>Луксмакс-словарь</a>&nbsp;·&nbsp;<a href='#' data-view='history' style='color:#c4a46b;text-decoration:none'>История оценок</a>&nbsp;·&nbsp;<a href='#' data-view='feedback' style='color:#c4a46b;text-decoration:none'>Обратная связь</a>",
     footLegal: "<a href='terms.html' style='color:#888;text-decoration:none'>Пользовательское соглашение</a>&nbsp;·&nbsp;<a href='privacy.html' style='color:#888;text-decoration:none'>Политика конфиденциальности</a>",
     pwReady: "Твой отчёт готов",
     pwLoginSub: "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.",
@@ -261,8 +257,6 @@ function applyLang() {
   var HTML = [
     ["#accLoggedOut .acc-lo-text i", "accLoSub"],
     ["#consentModal .consent-body", "consentBody"],
-    ["#mainFooter .footer-extra:first-child", "footTech"],
-    ["#mainFooter .footer-extra:nth-of-type(2)", "footLinks"],
     ["#mainFooter .container > p:last-child", "footLegal"],
   ];
   TXT.forEach(function(p){ var el = document.querySelector(p[0]); if (el) el.textContent = t(p[1]); });
