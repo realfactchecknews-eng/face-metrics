@@ -7,9 +7,11 @@
 //   POST /buy            — создать инвойс: method=stars|rub|crypto (по умолчанию stars)
 //   POST /tg-webhook     — вебхук бота: pre_checkout_query + successful_payment
 //   POST /crypto-webhook — вебхук CryptoBot: invoice_paid → начисление
+//   POST /support-webhook— вебхук саппорт-бота: AI-ответ + эскалация оператору
 //
 // Секреты: OPENROUTER_API_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
-//          YUKASSA_PROVIDER_TOKEN (карты РФ через Telegram), CRYPTOBOT_TOKEN (Crypto Pay API).
+//          YUKASSA_PROVIDER_TOKEN (карты РФ через Telegram), CRYPTOBOT_TOKEN (Crypto Pay API),
+//          SUPPORT_BOT_TOKEN, SUPPORT_ADMIN_ID (куда падают обращения), SUPPORT_WEBHOOK_SECRET (опц.).
 // KV: RATE_LIMIT.
 
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/день
@@ -43,6 +45,7 @@ export default {
     try {
       if (path === '/tg-webhook') return await tgWebhook(request, env);
       if (path === '/crypto-webhook') return await cryptoWebhook(request, env);
+      if (path === '/support-webhook') return await supportWebhook(request, env);
       if (path === '/auth')       return await authTg(request, env);
       if (path === '/authpoll')   return await authPoll(request, env);
       if (path === '/me')         return await me(request, env);
@@ -775,6 +778,136 @@ async function grantPack(env, tgid, pack, L, sp) {
     return b.paySub(fmtDate(until, L || 'en')) + (sp?.is_recurring ? b.payRec : '');
   }
   return '';
+}
+
+// ─────────────────────────── Бот техподдержки (отдельный токен) ───────────────────────────
+const SUP = {
+  en: {
+    hello: '👋 FaceRate Support. Ask your question — I’ll answer right away. If I can’t help, tap “Call an operator”.',
+    human: '🧑 Call an operator', humanOn: '✅ Passed to an operator. Write your question — a human will reply here.',
+    sent: '✅ Sent to the operator. Please wait for a reply.',
+    noAdmin: 'Operator is temporarily unavailable, please try later.',
+  },
+  ru: {
+    hello: '👋 Поддержка FaceRate. Задай вопрос — отвечу сразу. Если не помогу, жми «Позвать оператора».',
+    human: '🧑 Позвать оператора', humanOn: '✅ Передаю оператору. Опиши вопрос — человек ответит здесь.',
+    sent: '✅ Отправлено оператору. Дождись ответа.',
+    noAdmin: 'Оператор временно недоступен, попробуй позже.',
+  },
+};
+const SUP_FAQ = {
+  ru: `Ты — вежливый саппорт сервиса FaceRate (facerate.ru) — это AI-оценка лица по канонам луксмаксинга (сайт + Telegram-бот).
+Факты:
+- Бесплатно: подписка на канал @wwwfacerateru даёт 1 бесплатный анализ в день.
+- Платно: пакеты «1 анализ», «5 анализов», «безлимит на день», «безлимит на месяц». Оплата — Telegram Stars или криптой (через CryptoBot), цена в звёздах или рублях.
+- Вход на сайте — через Telegram. После оплаты доступ появляется автоматически, обнови страницу.
+- Промокоды: в боте кнопка «Ввести промокод»; коды бывают в розыгрышах в канале.
+Отвечай кратко (2–4 предложения), на русском. Если вопрос про возврат денег, проблему с оплатой, доступ после оплаты, баг или что-то, в чём не уверен — не выдумывай, а попроси нажать «Позвать оператора».`,
+  en: `You are the polite support agent for FaceRate (facerate.ru) — AI face rating by looksmaxxing canons (website + Telegram bot).
+Facts:
+- Free: subscribing to the @wwwfacerateru channel gives 1 free analysis per day.
+- Paid: packages "1 analysis", "5 analyses", "day unlimited", "month unlimited". Payment via Telegram Stars or crypto (CryptoBot), priced in stars or rubles.
+- Login on the site is via Telegram. After payment access appears automatically — refresh the page.
+- Promo codes: the bot has an "Enter promo code" button; codes appear in channel giveaways.
+Answer briefly (2–4 sentences), in English. For refunds, payment issues, access-after-payment, bugs, or anything you’re unsure about — do not make things up; ask them to tap "Call an operator".`,
+};
+
+function supportApi(env, method, body) {
+  return fetch(`https://api.telegram.org/bot${env.SUPPORT_BOT_TOKEN}/${method}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then(r => r.json()).catch(e => ({ ok: false, description: e.message }));
+}
+
+async function supportAI(env, question, L) {
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENROUTER_API_KEY}` },
+      body: JSON.stringify({ model: 'x-ai/grok-4.3', max_tokens: 500, temperature: 0.3,
+        messages: [{ role: 'system', content: SUP_FAQ[L] || SUP_FAQ.en }, { role: 'user', content: question || 'hi' }] }),
+    });
+    const d = await res.json();
+    return d?.choices?.[0]?.message?.content || (L === 'ru' ? 'Не смог ответить — нажми «Позвать оператора».' : 'Could not answer — tap “Call an operator”.');
+  } catch { return L === 'ru' ? 'Ошибка, попробуй позже или позови оператора.' : 'Error, try later or call an operator.'; }
+}
+
+async function forwardToAdmin(env, msg, L) {
+  const b = SUP[L];
+  if (!env.SUPPORT_ADMIN_ID) { await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.noAdmin }); return; }
+  const u = msg.from;
+  const sent = await supportApi(env, 'sendMessage', {
+    chat_id: env.SUPPORT_ADMIN_ID,
+    text: `💬 ${u.first_name || ''} @${u.username || ''} (id ${u.id}):\n\n${msg.text || '[нетекстовое сообщение]'}\n\n↩️ Ответь реплаем на это сообщение.`,
+  });
+  if (sent.ok) await env.RATE_LIMIT.put(`supmap:${sent.result.message_id}`, String(u.id), { expirationTtl: 60 * 60 * 24 * 3 });
+  await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.sent });
+}
+
+async function supportWebhook(request, env) {
+  if (env.SUPPORT_WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.SUPPORT_WEBHOOK_SECRET) {
+    return new Response('forbidden', { status: 403 });
+  }
+  let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
+
+  // Кнопка «Позвать оператора».
+  if (upd.callback_query) {
+    const cq = upd.callback_query;
+    const fromId = String(cq.from.id);
+    const L = await userLang(env, cq.from.id);
+    await supportApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
+    if (cq.data === 'human') {
+      await env.RATE_LIMIT.put(`suphuman:${fromId}`, '1', { expirationTtl: 60 * 60 * 24 });
+      await supportApi(env, 'sendMessage', { chat_id: cq.message.chat.id, text: SUP[L].humanOn });
+      if (env.SUPPORT_ADMIN_ID) {
+        const u = cq.from;
+        await supportApi(env, 'sendMessage', { chat_id: env.SUPPORT_ADMIN_ID, text: `🆘 ${u.first_name || ''} @${u.username || ''} (id ${fromId}) просит оператора. Его сообщения будут приходить сюда — отвечай реплаем. Закрыть диалог: /close ${fromId}` });
+      }
+    }
+    return new Response('ok');
+  }
+
+  const msg = upd.message;
+  if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
+  const adminId = String(env.SUPPORT_ADMIN_ID || '');
+  const fromId = String(msg.from.id);
+  const L = await userLang(env, msg.from.id);
+  const text = (msg.text || '').trim();
+
+  // Ответ оператора реплаем → пересылаем пользователю.
+  if (adminId && fromId === adminId && msg.reply_to_message) {
+    const uid = await env.RATE_LIMIT.get(`supmap:${msg.reply_to_message.message_id}`);
+    if (uid) {
+      const uL = await userLang(env, uid);
+      await supportApi(env, 'sendMessage', { chat_id: uid, text: (uL === 'ru' ? '🛠 Поддержка: ' : '🛠 Support: ') + text });
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: '✅ Отправлено пользователю ' + uid });
+    }
+    return new Response('ok');
+  }
+  // Оператор закрывает диалог: /close <id>
+  if (adminId && fromId === adminId && text.startsWith('/close')) {
+    const uid = (text.split(' ')[1] || '').trim();
+    if (uid) { await env.RATE_LIMIT.delete(`suphuman:${uid}`); await supportApi(env, 'sendMessage', { chat_id: adminId, text: 'Диалог с ' + uid + ' закрыт.' }); }
+    return new Response('ok');
+  }
+
+  if (text === '/start') {
+    await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: SUP[L].hello });
+    return new Response('ok');
+  }
+
+  // Пользователь уже переключён на оператора → пересылаем всё оператору.
+  if (await env.RATE_LIMIT.get(`suphuman:${fromId}`)) {
+    await forwardToAdmin(env, msg, L);
+    return new Response('ok');
+  }
+
+  // Иначе — AI-ответ по FAQ + кнопка эскалации.
+  const answer = await supportAI(env, text, L);
+  await supportApi(env, 'sendMessage', {
+    chat_id: msg.chat.id, text: answer,
+    reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }]] },
+  });
+  return new Response('ok');
 }
 
 // ─────────────────────────── Утилиты ───────────────────────────
