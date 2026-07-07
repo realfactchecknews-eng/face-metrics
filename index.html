@@ -16,7 +16,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=17" />
+<link rel="stylesheet" href="style.css?v=18" />
 </head>
 <body>
 
@@ -112,6 +112,7 @@
     <p class="menu-eyebrow">ASCEND &amp; FORGET</p>
     <h2 class="menu-title">Меню</h2>
     <div class="menu-tiles">
+      <button class="menu-tile menu-tile-hot" id="compareTile"><span class="mt-ic">⚔️</span><span class="mt-tx"><b data-i18n="tCompare">Who mogs?</b><i data-i18n="tCompareSub">Face-off: compare two faces</i></span></button>
       <button class="menu-tile" data-view="history"><span class="mt-ic">✦</span><span class="mt-tx"><b>История оценок</b><i>Прошлые результаты</i></span></button>
       <button class="menu-tile" data-view="glossary"><span class="mt-ic">❡</span><span class="mt-tx"><b>Луксмакс-словарь</b><i>Термины простыми словами</i></span></button>
       <button class="menu-tile" data-view="how"><span class="mt-ic">◎</span><span class="mt-tx"><b>Как это работает</b><i>Геометрия + AI</i></span></button>
@@ -324,6 +325,61 @@
     <p id="errorText"></p>
   </div>
 
+  <!-- WHO MOGS: сравнение двух лиц -->
+  <section id="compareSection" class="hidden">
+    <div class="cmp-head">
+      <button id="cmpBackBtn" class="btn-reset" type="button">&larr; Menu</button>
+      <h2 class="cmp-title" data-i18n="cmpTitle">Who mogs?</h2>
+      <span style="width:60px"></span>
+    </div>
+    <p class="cmp-sub" data-i18n="cmpSub">Upload two faces — AI decides who mogs whom. 1 credit.</p>
+
+    <div id="cmpSetup">
+      <div class="cmp-grid">
+        <div class="cmp-slot" id="cmpSlotA">
+          <input type="file" id="cmpInputA" accept="image/*" hidden />
+          <div class="cmp-ph" id="cmpPhA">
+            <div class="upload-icon">◎</div>
+            <p class="upload-title">Face A</p>
+          </div>
+          <div class="cmp-thumb hidden" id="cmpThumbA"><img id="cmpImgA" alt="" /></div>
+          <span class="cmp-badge">A</span>
+        </div>
+        <div class="cmp-vs">VS</div>
+        <div class="cmp-slot" id="cmpSlotB">
+          <input type="file" id="cmpInputB" accept="image/*" hidden />
+          <div class="cmp-ph" id="cmpPhB">
+            <div class="upload-icon">◎</div>
+            <p class="upload-title">Face B</p>
+          </div>
+          <div class="cmp-thumb hidden" id="cmpThumbB"><img id="cmpImgB" alt="" /></div>
+          <span class="cmp-badge">B</span>
+        </div>
+      </div>
+      <button id="cmpRunBtn" class="btn-analyze hidden">
+        <span class="btn-analyze-fill"></span>
+        <span class="btn-analyze-inner">
+          <span class="btn-analyze-text" data-i18n="cmpRun">FACE-OFF</span>
+          <span class="btn-analyze-arr">⚔️</span>
+        </span>
+      </button>
+      <p id="cmpErr" class="cmp-err hidden"></p>
+    </div>
+
+    <div id="cmpLoading" class="ai-hud-card hidden" style="justify-content:center">
+      <div class="hud-header"><span class="hud-dot"></span><span class="hud-label" data-i18n="cmpLoading">DECIDING WHO MOGS…</span></div>
+    </div>
+
+    <div id="cmpResult" class="hidden">
+      <div class="photo-card"><div class="canvas-wrap" style="border:none;background:none"><canvas id="cmpCanvas"></canvas></div></div>
+      <div class="photo-actions">
+        <button id="cmpShareBtn" class="btn-share" type="button" data-i18n="share">Share result</button>
+        <button id="cmpTgBtn" class="btn-share btn-share-tg" type="button" data-i18n="tgCard">📩 Send card to Telegram</button>
+      </div>
+      <button id="cmpAgainBtn" class="btn-reset" type="button" style="margin:14px auto 0;display:block" data-i18n="cmpAgain">↻ New face-off</button>
+    </div>
+  </section>
+
 </main>
 
 <footer class="site-footer" id="mainFooter">
@@ -418,6 +474,6 @@
 <button id="langBtn" class="mute-btn lang-btn" title="Language">RU</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

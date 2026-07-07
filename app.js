@@ -127,6 +127,13 @@ var I18N = {
     errGeneric: "Analysis error. Try refreshing the page.",
     emptyAnswer: "Empty response.",
     gateRestricted: "Access restricted.", errPrefix: "Error: ",
+    tCompare: "Who mogs?", tCompareSub: "Face-off: compare two faces",
+    cmpTitle: "Who mogs?", cmpSub: "Upload two faces — AI decides who mogs whom. 1 credit.",
+    cmpRun: "FACE-OFF", cmpLoading: "DECIDING WHO MOGS…", cmpAgain: "↻ New face-off",
+    cmpNeedTwo: "Add both photos first.", cmpNoFaceA: "No face detected in photo A.",
+    cmpNoFaceB: "No face detected in photo B.", cmpErrGen: "Something went wrong, try again.",
+    cmpMogs: "MOGS", cmpVerdict: "VERDICT", cmpMogged: "MOGGED",
+    cmpShareText: "Who mogs? — facerate.ru",
   },
   ru: {
     begin: "НАЧАТЬ АНАЛИЗ",
@@ -203,6 +210,13 @@ var I18N = {
     errGeneric: "Ошибка при анализе. Попробуйте обновить страницу.",
     emptyAnswer: "Пустой ответ.",
     gateRestricted: "Доступ ограничен.", errPrefix: "Ошибка: ",
+    tCompare: "Кто моггит?", tCompareSub: "Дуэль: сравни два лица",
+    cmpTitle: "Кто моггит?", cmpSub: "Загрузи два лица — ИИ решит, кто кого моггит. 1 кредит.",
+    cmpRun: "ДУЭЛЬ", cmpLoading: "РЕШАЮ, КТО МОГГИТ…", cmpAgain: "↻ Новая дуэль",
+    cmpNeedTwo: "Сначала добавь оба фото.", cmpNoFaceA: "На фото A не найдено лицо.",
+    cmpNoFaceB: "На фото B не найдено лицо.", cmpErrGen: "Что-то пошло не так, попробуй ещё раз.",
+    cmpMogs: "МОГГИТ", cmpVerdict: "ВЕРДИКТ", cmpMogged: "MOGGED",
+    cmpShareText: "Кто моггит? — facerate.ru",
   },
 };
 
@@ -251,6 +265,8 @@ function applyLang() {
   ];
   TXT.forEach(function(p){ var el = document.querySelector(p[0]); if (el) el.textContent = t(p[1]); });
   HTML.forEach(function(p){ var el = document.querySelector(p[0]); if (el) el.innerHTML = t(p[1]); });
+  // Универсальный перевод по data-i18n
+  document.querySelectorAll("[data-i18n]").forEach(function(el){ el.textContent = t(el.getAttribute("data-i18n")); });
   // hints профиля (их два <p>)
   var hints = document.querySelectorAll("#sidePlaceholder .upload-hint");
   if (hints[0]) hints[0].textContent = t("sideHint");
@@ -1961,6 +1977,7 @@ function buyPack(pack, btn) {
 
 /* ───────────────────  Гейт перед генерацией: пейволл  ─────────────────── */
 var _pendingAnalysis = null;   // {metrics, shapeInfo} — ждёт прохода гейта
+var _afterGate = null;         // что запустить после успешного гейта (анализ или сравнение)
 var _gateBusy = false;
 
 function fetchStatus(fresh) {
@@ -1975,15 +1992,18 @@ function fetchStatus(fresh) {
 // Скан завершён → проверяем доступ; есть — генерим, нет — красивый пейволл.
 function gateThenAI(metrics, shapeInfo) {
   _pendingAnalysis = { metrics: metrics, shapeInfo: shapeInfo };
+  _afterGate = startAI;
   fetchStatus(false).then(function(st) {
     if (st.error === "auth") { showPaywall("auth"); return; }
     if (st.error) { showPaywall("auth"); return; }
     renderAccount(st);
-    if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); startAI(); }
+    if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); runAfterGate(); }
     else if (!st.subscribed) showPaywall("sub");
     else showPaywall("pay", st);
-  }).catch(function(){ startAI(); }); // сеть легла — пусть решает воркер
+  }).catch(function(){ runAfterGate(); }); // сеть легла — пусть решает воркер
 }
+
+function runAfterGate() { var f = _afterGate; _afterGate = null; (f || startAI)(); }
 
 function startAI() {
   if (!_pendingAnalysis) return;
@@ -2056,7 +2076,7 @@ function pwRecheck(silent) {
     _gateBusy = false;
     if (st.error) { if (!silent) showPaywall("auth"); return; }
     renderAccount(st);
-    if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); startAI(); }
+    if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); runAfterGate(); }
     else if (!silent) showPaywall(!st.subscribed ? "sub" : "pay", st);
   }).catch(function(){ _gateBusy = false; });
 }
@@ -2067,5 +2087,267 @@ function pwRecheck(silent) {
     hidePaywall();
     _pendingAnalysis = null;
     backToUploadTop();
+  });
+})();
+
+/* ═══════════════════  WHO MOGS: сравнение двух лиц  ═══════════════════ */
+(function initCompare(){
+  var A = null, B = null; // { canvas, box } — чистый canvas + рамка лица (норм.)
+  var lastResult = null;  // { a, b, winner, verdict }
+
+  function $(id){ return document.getElementById(id); }
+
+  // Открыть/закрыть режим сравнения (из меню).
+  window.fmOpenCompare = function(){
+    var menu = $("menuScreen");
+    if (menu){ menu.classList.remove("in"); setTimeout(function(){ menu.classList.add("hidden"); }, 420); }
+    document.body.classList.add("post-landing", "compare-mode");
+    $("uploadSection").classList.add("hidden");
+    $("analysisView").classList.add("hidden");
+    var cs = $("compareSection"); cs.classList.remove("hidden");
+    showSetup();
+  };
+  function backToMenuFromCompare(){
+    document.body.classList.remove("compare-mode");
+    $("compareSection").classList.add("hidden");
+    document.body.classList.remove("post-landing");
+    var menu = $("menuScreen");
+    if (menu){ menu.classList.remove("hidden"); requestAnimationFrame(function(){ menu.classList.add("in"); }); }
+  }
+
+  function showSetup(){ $("cmpSetup").classList.remove("hidden"); $("cmpResult").classList.add("hidden"); $("cmpLoading").classList.add("hidden"); }
+
+  // Детекция лица на изображении → {canvas, box(норм)} или null.
+  async function detectFace(img){
+    var fl = await initFaceLandmarker();
+    var cv = document.createElement("canvas");
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    cv.getContext("2d").drawImage(img, 0, 0);
+    var res = fl.detect(cv);
+    if (!res.faceLandmarks || !res.faceLandmarks.length) return { canvas: cv, box: null };
+    var raw = res.faceLandmarks[0], minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+    for (var i=0;i<raw.length;i++){ var p=raw[i]; if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
+    return { canvas: cv, box: { x:minx*cv.width, y:miny*cv.height, w:(maxx-minx)*cv.width, h:(maxy-miny)*cv.height } };
+  }
+
+  function loadInto(which, file){
+    if (!file || !file.type.startsWith("image/")) return;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var img = new Image();
+      img.onload = async function(){
+        var slot = which === "A" ? "cmpThumbA" : "cmpThumbB";
+        var ph   = which === "A" ? "cmpPhA" : "cmpPhB";
+        var imgEl= which === "A" ? "cmpImgA" : "cmpImgB";
+        $(imgEl).src = e.target.result;
+        $(ph).classList.add("hidden"); $(slot).classList.remove("hidden");
+        var res = await detectFace(img);
+        if (which === "A") A = res; else B = res;
+        cmpErr("");
+        if (A && B) $("cmpRunBtn").classList.remove("hidden");
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function cmpErr(msg){ var e=$("cmpErr"); if(!msg){ e.classList.add("hidden"); e.textContent=""; } else { e.textContent=msg; e.classList.remove("hidden"); } }
+
+  function runCompare(){
+    if (!A || !B){ cmpErr(t("cmpNeedTwo")); return; }
+    if (!A.box){ cmpErr(t("cmpNoFaceA")); return; }
+    if (!B.box){ cmpErr(t("cmpNoFaceB")); return; }
+    cmpErr("");
+    // Гейт: те же квоты/кредиты, что и анализ (1 кредит).
+    _afterGate = doCompare;
+    fetchStatus(false).then(function(st){
+      if (st.error === "auth"){ showPaywall("auth"); return; }
+      renderAccount(st);
+      if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0){ hidePaywall(); doCompare(); }
+      else if (!st.subscribed) showPaywall("sub");
+      else showPaywall("pay", st);
+    }).catch(function(){ doCompare(); });
+  }
+
+  function comparePrompt(){
+    var ru = lang() === "ru";
+    var langLine = ru ? "Пиши VERDICT на русском." : "Write the VERDICT in English.";
+    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. Rate each on the PSL 1-10 scale (one decimal, be discriminating, real spread), then decide who MOGS the other (higher overall aesthetics). Be brutally honest and witty. " + langLine + "\n\nReply STRICTLY in this plain format, nothing else:\nSCORE_A: 0.0\nSCORE_B: 0.0\nWINNER: A\nVERDICT: one punchy savage sentence on who mogs whom and why (max 18 words).";
+  }
+
+  function doCompare(){
+    $("cmpSetup").classList.add("hidden");
+    $("cmpLoading").classList.remove("hidden");
+    var acc = getAccount();
+    var images = [oneToBase64(A.canvas), oneToBase64(B.canvas)];
+    fetch(WORKER_URL, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ prompt: comparePrompt(), images: images, token: acc ? acc.token : null })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.error){ $("cmpLoading").classList.add("hidden"); showGate(d); $("compareSection").scrollIntoView({behavior:"smooth"}); return; }
+      var parsed = parseCompare(d.text || "");
+      if (parsed.a === null || parsed.b === null){ $("cmpLoading").classList.add("hidden"); showSetup(); cmpErr(t("cmpErrGen")); return; }
+      if (typeof d.creditsLeft !== "undefined") updateQuotaChip(d.freeLeft, d.creditsLeft, d.subscribed, d.unlimUntil);
+      lastResult = parsed;
+      buildCompareCard(parsed).then(function(){
+        $("cmpLoading").classList.add("hidden");
+        $("cmpResult").classList.remove("hidden");
+      });
+    }).catch(function(){ $("cmpLoading").classList.add("hidden"); showSetup(); cmpErr(t("cmpErrGen")); });
+  }
+
+  function parseCompare(txt){
+    function num(re){ var m = txt.match(re); return m ? parseFloat(m[1]) : null; }
+    var a = num(/SCORE_A:\s*(\d+(?:\.\d+)?)/i);
+    var b = num(/SCORE_B:\s*(\d+(?:\.\d+)?)/i);
+    var wm = txt.match(/WINNER:\s*([AB])/i);
+    var vm = txt.match(/VERDICT:\s*([\s\S]+?)(?:\n\s*\n|$)/i);
+    var winner = wm ? wm[1].toUpperCase() : (a!==null&&b!==null ? (a>=b?"A":"B") : "A");
+    return { a:a, b:b, winner:winner, verdict: vm ? vm[1].replace(/\s+/g," ").trim() : "" };
+  }
+
+  // Рисует лицо в квадратную ячейку, возвращает Y-координату глаз в ячейке.
+  function drawFaceCell(g, face, cx, cy, size){
+    var src = face.canvas, box = face.box;
+    g.save(); roundRect(g, cx, cy, size, size, 22); g.clip();
+    if (box){
+      var fcx = box.x + box.w/2, fcy = box.y + box.h*0.42;
+      var rh = box.h*2.05, rw = rh; // квадрат
+      if (rw > src.width){ rw = src.width; rh = rw; }
+      if (rh > src.height){ rh = src.height; rw = rh; }
+      var rx = Math.max(0, Math.min(fcx - rw/2, src.width - rw));
+      var ry = Math.max(0, Math.min(fcy - rh/2, src.height - rh));
+      g.drawImage(src, rx, ry, rw, rh, cx, cy, size, size);
+      g.restore();
+      var eyeSrcY = box.y + box.h*0.40;
+      return cy + (eyeSrcY - ry)/rh * size;
+    } else {
+      var s = Math.min(src.width, src.height);
+      g.drawImage(src, (src.width-s)/2, (src.height-s)/2, s, s, cx, cy, size, size);
+      g.restore();
+      return cy + size*0.42;
+    }
+  }
+
+  function buildCompareCard(res){
+    return new Promise(function(resolve){
+      var W = 1080, H = 1350;
+      var c = document.createElement("canvas"); c.width=W; c.height=H;
+      var cv = $("cmpCanvas"); cv.width=W; cv.height=H;
+      var g = cv.getContext("2d");
+      var GOLD="#c4a46b", GOLD_HI="#e8cf96", DIM="#8a7f6a";
+      function ls(px){ try{ g.letterSpacing=px+"px"; }catch(e){} }
+
+      g.fillStyle="#050505"; g.fillRect(0,0,W,H);
+      var glow=g.createRadialGradient(W/2,0,80,W/2,0,850);
+      glow.addColorStop(0,"rgba(196,164,107,0.10)"); glow.addColorStop(1,"rgba(196,164,107,0)");
+      g.fillStyle=glow; g.fillRect(0,0,W,850);
+      g.strokeStyle="rgba(196,164,107,0.35)"; g.lineWidth=2; roundRect(g,22,22,W-44,H-44,30); g.stroke();
+
+      // шапка
+      g.textAlign="left"; g.textBaseline="alphabetic"; g.font="bold 56px Georgia,serif"; ls(3);
+      var bw=g.measureText("FACERATE").width, pw=74, gp=22, sx=(W-(pw+gp+bw))/2;
+      drawBrandPill(g, sx+pw/2, 86, pw, 32);
+      var bg=g.createLinearGradient(0,58,0,104); bg.addColorStop(0,"#f4ead2"); bg.addColorStop(1,"#cbb789");
+      g.fillStyle=bg; g.fillText("FACERATE", sx+pw+gp, 104); ls(0);
+      g.textAlign="center"; g.font="26px Georgia,serif"; ls(8); g.fillStyle=GOLD;
+      g.fillText(t("cmpTitle").toUpperCase(), W/2, 150); ls(0);
+
+      // две ячейки
+      var size=390, gap=60, y=210;
+      var xA=(W-size*2-gap)/2, xB=xA+size+gap;
+      var eyeA=drawFaceCell(g, A, xA, y, size);
+      var eyeB=drawFaceCell(g, B, xB, y, size);
+      var winA = res.winner==="A";
+      // рамки: победитель — золото, проигравший — тускло
+      g.lineWidth=4; g.strokeStyle=winA?GOLD_HI:"rgba(120,120,120,0.5)"; roundRect(g,xA,y,size,size,22); g.stroke();
+      g.lineWidth=4; g.strokeStyle=!winA?GOLD_HI:"rgba(120,120,120,0.5)"; roundRect(g,xB,y,size,size,22); g.stroke();
+      // бейджи A/B
+      [["A",xA],["B",xB]].forEach(function(k){
+        g.fillStyle="rgba(0,0,0,0.7)"; roundRect(g,k[1]+14,y+14,54,40,10); g.fill();
+        g.fillStyle=GOLD_HI; g.font="26px Georgia,serif"; g.textAlign="center"; g.fillText(k[0], k[1]+41, y+42);
+      });
+      // MOGGED плашка на глазах проигравшего
+      var loserX = winA ? xB : xA, loserEyeY = winA ? eyeB : eyeA;
+      var barH=54, barPad=26;
+      g.fillStyle="#000"; g.fillRect(loserX+barPad, loserEyeY-barH/2, size-barPad*2, barH);
+      g.fillStyle="#ff2d2d"; g.font="bold 34px Georgia,serif"; g.textAlign="center"; ls(3);
+      g.fillText(t("cmpMogged"), loserX+size/2, loserEyeY+12); ls(0);
+
+      // баллы под ячейками
+      function scoreUnder(x, val, win){
+        g.textAlign="center";
+        g.font="300 88px Georgia,serif";
+        g.fillStyle = win ? GOLD_HI : "#9a9084";
+        g.fillText(Number(val).toFixed(1), x+size/2, y+size+96);
+      }
+      scoreUnder(xA, res.a, winA); scoreUnder(xB, res.b, !winA);
+
+      // VS в центре между
+      g.fillStyle=DIM; g.font="italic 40px Georgia,serif"; g.textAlign="center";
+      g.fillText("vs", W/2, y+size/2+14);
+
+      // заголовок вердикта: "A MOGS B"
+      var winLabel = res.winner + " " + t("cmpMogs") + " " + (winA?"B":"A");
+      var vy = y+size+190;
+      g.font="bold 72px Georgia,serif"; ls(2);
+      var vg=g.createLinearGradient(0,vy-60,0,vy); vg.addColorStop(0,"#f0dfae"); vg.addColorStop(1,"#b3924f");
+      g.fillStyle=vg; g.fillText(winLabel, W/2, vy); ls(0);
+
+      // строка вердикта (перенос)
+      g.font="34px Georgia,serif"; g.fillStyle="#c9bfad";
+      wrapText(g, res.verdict, W/2, vy+64, W-200, 46);
+
+      // футер
+      g.font="42px Georgia,serif"; ls(2);
+      var fg=g.createLinearGradient(0,H-92,0,H-52); fg.addColorStop(0,"#eddcab"); fg.addColorStop(1,"#b3924f");
+      g.fillStyle=fg; g.fillText("facerate.ru", W/2, H-58); ls(0);
+
+      resolve();
+    });
+  }
+
+  function wrapText(g, text, cx, y, maxW, lh){
+    var words=(text||"").split(" "), line="", lines=[];
+    for (var i=0;i<words.length;i++){
+      var test=line?line+" "+words[i]:words[i];
+      if (g.measureText(test).width>maxW && line){ lines.push(line); line=words[i]; } else line=test;
+    }
+    if (line) lines.push(line);
+    lines.slice(0,3).forEach(function(l,i){ g.fillText(l, cx, y+i*lh); });
+  }
+
+  function shareBlob(){ return new Promise(function(res){ $("cmpCanvas").toBlob(function(b){ res(b); }, "image/png"); }); }
+
+  // ── wiring ──
+  document.addEventListener("DOMContentLoaded", function(){
+    var tile=$("compareTile"); if(tile) tile.addEventListener("click", function(){ window.fmOpenCompare(); });
+    $("cmpBackBtn").addEventListener("click", backToMenuFromCompare);
+    $("cmpAgainBtn").addEventListener("click", function(){ A=null;B=null; $("cmpImgA").src=""; $("cmpImgB").src="";
+      $("cmpThumbA").classList.add("hidden"); $("cmpPhA").classList.remove("hidden");
+      $("cmpThumbB").classList.add("hidden"); $("cmpPhB").classList.remove("hidden");
+      $("cmpRunBtn").classList.add("hidden"); cmpErr(""); showSetup(); });
+    $("cmpSlotA").addEventListener("click", function(){ if(!A) $("cmpInputA").click(); });
+    $("cmpSlotB").addEventListener("click", function(){ if(!B) $("cmpInputB").click(); });
+    $("cmpInputA").addEventListener("change", function(e){ if(e.target.files[0]) loadInto("A", e.target.files[0]); });
+    $("cmpInputB").addEventListener("change", function(e){ if(e.target.files[0]) loadInto("B", e.target.files[0]); });
+    $("cmpRunBtn").addEventListener("click", runCompare);
+    $("cmpShareBtn").addEventListener("click", async function(){
+      var blob=await shareBlob(); var file=new File([blob],"facerate-mogs.png",{type:"image/png"});
+      if (navigator.canShare && navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file], text:t("cmpShareText")}); return; }catch(e){} }
+      var url=URL.createObjectURL(blob); var a=document.createElement("a"); a.href=url; a.download="facerate-mogs.png"; a.click(); URL.revokeObjectURL(url);
+    });
+    $("cmpTgBtn").addEventListener("click", async function(b){
+      var btn=this, acc=getAccount(); if(!acc){ backToUploadTop(); return; }
+      btn.disabled=true; btn.textContent=t("tgCardSending");
+      var blob=await shareBlob(); var fr=new FileReader();
+      fr.onload=function(){
+        fetch(WORKER_URL+"/sendcard",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({token:acc.token, image:String(fr.result).split(",")[1]})})
+        .then(function(r){return r.json();}).then(function(d){ btn.disabled=false; btn.textContent=d.ok?t("tgCardOk"):t("tgCardErr"); setTimeout(function(){btn.textContent=t("tgCard");},3500); })
+        .catch(function(){ btn.disabled=false; btn.textContent=t("tgCardErr"); });
+      };
+      fr.readAsDataURL(blob);
+    });
   });
 })();
