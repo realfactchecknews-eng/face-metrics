@@ -35,7 +35,8 @@ function enabledMethods(env) {
 }
 function packLabel(pack, L) { return L === 'ru' ? pack.label : pack.labelEn; }
 const IP_LIMIT_DAY = 40;                 // страховочный лимит по IP (анти-абьюз)
-const GLOBAL_DAILY_CAP = 300;            // потолок на весь сайт в сутки
+const GLOBAL_DAILY_CAP = 3000;           // потолок БЕСПЛАТНЫХ анализов в сутки (защита бюджета OpenRouter);
+                                          // на оплативших (unlim/кредиты) не действует — см. analyze()
 
 export default {
   async fetch(request, env) {
@@ -64,13 +65,9 @@ async function analyze(request, env) {
   try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
   if (!body.prompt) return cors('Missing prompt', 400);
 
-  // Глобальный потолок + страховка по IP.
+  // Страховка по IP (анти-абьюз) — касается всех, включая оплативших.
   const today = new Date().toISOString().slice(0, 10);
   if (env.RATE_LIMIT) {
-    const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
-    if (g >= GLOBAL_DAILY_CAP) {
-      return json({ error: 'global', text: 'Дневной лимит сервиса исчерпан. Загляните завтра.' });
-    }
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
     const ipKey = `d:${ip}:${today}`;
     const ipCnt = parseInt(await env.RATE_LIMIT.get(ipKey) || '0', 10);
@@ -98,6 +95,15 @@ async function analyze(request, env) {
     return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в день.', channel: CHANNEL });
   } else {
     return json({ error: 'pay', text: 'Бесплатный анализ на сегодня использован. Купи кредиты, чтобы продолжить.', packs: PACKS });
+  }
+
+  // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
+  // Не блокирует уже оплативших (unlim/paid), чтобы платёж не пропадал впустую при наплыве трафика.
+  if (env.RATE_LIMIT && mode === 'free') {
+    const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
+    if (g >= GLOBAL_DAILY_CAP) {
+      return json({ error: 'global', text: 'Дневной лимит бесплатных анализов исчерпан. Загляните завтра или купи кредиты.', packs: PACKS });
+    }
   }
 
   // Модель.
