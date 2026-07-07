@@ -22,7 +22,7 @@ const CHANNEL = '@wwwfacerateru';        // канал, подписка на к
 const FREE_PER_DAY = 1;                  // бесплатных анализов в день подписчику
 const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
 const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
-  p1: { type: 'credits', credits: 1, stars: 29,  rub: 49,  label: '1 анализ', labelEn: '1 analysis' },
+  p1: { type: 'credits', credits: 1, stars: 29,  rub: 50,  label: '1 анализ', labelEn: '1 analysis' }, // 50₽ — минималка Lava.top
   p5: { type: 'credits', credits: 5, stars: 99,  rub: 149, label: '5 анализов', labelEn: '5 analyses' },
   d1: { type: 'unlim',  hours: 24,   stars: 99,  rub: 149, label: 'Безлимит на день', labelEn: 'Day unlimited' },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
