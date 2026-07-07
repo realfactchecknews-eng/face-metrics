@@ -825,7 +825,12 @@ function supMenuKb(L, isAdmin) {
   return { inline_keyboard: rows };
 }
 
-// ─── Админ-панель модератора (только SUPPORT_ADMIN_ID) ───
+// ─── Админ-панель модератора (SUPPORT_ADMIN_ID — один id или несколько через запятую) ───
+function adminIds(env) {
+  return String(env.SUPPORT_ADMIN_ID || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+function isAdminId(env, id) { return adminIds(env).includes(String(id)); }
+
 function adminPanelKb() {
   return { inline_keyboard: [
     [{ text: '📂 Открытые чаты', callback_data: 'admtickets' }],
@@ -893,14 +898,17 @@ async function supportAI(env, question, L) {
 
 async function forwardToAdmin(env, msg, L) {
   const b = SUP[L];
-  if (!env.SUPPORT_ADMIN_ID) { await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.noAdmin }); return; }
+  const ids = adminIds(env);
+  if (!ids.length) { await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.noAdmin }); return; }
   const u = msg.from;
   await addTicket(env, u, msg.text || '[нетекстовое сообщение]');
-  const sent = await supportApi(env, 'sendMessage', {
-    chat_id: env.SUPPORT_ADMIN_ID,
-    text: `💬 ${u.first_name || ''} @${u.username || ''} (id ${u.id}):\n\n${msg.text || '[нетекстовое сообщение]'}\n\n↩️ Ответь реплаем, или открой «📂 Открытые чаты» в /admin.`,
-  });
-  if (sent.ok) await env.RATE_LIMIT.put(`supmap:${sent.result.message_id}`, String(u.id), { expirationTtl: 60 * 60 * 24 * 3 });
+  for (const admin of ids) {
+    const sent = await supportApi(env, 'sendMessage', {
+      chat_id: admin,
+      text: `💬 ${u.first_name || ''} @${u.username || ''} (id ${u.id}):\n\n${msg.text || '[нетекстовое сообщение]'}\n\n↩️ Ответь реплаем, или открой «📂 Открытые чаты» в /admin.`,
+    });
+    if (sent.ok) await env.RATE_LIMIT.put(`supmap:${admin}:${sent.result.message_id}`, String(u.id), { expirationTtl: 60 * 60 * 24 * 3 });
+  }
   await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.sent });
 }
 
@@ -938,7 +946,7 @@ async function supportWebhook(request, env) {
     const cq = upd.callback_query;
     const chat = cq.message.chat.id, fromId = String(cq.from.id), data = cq.data || '';
     await supportApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
-    const isAdmin = env.SUPPORT_ADMIN_ID && fromId === String(env.SUPPORT_ADMIN_ID);
+    const isAdmin = isAdminId(env, fromId);
     let L = await userLang(env, cq.from.id);
     if (data === 'lang:ru' || data === 'lang:en') {
       L = data.slice(5);
@@ -951,10 +959,13 @@ async function supportWebhook(request, env) {
     } else if (data === 'human') {
       await env.RATE_LIMIT.put(`suphuman:${fromId}`, '1', { expirationTtl: 60 * 60 * 24 });
       await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].humanOn });
-      if (env.SUPPORT_ADMIN_ID) {
+      const ids = adminIds(env);
+      if (ids.length) {
         const u = cq.from;
         await addTicket(env, u, '(нажал «Позвать оператора»)');
-        await supportApi(env, 'sendMessage', { chat_id: env.SUPPORT_ADMIN_ID, text: `🆘 ${u.first_name || ''} @${u.username || ''} (id ${fromId}) просит оператора.`, reply_markup: { inline_keyboard: [[{ text: '💬 Открыть чат', callback_data: `admopen:${fromId}` }]] } });
+        for (const admin of ids) {
+          await supportApi(env, 'sendMessage', { chat_id: admin, text: `🆘 ${u.first_name || ''} @${u.username || ''} (id ${fromId}) просит оператора.`, reply_markup: { inline_keyboard: [[{ text: '💬 Открыть чат', callback_data: `admopen:${fromId}` }]] } });
+        }
       }
     } else if (data === 'admin' && isAdmin) {
       await supportApi(env, 'sendMessage', { chat_id: chat, text: '⚙️ Панель модератора:', reply_markup: adminPanelKb() });
@@ -982,12 +993,12 @@ async function supportWebhook(request, env) {
 
   const msg = upd.message;
   if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
-  const adminId = String(env.SUPPORT_ADMIN_ID || '');
   const fromId = String(msg.from.id);
+  const adminId = fromId; // используем chat_id самого пишущего админа для ответов ему
   const L = await userLang(env, msg.from.id);
   const text = (msg.text || '').trim();
 
-  const isAdmin = adminId && fromId === adminId;
+  const isAdmin = isAdminId(env, fromId);
 
   if (isAdmin && (text === '/admin')) {
     await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: '⚙️ Панель модератора:', reply_markup: adminPanelKb() });
@@ -1016,7 +1027,7 @@ async function supportWebhook(request, env) {
   }
   // Ответ оператора реплаем (старый способ, всё ещё работает) → пересылаем пользователю.
   if (isAdmin && msg.reply_to_message) {
-    const uid = await env.RATE_LIMIT.get(`supmap:${msg.reply_to_message.message_id}`);
+    const uid = await env.RATE_LIMIT.get(`supmap:${adminId}:${msg.reply_to_message.message_id}`);
     if (uid) {
       const uL = await userLang(env, uid);
       await supportApi(env, 'sendMessage', { chat_id: uid, text: (uL === 'ru' ? '🛠 Поддержка: ' : '🛠 Support: ') + text });
