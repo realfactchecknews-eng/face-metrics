@@ -111,6 +111,7 @@ var I18N = {
     chipUnlim: "👑 Unlimited until ",
     gateHint: "After subscribing, come back and press “Analyze” again.",
     invoiceCreating: "Creating invoice…", invoiceOpening: "Opening Telegram…", invoiceErr: "Error, try again", netErr: "Network unavailable",
+    pwPickMethod: "Choose payment method", payStars: "⭐ Telegram Stars", payCard: "💳 Card (RUB)", payCrypto: "🪙 Crypto", pwBack: "← Back",
     histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
     histAvg: "Average score: ", histCount: " · analyses: ",
     howHtml: "<div class='how'>" +
@@ -194,6 +195,7 @@ var I18N = {
     chipUnlim: "👑 Безлимит до ",
     gateHint: "После подписки вернись и нажми «Анализировать» ещё раз.",
     invoiceCreating: "Создаю счёт…", invoiceOpening: "Открываю Telegram…", invoiceErr: "Ошибка, ещё раз", netErr: "Сеть недоступна",
+    pwPickMethod: "Выбери способ оплаты", payStars: "⭐ Telegram Stars", payCard: "💳 Картой (₽)", payCrypto: "🪙 Криптой", pwBack: "← Назад",
     histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
     histAvg: "Средний балл: ", histCount: " · оценок: ",
     howHtml: "<div class='how'>" +
@@ -1936,13 +1938,13 @@ function refreshAccount() {
 // Покупка кредитов: воркер создаёт Stars-инвойс, открываем в Telegram.
 // location.href вместо window.open — попап после fetch блокируется на мобилах
 // (из-за этого кнопки покупки казались «некликабельными»).
-function buyPack(pack, btn) {
+function buyPack(pack, btn, payMethod) {
   var acc = getAccount();
   if (!acc) { backToUploadTop(); return; }
   if (btn) { btn.disabled = true; btn.textContent = t("invoiceCreating"); }
   fetch(WORKER_URL + "/buy", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang() }),
+    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang(), method: payMethod || "stars" }),
   }).then(function(r){ return r.json(); }).then(function(d){
     if (btn) btn.disabled = false;
     if (d.error || !d.link) { if (btn) btn.textContent = t("invoiceErr"); return; }
@@ -2046,12 +2048,24 @@ function showPaywall(state, st) {
     title.textContent = t("pwPayTitle");
     sub.textContent = t("pwPaySub");
     var packs = (st && st.packs) || {
-      p1: { label: "1 анализ", stars: 30 }, p5: { label: "5 анализов", stars: 100 },
-      d1: { label: "Безлимит на день", stars: 100 }, m1: { label: "Безлимит на месяц", stars: 500 },
+      p1: { label: "1 анализ", stars: 30, rub: 99 }, p5: { label: "5 анализов", stars: 100, rub: 299 },
+      d1: { label: "Безлимит на день", stars: 100, rub: 299 }, m1: { label: "Безлимит на месяц", stars: 500, rub: 990 },
     };
-    btn(t("packP1") + " — " + packs.p1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("p1", b); });
-    if (packs.d1) btn("🔥 " + t("packD1") + " — " + packs.d1.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack("d1", b); });
-    if (packs.m1) btn("👑 " + t("packM1") + " — " + packs.m1.stars + "⭐/mo <i class='pw-hit'>top</i>", "pw-btn pw-btn-main", function(b){ buyPack("m1", b); });
+    // Шаг 2: выбор способа оплаты для конкретного пакета.
+    function pickMethod(id, label) {
+      var p = packs[id]; if (!p) return;
+      actions.innerHTML = "";
+      title.textContent = t("pwPickMethod"); sub.textContent = label;
+      btn(t("payStars") + " — " + p.stars + "⭐", "pw-btn pw-btn-main", function(b){ buyPack(id, b, "stars"); });
+      if (p.rub) btn(t("payCard") + " — " + p.rub + "₽", "pw-btn pw-btn-main", function(b){ buyPack(id, b, "rub"); });
+      if (p.rub) btn(t("payCrypto") + " — " + p.rub + "₽", "pw-btn pw-btn-main", function(b){ buyPack(id, b, "crypto"); });
+      btn(t("pwBack"), "pw-btn pw-btn-ghost", function(){ showPaywall("pay", st); });
+    }
+    // Шаг 1: выбор пакета.
+    btn(t("packP1") + " — " + packs.p1.stars + "⭐", "pw-btn pw-btn-main", function(){ pickMethod("p1", t("packP1")); });
+    if (packs.p5) btn(t("packP5") + " — " + packs.p5.stars + "⭐", "pw-btn pw-btn-main", function(){ pickMethod("p5", t("packP5")); });
+    if (packs.d1) btn("🔥 " + t("packD1") + " — " + packs.d1.stars + "⭐", "pw-btn pw-btn-main", function(){ pickMethod("d1", t("packD1")); });
+    if (packs.m1) btn("👑 " + t("packM1") + " — " + packs.m1.stars + "⭐ <i class='pw-hit'>top</i>", "pw-btn pw-btn-main", function(){ pickMethod("m1", t("packM1")); });
     btn(t("pwPaid"), "pw-btn pw-btn-ghost", function(b){
       b.textContent = t("pwChecking"); pwRecheck();
     });

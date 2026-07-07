@@ -4,19 +4,25 @@
 //   POST /            — анализ (нужен token сессии; 1 free/день за подписку на канал, дальше кредиты)
 //   POST /auth        — вход через Telegram Login Widget (проверка hash)
 //   POST /me          — статус аккаунта (квота, кредиты, подписка)
-//   POST /buy         — создать Stars-инвойс (createInvoiceLink)
-//   POST /tg-webhook  — вебхук бота: pre_checkout_query + successful_payment
+//   POST /buy            — создать инвойс: method=stars|rub|crypto (по умолчанию stars)
+//   POST /tg-webhook     — вебхук бота: pre_checkout_query + successful_payment
+//   POST /crypto-webhook — вебхук CryptoBot: invoice_paid → начисление
 //
-// Секреты: OPENROUTER_API_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET. KV: RATE_LIMIT.
+// Секреты: OPENROUTER_API_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
+//          YUKASSA_PROVIDER_TOKEN (карты РФ через Telegram), CRYPTOBOT_TOKEN (Crypto Pay API).
+// KV: RATE_LIMIT.
 
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/день
 const FREE_PER_DAY = 1;                  // бесплатных анализов в день подписчику
 const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
-const PACKS = {                          // тарифы за Stars (XTR)
-  p1: { type: 'credits', credits: 1, stars: 30,  label: '1 анализ', labelEn: '1 analysis' },
-  p5: { type: 'credits', credits: 5, stars: 100, label: '5 анализов', labelEn: '5 analyses' },
-  d1: { type: 'unlim',  hours: 24,   stars: 100, label: 'Безлимит на день', labelEn: 'Day unlimited' },
-  m1: { type: 'sub',    stars: 500,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', period: 2592000 },
+const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
+  p1: { type: 'credits', credits: 1, stars: 30,  rub: 99,  label: '1 анализ', labelEn: '1 analysis' },
+  p5: { type: 'credits', credits: 5, stars: 100, rub: 299, label: '5 анализов', labelEn: '5 analyses' },
+  d1: { type: 'unlim',  hours: 24,   stars: 100, rub: 299, label: 'Безлимит на день', labelEn: 'Day unlimited' },
+  // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
+  // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
+  // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
+  m1: { type: 'unlim',  hours: 720,  stars: 500, rub: 990, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
 };
 function packLabel(pack, L) { return L === 'ru' ? pack.label : pack.labelEn; }
 const IP_LIMIT_DAY = 40;                 // страховочный лимит по IP (анти-абьюз)
@@ -29,6 +35,7 @@ export default {
     const path = new URL(request.url).pathname;
     try {
       if (path === '/tg-webhook') return await tgWebhook(request, env);
+      if (path === '/crypto-webhook') return await cryptoWebhook(request, env);
       if (path === '/auth')       return await authTg(request, env);
       if (path === '/authpoll')   return await authPoll(request, env);
       if (path === '/me')         return await me(request, env);
@@ -230,8 +237,16 @@ async function buy(request, env) {
   if (!sess) return json({ error: 'auth', text: 'Сначала войдите через Telegram.' });
   const pack = PACKS[body.pack];
   if (!pack) return json({ error: 'pack', text: 'Неизвестный пакет.' });
+  const L = body.lang === 'ru' ? 'ru' : 'en';
+  const method = body.method || 'stars';
 
-  const d = await createInvoice(env, sess.id, body.pack, body.lang === 'ru' ? 'ru' : 'en');
+  if (method === 'crypto') {
+    const d = await createCryptoInvoice(env, sess.id, body.pack, L);
+    if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.error || '') });
+    return json({ link: d.link });
+  }
+  // stars | rub — оба через Telegram createInvoiceLink (для rub нужен provider_token)
+  const d = await createInvoice(env, sess.id, body.pack, L, method);
   if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.description || '') });
   return json({ link: d.result });
 }
@@ -254,18 +269,20 @@ async function sendCard(request, env) {
   return json({ ok: true });
 }
 
-// Создание Stars-инвойса (ссылкой). Для месячного тарифа — подписка с автопродлением.
-async function createInvoice(env, tgid, packId, L) {
+// Создание инвойса-ссылки через Telegram. method: 'stars' (XTR) | 'rub' (карта РФ, ЮKassa).
+async function createInvoice(env, tgid, packId, L, method = 'stars') {
   const pack = PACKS[packId];
+  const unlimRu = pack.hours >= 720 ? 'на месяц' : pack.hours >= 168 ? 'на неделю' : 'на 24 часа';
+  const unlimEn = pack.hours >= 720 ? 'for a month' : pack.hours >= 168 ? 'for a week' : 'for 24 hours';
   const descRu = pack.type === 'credits'
     ? `${pack.credits} AI-анализ(а) лица на facerate.ru`
     : pack.type === 'unlim'
-      ? 'Безлимитные анализы на 24 часа на facerate.ru'
+      ? `Безлимитные анализы ${unlimRu} на facerate.ru`
       : 'Безлимитные анализы на месяц (автопродление, отмена в любой момент)';
   const descEn = pack.type === 'credits'
     ? `${pack.credits} AI face analyses on facerate.ru`
     : pack.type === 'unlim'
-      ? 'Unlimited analyses for 24 hours on facerate.ru'
+      ? `Unlimited analyses ${unlimEn} on facerate.ru`
       : 'Unlimited analyses for a month (auto-renews, cancel anytime)';
   const req = {
     title: `FaceRate: ${packLabel(pack, L)}`,
@@ -274,9 +291,76 @@ async function createInvoice(env, tgid, packId, L) {
     currency: 'XTR',
     prices: [{ label: packLabel(pack, L), amount: pack.stars }],
   };
-  if (pack.type === 'sub') req.subscription_period = pack.period;
+  if (method === 'rub') {
+    // Карта РФ через ЮKassa: рубли в копейках + provider_token из BotFather.
+    req.currency = 'RUB';
+    req.provider_token = env.YUKASSA_PROVIDER_TOKEN;
+    req.prices = [{ label: packLabel(pack, L), amount: pack.rub * 100 }];
+    // Если ЮKassa требует фискальный чек (54-ФЗ) — добавь req.provider_data
+    // с receipt (см. доку ЮKassa) и need_email/send_email_to_provider.
+  } else if (pack.type === 'sub') {
+    req.subscription_period = pack.period;
+  }
   const r = await tgApi(env, 'createInvoiceLink', req);
   return r;
+}
+
+// ─────────────────────────── CryptoBot (Crypto Pay API) ───────────────────────────
+// createInvoice в фиате RUB — оплата любой поддержанной криптой, курс считает CryptoBot.
+async function createCryptoInvoice(env, tgid, packId, L) {
+  const pack = PACKS[packId];
+  const descRu = pack.type === 'credits' ? `${pack.credits} AI-анализ(а) на facerate.ru`
+    : pack.hours >= 720 ? 'Безлимит на месяц на facerate.ru' : 'Безлимит на день на facerate.ru';
+  const descEn = pack.type === 'credits' ? `${pack.credits} AI analyses on facerate.ru`
+    : pack.hours >= 720 ? 'Month unlimited on facerate.ru' : 'Day unlimited on facerate.ru';
+  const r = await cryptoApi(env, 'createInvoice', {
+    currency_type: 'fiat',
+    fiat: 'RUB',
+    amount: String(pack.rub),
+    description: L === 'ru' ? descRu : descEn,
+    payload: JSON.stringify({ tgid, pack: packId }),
+    paid_btn_name: 'openBot',
+    paid_btn_url: 'https://t.me/' + (env.BOT_USERNAME || 'facerate_bot'),
+    expires_in: 3600,
+  });
+  if (!r.ok) return { ok: false, error: r.error?.name || JSON.stringify(r.error || 'error') };
+  return { ok: true, link: r.result.pay_url || r.result.bot_invoice_url };
+}
+
+function cryptoApi(env, method, body) {
+  return fetch('https://pay.crypt.bot/api/' + method, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Crypto-Pay-API-Token': env.CRYPTOBOT_TOKEN },
+    body: JSON.stringify(body),
+  }).then(r => r.json()).catch(e => ({ ok: false, error: { name: e.message } }));
+}
+
+// Вебхук CryptoBot: подпись — HMAC-SHA256(тело, SHA256(token)) в заголовке crypto-pay-api-signature.
+async function cryptoWebhook(request, env) {
+  const raw = await request.text();
+  const sig = request.headers.get('crypto-pay-api-signature') || '';
+  const enc = new TextEncoder();
+  const secret = await crypto.subtle.digest('SHA-256', enc.encode(env.CRYPTOBOT_TOKEN));
+  const key = await crypto.subtle.importKey('raw', secret, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(raw));
+  const hex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).join('');
+  if (hex !== sig) return new Response('forbidden', { status: 403 });
+
+  let upd; try { upd = JSON.parse(raw); } catch { return new Response('ok'); }
+  if (upd.update_type !== 'invoice_paid') return new Response('ok');
+  try {
+    const payload = JSON.parse(upd.payload.payload);
+    const tgid = payload.tgid;
+    const pack = PACKS[payload.pack];
+    // Идемпотентность: один invoice начисляем один раз.
+    const seenKey = `cryptopaid:${upd.payload.invoice_id}`;
+    if (await env.RATE_LIMIT.get(seenKey)) return new Response('ok');
+    await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
+    const L = await userLang(env, tgid);
+    const note = await grantPack(env, tgid, pack, L);
+    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note), reply_markup: menuKb(L) });
+  } catch { /* payload сломан — игнор */ }
+  return new Response('ok');
 }
 
 function tgApi(env, method, body) {
@@ -300,7 +384,7 @@ const BL = {
     kbBack: '← Menu',
     shopTitle: '⭐ What are we getting?',
     shop1: (s) => `1 analysis — ${s}⭐`, shop5: (s) => `5 — ${s}⭐`,
-    shopD: (s) => `🔥 Day unlimited — ${s}⭐`, shopM: (s) => `👑 Month unlimited — ${s}⭐/mo`,
+    shopD: (s) => `🔥 Day unlimited — ${s}⭐`, shopM: (s) => `👑 Month unlimited — ${s}⭐`,
     loginOk: '✅ Logged in! Go back to the site — the page will pick up your account automatically.',
     hello: '🖤 FaceRate — AI face rating by looksmaxxing canons.\n\nSubscribe to ' + CHANNEL + ' = 1 free analysis per day.',
     statusHead: '💎 Your status:\n',
@@ -311,6 +395,9 @@ const BL = {
     subDesc: 'Month unlimited. Auto-renews — cancel anytime in Telegram settings.',
     packDesc: (l) => l + ' on facerate.ru',
     invoiceFail: (e) => 'Could not create invoice: ' + e,
+    payPick: 'How would you like to pay?',
+    payStars: '⭐ Telegram Stars', payCard: '💳 Card (RUB)', payCrypto: '🪙 Crypto',
+    cryptoBtn: '🪙 Pay in crypto',
     promoAsk: '🎁 Send the promo code as one message:',
     mysubActive: (d) => `👑 Unlimited active until ${d}.`,
     mysubRec: '\n\n🔄 Auto-renewal is ON. Turn off: Telegram settings → My Stars → subscriptions (or the button below).',
@@ -344,7 +431,7 @@ const BL = {
     kbBack: '← Меню',
     shopTitle: '⭐ Что берём?',
     shop1: (s) => `1 анализ — ${s}⭐`, shop5: (s) => `5 — ${s}⭐`,
-    shopD: (s) => `🔥 Безлимит на день — ${s}⭐`, shopM: (s) => `👑 Безлимит на месяц — ${s}⭐/мес`,
+    shopD: (s) => `🔥 Безлимит на день — ${s}⭐`, shopM: (s) => `👑 Безлимит на месяц — ${s}⭐`,
     loginOk: '✅ Вход выполнен! Возвращайся на сайт — страница подхватит аккаунт сама.',
     hello: '🖤 FaceRate — AI-оценка лица по канонам луксмаксинга.\n\nПодписка на ' + CHANNEL + ' = 1 бесплатный анализ в день.',
     statusHead: '💎 Твой статус:\n',
@@ -355,6 +442,9 @@ const BL = {
     subDesc: 'Безлимит на месяц. Автопродление — отключается в настройках Telegram в любой момент.',
     packDesc: (l) => l + ' на facerate.ru',
     invoiceFail: (e) => 'Не удалось выставить счёт: ' + e,
+    payPick: 'Как удобнее оплатить?',
+    payStars: '⭐ Telegram Stars', payCard: '💳 Картой (₽)', payCrypto: '🪙 Криптой',
+    cryptoBtn: '🪙 Оплатить криптой',
     promoAsk: '🎁 Отправь промокод одним сообщением:',
     mysubActive: (d) => `👑 Безлимит активен до ${d}.`,
     mysubRec: '\n\n🔄 Автопродление ВКЛЮЧЕНО. Отключить: настройки Telegram → Мои звёзды → подписки (или кнопкой ниже).',
@@ -517,9 +607,26 @@ async function handleCallback(env, cq) {
   } else if (data === 'shop') {
     await tgApi(env, 'sendMessage', { chat_id: chat, text: b.shopTitle, reply_markup: shopKb(L) });
   } else if (data.startsWith('buy:')) {
+    // Шаг 1: выбор способа оплаты для пакета.
     const packId = data.slice(4);
-    if (PACKS[packId]) {
-      const pack = PACKS[packId];
+    const pack = PACKS[packId];
+    if (pack) {
+      const rows = [[{ text: `${b.payStars} — ${pack.stars}⭐`, callback_data: `pay:${packId}:stars` }]];
+      if (env.YUKASSA_PROVIDER_TOKEN) rows.push([{ text: `${b.payCard} — ${pack.rub}₽`, callback_data: `pay:${packId}:rub` }]);
+      if (env.CRYPTOBOT_TOKEN) rows.push([{ text: `${b.payCrypto} — ${pack.rub}₽`, callback_data: `pay:${packId}:crypto` }]);
+      rows.push([{ text: b.kbBack, callback_data: 'shop' }]);
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: `${b.payPick}\n${packLabel(pack, L)}`, reply_markup: { inline_keyboard: rows } });
+    }
+  } else if (data.startsWith('pay:')) {
+    // Шаг 2: выставление счёта выбранным способом.
+    const [, packId, method] = data.split(':');
+    const pack = PACKS[packId];
+    if (!pack) return;
+    if (method === 'crypto') {
+      const d = await createCryptoInvoice(env, tgid, packId, L);
+      if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.cryptoBtn, url: d.link }]] } });
+      else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
+    } else {
       const inv = {
         chat_id: chat,
         title: `FaceRate: ${packLabel(pack, L)}`,
@@ -528,7 +635,13 @@ async function handleCallback(env, cq) {
         currency: 'XTR',
         prices: [{ label: packLabel(pack, L), amount: pack.stars }],
       };
-      if (pack.type === 'sub') inv.subscription_period = pack.period;
+      if (method === 'rub') {
+        inv.currency = 'RUB';
+        inv.provider_token = env.YUKASSA_PROVIDER_TOKEN;
+        inv.prices = [{ label: packLabel(pack, L), amount: pack.rub * 100 }];
+      } else if (pack.type === 'sub') {
+        inv.subscription_period = pack.period;
+      }
       const r = await tgApi(env, 'sendInvoice', inv);
       if (!r.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(r.description || '') });
     }
@@ -623,24 +736,35 @@ async function handlePayment(env, msg, L) {
       const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
       await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + payload.credits));
       note = b.payCredits(payload.credits);
-    } else if (pack?.type === 'credits') {
-      const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
-      await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + pack.credits));
-      note = b.payCredits(pack.credits);
-    } else if (pack?.type === 'unlim') {
-      const cur = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
-      const until = Math.max(cur, Date.now()) + pack.hours * 3600 * 1000;
-      await env.RATE_LIMIT.put(`unlim:${tgid}`, String(until));
-      note = b.payUnlim(fmtDate(until, L || 'en'));
-    } else if (pack?.type === 'sub') {
-      const until = (sp.subscription_expiration_date ? sp.subscription_expiration_date * 1000 : Date.now() + 30 * 24 * 3600 * 1000);
-      await env.RATE_LIMIT.put(`unlim:${tgid}`, String(until));
-      await env.RATE_LIMIT.put(`subchg:${tgid}`, sp.telegram_payment_charge_id || '');
-      await env.RATE_LIMIT.put(`subrec:${tgid}`, sp.is_recurring ? '1' : '0');
-      note = b.paySub(fmtDate(until, L || 'en')) + (sp.is_recurring ? b.payRec : '');
+    } else {
+      note = await grantPack(env, tgid, pack, L, sp);
     }
     await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note), reply_markup: menuKb(L || 'en') });
   } catch { /* payload сломан — молча игнор */ }
+}
+
+// Начисление тарифа. sp — successful_payment (только для Stars-подписки), может отсутствовать.
+async function grantPack(env, tgid, pack, L, sp) {
+  const b = BL[L || 'en'];
+  if (pack?.type === 'credits') {
+    const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+    await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + pack.credits));
+    return b.payCredits(pack.credits);
+  }
+  if (pack?.type === 'unlim') {
+    const cur = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
+    const until = Math.max(cur, Date.now()) + pack.hours * 3600 * 1000;
+    await env.RATE_LIMIT.put(`unlim:${tgid}`, String(until));
+    return b.payUnlim(fmtDate(until, L || 'en'));
+  }
+  if (pack?.type === 'sub') {
+    const until = (sp?.subscription_expiration_date ? sp.subscription_expiration_date * 1000 : Date.now() + 30 * 24 * 3600 * 1000);
+    await env.RATE_LIMIT.put(`unlim:${tgid}`, String(until));
+    await env.RATE_LIMIT.put(`subchg:${tgid}`, sp?.telegram_payment_charge_id || '');
+    await env.RATE_LIMIT.put(`subrec:${tgid}`, sp?.is_recurring ? '1' : '0');
+    return b.paySub(fmtDate(until, L || 'en')) + (sp?.is_recurring ? b.payRec : '');
+  }
+  return '';
 }
 
 // ─────────────────────────── Утилиты ───────────────────────────
