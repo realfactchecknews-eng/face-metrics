@@ -391,6 +391,7 @@ const BL = {
     menu: 'FaceRate menu:',
     kbStatus: '💎 My status', kbShop: '⭐ Buy analyses / unlimited', kbPromo: '🎁 Enter promo code',
     kbSub: '🔄 My subscription', kbGw: '🎉 Giveaways', kbSite: '🌐 Open FaceRate', kbLang: '🌍 Язык: Русский',
+    kbSupport: '💬 Support',
     kbBack: '← Menu',
     shopTitle: '⭐ What are we getting?',
     shop1: (s) => `1 analysis — ${s}⭐`, shop5: (s) => `5 — ${s}⭐`,
@@ -438,6 +439,7 @@ const BL = {
     menu: 'Меню FaceRate:',
     kbStatus: '💎 Мой статус', kbShop: '⭐ Купить анализы / безлимит', kbPromo: '🎁 Ввести промокод',
     kbSub: '🔄 Моя подписка', kbGw: '🎉 Розыгрыши', kbSite: '🌐 Открыть FaceRate', kbLang: '🌍 Language: English',
+    kbSupport: '💬 Поддержка',
     kbBack: '← Меню',
     shopTitle: '⭐ Что берём?',
     shop1: (s) => `1 анализ — ${s}⭐`, shop5: (s) => `5 — ${s}⭐`,
@@ -494,7 +496,7 @@ function menuKb(L) {
     [{ text: b.kbShop, callback_data: 'shop' }],
     [{ text: b.kbPromo, callback_data: 'promo' }],
     [{ text: b.kbSub, callback_data: 'mysub' }, { text: b.kbGw, callback_data: 'gw' }],
-    [{ text: b.kbSite, url: 'https://facerate.ru' }],
+    [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbSupport, url: 'https://t.me/FaceRateSupport_bot' }],
     [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
   ]};
 }
@@ -783,18 +785,37 @@ async function grantPack(env, tgid, pack, L, sp) {
 // ─────────────────────────── Бот техподдержки (отдельный токен) ───────────────────────────
 const SUP = {
   en: {
-    hello: '👋 FaceRate Support. Ask your question — I’ll answer right away. If I can’t help, tap “Call an operator”.',
-    human: '🧑 Call an operator', humanOn: '✅ Passed to an operator. Write your question — a human will reply here.',
+    hello: '👋 FaceRate Support. Ask your question — I’ll answer right away. Or pick an option below.',
+    menu: 'How can I help?',
+    human: '🧑 Call an operator', kbFaq: '📖 FAQ', kbSite: '🌐 Open FaceRate', kbBuy: '⭐ Buy / prices',
+    kbLang: '🌍 Язык: Русский', kbBack: '← Menu',
+    humanOn: '✅ Passed to an operator. Write your question — a human will reply here.',
     sent: '✅ Sent to the operator. Please wait for a reply.',
     noAdmin: 'Operator is temporarily unavailable, please try later.',
+    langSet: '🌍 Language set: English.',
+    faq: '❓ FAQ\n\n• Free analysis — subscribe to @wwwfacerateru (1/day).\n• Paid — Telegram Stars or crypto in the payments bot.\n• No access after paying? Refresh facerate.ru; if it persists — tap “Call an operator”.\n• Promo codes — button in the payments bot; codes drop in channel giveaways.\n• Privacy — your photo is used only for the analysis and is not published.\n\nStill stuck? Just type your question here.',
   },
   ru: {
-    hello: '👋 Поддержка FaceRate. Задай вопрос — отвечу сразу. Если не помогу, жми «Позвать оператора».',
-    human: '🧑 Позвать оператора', humanOn: '✅ Передаю оператору. Опиши вопрос — человек ответит здесь.',
+    hello: '👋 Поддержка FaceRate. Задай вопрос — отвечу сразу. Или выбери пункт ниже.',
+    menu: 'Чем помочь?',
+    human: '🧑 Позвать оператора', kbFaq: '📖 FAQ', kbSite: '🌐 Открыть FaceRate', kbBuy: '⭐ Купить / тарифы',
+    kbLang: '🌍 Language: English', kbBack: '← Меню',
+    humanOn: '✅ Передаю оператору. Опиши вопрос — человек ответит здесь.',
     sent: '✅ Отправлено оператору. Дождись ответа.',
     noAdmin: 'Оператор временно недоступен, попробуй позже.',
+    langSet: '🌍 Язык переключён: русский.',
+    faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в день).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
   },
 };
+function supMenuKb(L) {
+  const b = SUP[L];
+  return { inline_keyboard: [
+    [{ text: b.kbFaq, callback_data: 'faq' }],
+    [{ text: b.human, callback_data: 'human' }],
+    [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbBuy, url: 'https://t.me/faceratepay_bot' }],
+    [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
+  ]};
+}
 const SUP_FAQ = {
   ru: `Ты — вежливый саппорт сервиса FaceRate (facerate.ru) — это AI-оценка лица по канонам луксмаксинга (сайт + Telegram-бот).
 Факты:
@@ -849,15 +870,23 @@ async function supportWebhook(request, env) {
   }
   let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
 
-  // Кнопка «Позвать оператора».
+  // Кнопки меню саппорт-бота.
   if (upd.callback_query) {
     const cq = upd.callback_query;
-    const fromId = String(cq.from.id);
-    const L = await userLang(env, cq.from.id);
+    const chat = cq.message.chat.id, fromId = String(cq.from.id), data = cq.data || '';
     await supportApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
-    if (cq.data === 'human') {
+    let L = await userLang(env, cq.from.id);
+    if (data === 'lang:ru' || data === 'lang:en') {
+      L = data.slice(5);
+      await env.RATE_LIMIT.put(`lang:${fromId}`, L);
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].langSet, reply_markup: supMenuKb(L) });
+    } else if (data === 'menu') {
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].menu, reply_markup: supMenuKb(L) });
+    } else if (data === 'faq') {
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].faq, reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] } });
+    } else if (data === 'human') {
       await env.RATE_LIMIT.put(`suphuman:${fromId}`, '1', { expirationTtl: 60 * 60 * 24 });
-      await supportApi(env, 'sendMessage', { chat_id: cq.message.chat.id, text: SUP[L].humanOn });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].humanOn });
       if (env.SUPPORT_ADMIN_ID) {
         const u = cq.from;
         await supportApi(env, 'sendMessage', { chat_id: env.SUPPORT_ADMIN_ID, text: `🆘 ${u.first_name || ''} @${u.username || ''} (id ${fromId}) просит оператора. Его сообщения будут приходить сюда — отвечай реплаем. Закрыть диалог: /close ${fromId}` });
@@ -890,8 +919,8 @@ async function supportWebhook(request, env) {
     return new Response('ok');
   }
 
-  if (text === '/start') {
-    await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: SUP[L].hello });
+  if (text === '/start' || text === '/menu') {
+    await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: SUP[L].hello, reply_markup: supMenuKb(L) });
     return new Response('ok');
   }
 
@@ -905,7 +934,7 @@ async function supportWebhook(request, env) {
   const answer = await supportAI(env, text, L);
   await supportApi(env, 'sendMessage', {
     chat_id: msg.chat.id, text: answer,
-    reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }]] },
+    reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] },
   });
   return new Response('ok');
 }
