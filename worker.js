@@ -7,10 +7,13 @@
 //   POST /buy            — создать инвойс: method=stars|rub|crypto (по умолчанию stars)
 //   POST /tg-webhook     — вебхук бота: pre_checkout_query + successful_payment
 //   POST /crypto-webhook — вебхук CryptoBot: invoice_paid → начисление
+//   POST /lava-webhook   — вебхук Lava.top: payment.success → начисление
 //   POST /support-webhook— вебхук саппорт-бота: AI-ответ + эскалация оператору
 //
 // Секреты: OPENROUTER_API_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
-//          YUKASSA_PROVIDER_TOKEN (карты РФ через Telegram), CRYPTOBOT_TOKEN (Crypto Pay API),
+//          LAVA_API_KEY + LAVA_OFFER_IDS (карта РФ, приоритетный провайдер — см. блок Lava.top),
+//          YUKASSA_PROVIDER_TOKEN (карты РФ через Telegram, фолбэк если Lava не настроена),
+//          CRYPTOBOT_TOKEN (Crypto Pay API),
 //          SUPPORT_BOT_TOKEN, SUPPORT_ADMIN_ID (куда падают обращения), SUPPORT_WEBHOOK_SECRET (опц.).
 // KV: RATE_LIMIT.
 
@@ -27,9 +30,10 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   m1: { type: 'unlim',  hours: 720,  stars: 499, rub: 749, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
 };
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
+function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }
 function enabledMethods(env) {
   const m = ['stars'];
-  if (env.YUKASSA_PROVIDER_TOKEN) m.push('rub');
+  if (lavaConfigured(env) || env.YUKASSA_PROVIDER_TOKEN) m.push('rub'); // 'rub' = карта РФ, провайдер выбирается автоматически
   if (env.CRYPTOBOT_TOKEN) m.push('crypto');
   return m;
 }
@@ -46,6 +50,7 @@ export default {
     try {
       if (path === '/tg-webhook') return await tgWebhook(request, env);
       if (path === '/crypto-webhook') return await cryptoWebhook(request, env);
+      if (path === '/lava-webhook') return await lavaWebhook(request, env);
       if (path === '/support-webhook') return await supportWebhook(request, env);
       if (path === '/auth')       return await authTg(request, env);
       if (path === '/authpoll')   return await authPoll(request, env);
@@ -261,7 +266,12 @@ async function buy(request, env) {
     if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.error || '') });
     return json({ link: d.link });
   }
-  // stars | rub — оба через Telegram createInvoiceLink (для rub нужен provider_token)
+  if (method === 'rub' && lavaConfigured(env)) {
+    const d = await createLavaInvoice(env, sess.id, body.pack, L);
+    if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.error || '') });
+    return json({ link: d.link });
+  }
+  // stars | rub-через-ЮKassa — оба через Telegram createInvoiceLink (для rub нужен provider_token)
   const d = await createInvoice(env, sess.id, body.pack, L, method);
   if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.description || '') });
   return json({ link: d.result });
@@ -319,6 +329,61 @@ async function createInvoice(env, tgid, packId, L, method = 'stars') {
   }
   const r = await tgApi(env, 'createInvoiceLink', req);
   return r;
+}
+
+// ─────────────────────────── Lava.top (карта РФ, без ИП/самозанятости у продавца) ───────────────────────────
+// Каждый тариф — отдельный «оффер» в личном кабинете Lava.top (создаётся руками в UI,
+// цена там ДОЛЖНА совпадать с pack.rub). LAVA_OFFER_IDS — JSON {"p1":"uuid",...}.
+// Реального email у нас нет (вход только через Telegram) — используем синтетический
+// tg<tgid>@facerate.ru и потом парсим tgid обратно из него в вебхуке (без своей БД).
+function lavaOfferIds(env) {
+  try { return JSON.parse(env.LAVA_OFFER_IDS || '{}'); } catch { return {}; }
+}
+async function createLavaInvoice(env, tgid, packId, L) {
+  const offerId = lavaOfferIds(env)[packId];
+  if (!offerId) return { ok: false, error: 'оффер для этого тарифа не настроен в Lava.top' };
+  const r = await fetch('https://gate.lava.top/api/v3/invoice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': env.LAVA_API_KEY },
+    body: JSON.stringify({
+      email: `tg${tgid}@facerate.ru`,
+      offerId,
+      currency: 'RUB',
+      periodicity: 'ONE_TIME',
+      buyerLanguage: L === 'ru' ? 'RU' : 'EN',
+    }),
+  }).then(x => x.json()).catch(e => ({ error: e.message }));
+  if (!r.paymentUrl) return { ok: false, error: r.error?.message || r.message || JSON.stringify(r).slice(0, 200) };
+  return { ok: true, link: r.paymentUrl };
+}
+
+// Вебхук Lava.top: сверяем секрет из заголовка (задаётся при настройке вебхука в их кабинете),
+// tgid достаём из синтетического email, пакет — обратным поиском offerId в LAVA_OFFER_IDS.
+async function lavaWebhook(request, env) {
+  if (env.LAVA_WEBHOOK_SECRET) {
+    const key = request.headers.get('x-api-key') || request.headers.get('authorization') || '';
+    if (key !== env.LAVA_WEBHOOK_SECRET && key !== `Api-Key ${env.LAVA_WEBHOOK_SECRET}`) {
+      return new Response('forbidden', { status: 403 });
+    }
+  }
+  let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
+  if (upd.eventType !== 'payment.success') return new Response('ok');
+  try {
+    const seenKey = `lavapaid:${upd.contractId}`;
+    if (await env.RATE_LIMIT.get(seenKey)) return new Response('ok');
+    await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
+    const m = /^tg(\d+)@/.exec(upd.buyer?.email || '');
+    const tgid = m ? m[1] : null;
+    const offerIds = lavaOfferIds(env);
+    const packId = Object.keys(offerIds).find((k) => offerIds[k] === upd.product?.id);
+    const pack = PACKS[packId];
+    if (!tgid || !pack) return new Response('ok');
+    const L = await userLang(env, tgid);
+    const note = await grantPack(env, tgid, pack, L);
+    await logTx(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '' });
+    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note), reply_markup: menuKb(L) });
+  } catch { /* payload сломан — игнор */ }
+  return new Response('ok');
 }
 
 // ─────────────────────────── CryptoBot (Crypto Pay API) ───────────────────────────
@@ -647,6 +712,10 @@ async function handleCallback(env, cq) {
     if (method === 'crypto') {
       const d = await createCryptoInvoice(env, tgid, packId, L);
       if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.cryptoBtn, url: d.link }]] } });
+      else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
+    } else if (method === 'rub' && lavaConfigured(env)) {
+      const d = await createLavaInvoice(env, tgid, packId, L);
+      if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.payCard, url: d.link }]] } });
       else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
     } else {
       const inv = {
