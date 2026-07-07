@@ -1,277 +1,104 @@
-# FaceRate — AI-анализ лица (looksmaxxing / PSL)
+# FaceRate — AI-оценка лица (looksmaxxing / PSL)
 
-Веб-приложение: пользователь загружает фото лица, приложение находит
-геометрию лица **локально в браузере** (MediaPipe), отправляет фото + числовые
-метрики на ИИ-модель через прокси и показывает оценку внешности по 10-балльной
-шкале с разбором по категориям и персональными рекомендациями (softmax/hardmax).
+Веб-приложение: пользователь загружает фото, приложение считает геометрию лица
+**локально** (MediaPipe), отправляет фото на ИИ и показывает PSL-оценку, разбор по
+8 категориям и рекомендации. Есть сравнение двух лиц («who mogs»), аккаунты и оплата
+через Telegram Stars.
 
 - **Прод:** https://facerate.ru
-- **Репозиторий:** `realfactchecknews-eng/face-metrics`
-- **Хостинг:** GitHub Pages (ветка `gh-pages`), ИИ-прокси — Cloudflare Worker.
+- **Репо:** `realfactchecknews-eng/face-metrics`
+- **Бот:** [@faceratepay_bot](https://t.me/faceratepay_bot) · **Канал:** @wwwfacerateru
 
-> ⚠️ **Это не медицинский/диагностический инструмент и не объективная истина.**
-> Оценка — развлекательная эвристика на основе ИИ.
-
----
-
-## Как это работает (поток данных)
-
-1. Пользователь грузит **фронтальное фото** (обязательно) и опционально **профиль**.
-2. **MediaPipe Tasks `FaceLandmarker`** (`runningMode: "IMAGE"`) находит 468/478
-   точек лица — **на устройстве, в браузере** (WASM + модель тянутся с CDN).
-3. `computeFaceMetrics()` считает геометрию (ширина скул/челюсти/лба, fWHR,
-   симметрия), `classifyFaceShape()` определяет форму лица. Всё локально.
-4. Запускается анимация сканирования (canvas: луч, сетка, замеры).
-5. `callAI()` собирает текстовый промпт (форма лица, симметрия %, fWHR, ширины)
-   + **само фото в base64** и шлёт `POST` на **Cloudflare Worker**.
-6. Worker (`worker.js`) подставляет секретный `OPENROUTER_API_KEY` и проксирует
-   запрос в **OpenRouter** → vision-модель.
-7. Модель возвращает отчёт строго заданного текстового формата; `parseAIReport()`
-   разбирает его и рисует баллы, шкалы и рекомендации.
-
-### ⚠️ Про приватность (честно)
-Геометрия считается локально, но для ИИ-оценки **само изображение отправляется**
-на Worker и далее в OpenRouter (в base64). То есть фото покидает устройство.
-Не пишите в UI, что «фото никуда не уходит» — это неверно для ИИ-части.
+> Развлекательный сервис. Оценка — субъективная эвристика ИИ, не диагноз и не истина.
 
 ---
 
-## Стек
+## Стек и файлы
 
-- **Фронтенд:** чистые HTML/CSS/JS, **без сборки и фреймворков**. Просто статика.
-- **Детекция лица:** `@mediapipe/tasks-vision` `FaceLandmarker`, режим `IMAGE`,
-  грузится через динамический `import()` в `app.js` (CDN jsDelivr). Модель —
-  `face_landmarker.task` со storage.googleapis.com.
-- **ИИ:** Cloudflare Worker → OpenRouter (chat/completions, vision).
-- **Шрифт:** Google Fonts — Cormorant Garamond (300/400).
-- **Акцент:** золото `#c4a46b` (CSS-переменная `--accent`).
-
----
-
-## Структура файлов
+Чистые HTML/CSS/JS без сборки. Всё в трёх файлах: `index.html`, `style.css`, `app.js`.
 
 | Файл | Назначение |
 |------|------------|
-| `index.html` | Вся разметка: интро-оверлей, лендинг, загрузка фото, анализ, результаты |
-| `style.css` | Все стили и анимации |
-| `app.js` | **Вся логика**: загрузка фото, FaceLandmarker, метрики, анимация canvas, вызов ИИ, парсинг и рендер отчёта |
-| `worker.js` | Cloudflare Worker — прокси к OpenRouter (хранит ключ, добавляет CORS) |
-| `wrangler.toml` | Конфиг воркера (`name`, `main`) + binding KV `RATE_LIMIT` для rate-limit |
-| `favicon.svg` | Иконка |
-| `CLAUDE.md` | Контекст проекта для ИИ-ассистентов |
-| `metrics.js`, `recommendations.js` | ⚠️ **МЁРТВЫЙ КОД** — не подключены в `index.html`, вся логика живёт в `app.js`. Можно удалить. |
+| `app.js` | Вся логика фронта: детекция лица, гейт/пейволл, аккаунты, анализ, сравнение, карточки, i18n |
+| `worker.js` + `wrangler.toml` | Cloudflare Worker: прокси к OpenRouter + аккаунты/квоты/оплаты Telegram |
+| `glossary.html` / `glossary-en.html` | Луксмакс-словарь (RU/EN) |
+| `terms.html` / `privacy.html` | Соглашение и политика (только RU; в модали согласия текст локализован) |
+| `og.png`, `favicon.svg`, `music.mp3` | Ассеты |
+| `metrics.js`, `recommendations.js` | ⚠️ МЁРТВЫЙ КОД, не подключены |
 
----
+- **Детекция:** `@mediapipe/tasks-vision` FaceLandmarker (IMAGE), 468 точек, локально.
+- **ИИ:** Cloudflare Worker → OpenRouter, модель **`x-ai/grok-4.3`** (reasoning:low,
+  temp 0.7, seed 1337). Разрешительная к оценке внешности, различает черты. Фронт и
+  профиль шлются **отдельными изображениями** (`body.images`). Отчёт/язык — по `lang()`.
+- **i18n:** английский по умолчанию (`fm-lang`, дефолт en), переключатель RU/EN на сайте
+  и в боте. Словарь строк `I18N` в app.js, `BL` в worker.js, атрибуты `data-i18n`.
 
 ## Деплой
 
-### Сайт (фронтенд) — автоматически
-Push в ветку **`master`** → GitHub Actions (`.github/workflows/deploy.yml`,
-`peaceiris/actions-gh-pages@v4`) собирает и публикует в ветку **`gh-pages`**.
-Домен `facerate.ru` подключён через файл `CNAME` в `gh-pages`.
+- **Сайт:** push в `master` → `.github/workflows/deploy.yml` (официальный Pages-пайплайн:
+  `configure-pages` + `upload-pages-artifact` + `deploy-pages`). Публикует ТОЛЬКО статику
+  (список файлов в шаге «Stage static site» — при добавлении нового файла дописать туда!).
+  - ⚠️ env `github-pages` должен разрешать деплой с ветки `master` (Settings → Environments).
+  - ⚠️ `deploy-pages` иногда флейкует «try again later» — лечится ре-запуском workflow.
+- **Worker:** push с изменением `worker.js`/`wrangler.toml` → `deploy-worker.yml`
+  (npm i -g wrangler@4 → `wrangler deploy`). Нужен секрет `CLOUDFLARE_API_TOKEN`.
+- Кэш-бастинг: `?v=N` у style.css/app.js в index.html — поднимать при изменениях.
 
-```bash
-git add -A && git commit -m "..." && git push origin master
-# через ~1-2 мин обновится facerate.ru (браузер: Ctrl+F5 от кэша)
-```
+## Аккаунты, квоты, оплата (всё в worker.js, без отдельного хостинга)
 
-### Worker (ИИ) — вручную, отдельно
-Изменения в `worker.js` (модель, max_tokens, логика) **НЕ** деплоятся через Pages.
-Нужен Wrangler:
+Вебхук бота указывает на `WORKER_URL/tg-webhook`. Роуты воркера:
+`/` анализ · `/authpoll` вход · `/me` статус · `/buy` инвойс · `/sendcard` карточка в личку · `/tg-webhook`.
 
-```bash
-npm install -g wrangler      # один раз
-wrangler login               # один раз (откроет браузер)
-wrangler deploy              # выкатить worker.js
-```
+- **Вход:** кнопка → `t.me/faceratepay_bot?start=<uuid>` → бот ловит `/start код` → сессия;
+  сайт поллит `/authpoll`. Без номера телефона.
+- **Квоты:** подписка на канал (`getChatMember`, кэш 5 мин) = **1 бесплатный/день**;
+  далее **кредиты**; **безлимит** день/месяц (`unlim:tgid` = ms-expiry).
+- **Тарифы** (const `PACKS`): p1 1/30⭐, p5 5/100⭐, d1 день/100⭐, m1 месяц/500⭐
+  (Stars-подписка `subscription_period`, автопродление; отмена `editUserStarSubscription`).
+- **Меню бота** (inline-кнопки): статус / магазин / промокод / подписка / розыгрыши / язык.
+- **Промокоды:** админ (`ADMIN_USERNAMES`=['Matveyika']) пишет боту
+  `/addpromo КОД АКТИВАЦИЙ credits=3` или `hours=24`. Один код — один раз в руки. Это же
+  механика розыгрышей (кидаешь код в канал).
+- **Лимиты-страховки:** `IP_LIMIT_DAY=40`, `GLOBAL_DAILY_CAP=200` (KV `g:date`).
 
-Воркер публикуется на URL, прописанный во фронте: `WORKER_URL` в начале `app.js`
-(`https://face-metrics-ai.realfactchecknews.workers.dev`).
+## Секреты и KV
 
-Секрет с ключом OpenRouter уже задан; задать/обновить:
-```bash
-wrangler secret put OPENROUTER_API_KEY    # ключ берётся на openrouter.ai/keys
-```
+- Секреты Cloudflare: `OPENROUTER_API_KEY`, `TG_BOT_TOKEN`, `TG_WEBHOOK_SECRET`. В код НЕ класть.
+- KV namespace `RATE_LIMIT` (id в wrangler.toml). Ключи: `sess:token`, `authcode:code`,
+  `lang:tgid`, `credits:tgid`, `unlim:tgid`, `sub:tgid` (кэш подписки), `q:tgid:date` (free),
+  `promo:CODE`, `promoused:CODE:tgid`, `subchg/subrec:tgid`, `g:date`, `d:/h:ip:date`.
 
----
+## Фичи фронта
 
-## Rate limit (защита OpenRouter-баланса)
+- **Поток:** интро → лендинг → полноэкранное меню (3D-пилюля за курсором) → анализ.
+- **Анализ:** скан-анимация (локально, бесплатно) → пейволл (если нет квоты) → отчёт.
+- **Who mogs:** плитка меню → два лица → вердикт «A mogs B» + карточка с красной плашкой
+  **MOGGED** на глазах проигравшего (1 кредит).
+- **Share-карточка** (`buildShareCard`, `buildCompareCard`): люкс-дизайн 1080×1680/1350,
+  кроп по рамке лица (`window._fmFaceBox`), бренд-пилюля, бары, POTENTIAL. Share + Send to TG.
+- Дерзкий режим (роаст), история оценок (localStorage `fm-*`), звук/музыка.
 
-Воркер открыт миру: любой, кто увидит `WORKER_URL` в `app.js`, может слать
-запросы к платной vision-модели за наш счёт. Поэтому в `worker.js` стоит
-лимит по IP через **Cloudflare KV**: `3/день` и `3/час` (константы
-`LIMIT_PER_DAY` / `LIMIT_PER_HOUR`), плюс **глобальный дневной потолок на весь
-сайт** `GLOBAL_DAILY_CAP` (по умолчанию 200, ключ `g:YYYY-MM-DD`,
-инкрементится только после успешного ответа). Если KV не привязан — лимит просто
-отключается, воркер продолжает работать.
+## Формат ответа ИИ (критично для парсинга)
 
-**Настройка KV (один раз):**
-```bash
-wrangler kv namespace create RATE_LIMIT
-# скопировать выданный id в wrangler.toml вместо PASTE_KV_ID_HERE
-wrangler deploy
-```
-Для автодеплоя через GitHub Actions KV-namespace должен существовать, а id —
-быть прописан в `wrangler.toml` (см. `[[kv_namespaces]]`).
+Анализ: `parseAIReport` ждёт русские метки `ОБЩИЙ_БАЛЛ:`, `СИММЕТРИЯ:`,
+`ГЛАЗА_CANTHAL_TILT:`, `МИДФЕЙС_MAXILLA:`, `ДЖОУЛАЙН_MANDIBLE:`, `НОС_NOSE:`,
+`ГУБЫ_СКУЛЫ:`, `КОЖА:`, `ГРУМИНГ_STYLE:`, `РЕКОМЕНДАЦИИ:`. **Ключи не переводить** —
+меняется только язык описаний. Сравнение: `SCORE_A / SCORE_B / WINNER / VERDICT`.
+Балл — дробный (промпт запрещает целые/`.0`), разброс ≥2.5 между категориями.
 
----
+## Смена модели
 
-## UX-фичи фронтенда (localStorage, без бэкенда)
-
-- **Поделиться результатом** (`#shareBtn`) — `buildShareCard()` рисует
-  PNG-карточку 1080×1350 (фото + PSL-балл + бренд) и отдаёт через
-  `navigator.share`, иначе скачивает файл. Виральность = трафик.
-- **Прошлый результат** (`#lastResultBanner`) — баннер с последним баллом из
-  `localStorage.fm-last`.
-- **История** — последние 20 баллов в `localStorage.fm-history` (только числа,
-  без фото).
-- **Звук-пинг** при готовности отчёта (`playPing()`, Web Audio, без файла) +
-  sticky-кнопка mute `#muteBtn` (🔔/🔕), состояние в `localStorage.fm-muted`.
-- **OG-теги** в `<head>` для превью при шере. ⚠️ Ссылаются на `og.png` в корне —
-  **файла пока нет**, нужно добавить картинку-превью 1200×630.
-- **Кэш-бастинг:** у `style.css` и `app.js` в `index.html` стоит `?v=N`.
-  Поднимай `N` при изменениях, иначе юзеры сидят на старом кэше GitHub Pages.
-
----
-
-## Автодеплой воркера (чтобы ИИ-ассистент мог обновлять воркер сам)
-
-По умолчанию `worker.js` надо деплоить вручную (`wrangler deploy`), а это требует
-интерактивного `wrangler login` — у ИИ-ассистента такого доступа нет, он умеет
-только пушить в git. Чтобы воркер выкатывался **автоматически при пуше**, в репо
-уже лежит workflow `.github/workflows/deploy-worker.yml`. Его триггерят изменения
-`worker.js` / `wrangler.toml` в ветке `master`.
-
-Чтобы он заработал, **нужно один раз добавить токен Cloudflare** (делает владелец репо):
-
-1. **Создать API-токен Cloudflare:**
-   dash.cloudflare.com → справа сверху иконка профиля → **My Profile** →
-   **API Tokens** → **Create Token** → шаблон **«Edit Cloudflare Workers»** →
-   **Continue** → **Create Token** → скопировать токен (показывается один раз).
-
-2. **Добавить токен в секреты GitHub:**
-   репозиторий на GitHub → **Settings** → **Secrets and variables** → **Actions**
-   → **New repository secret** →
-   - **Name:** `CLOUDFLARE_API_TOKEN`
-   - **Secret:** вставить скопированный токен → **Add secret**
-
-3. *(Только если токен имеет доступ к нескольким аккаунтам Cloudflare)* добавить
-   ещё секрет `CLOUDFLARE_ACCOUNT_ID` (Account ID виден на главной странице
-   Workers в дашборде) и раскомментировать строку `accountId:` в workflow.
-
-Готово. После этого **любой push в `master`, меняющий `worker.js`, сам выкатит
-воркер** — ИИ-ассистенту достаточно отредактировать `worker.js` и запушить,
-ручной `wrangler deploy` больше не нужен.
-
-> Секрет `OPENROUTER_API_KEY` живёт на стороне Cloudflare и при автодеплое **не
-> стирается** — повторно его задавать не надо.
->
-> Проверить запуск: GitHub → вкладка **Actions** → workflow **Deploy Cloudflare
-> Worker**. Можно запустить вручную кнопкой **Run workflow** (`workflow_dispatch`).
-
----
-
-## Смена ИИ-модели
-
-Поменять одну строку в `worker.js` (поле `model`) и задеплоить воркер: либо
-`wrangler deploy`, либо просто **запушить в `master`**, если настроен автодеплой
-(см. раздел выше). Модель **обязана поддерживать vision** (приём изображений).
-
-Текущая модель: **`x-ai/grok-4.3`** — пермиссивная (не отказывается оценивать
-внешность), хорошее зрение и различение черт, цена ~$1.25/$2.50 за 1M токенов.
-Это reasoning-модель, поэтому в `worker.js` задан `reasoning: { effort: 'low' }`
-(быстро и дёшево). `temperature: 0.7`, `top_p: 0.95`, `seed: 1337` (одно фото →
-стабильно). Воркер шлёт **фронт и профиль ОТДЕЛЬНЫМИ изображениями** (`body.images`),
-а не склеивает — модель явно видит профиль и учитывает его в челюсти/носе.
-
-> Раньше была `qwen/qwen2.5-vl-72b-instruct` — дёшево, но баллы жались к ~5.7.
-> `x-ai/grok-2-vision-1212` снят с OpenRouter («No endpoints»).
-
-Промпт требует **дробные баллы**, разброс ≥2.5 между категориями, и НЕ якорит на
-«5 = среднее» (иначе модель ставит всем ~5.5-6).
-
-Альтернативы (id для OpenRouter), если grok не устроит:
-- `qwen/qwen2.5-vl-72b-instruct` — дёшево, послушная, но кучкует баллы.
-- `openai/gpt-4o` — сильное различение, но иногда отказывается оценивать внешность.
-- `mistralai/pixtral-large-2411` — хорошее зрение, довольно свободная.
-- `google/gemini-2.5-flash`, `openai/gpt-4o` — сильное зрение, но **часто отказывают**.
-
----
-
-## Формат ответа ИИ (КРИТИЧНО для парсинга)
-
-`parseAIReport()` в `app.js` ищет **точные русские метки**. Если изменить их
-текст в промпте — парсинг сломается и отчёт не отрисуется. Метки:
-
-```
-ОБЩИЙ_БАЛЛ: X/10
-[текст]
-
-СИММЕТРИЯ: X/10
-ГЛАЗА_CANTHAL_TILT: X/10
-МИДФЕЙС_MAXILLA: X/10
-ДЖОУЛАЙН_MANDIBLE: X/10
-НОС_NOSE: X/10
-ГУБЫ_СКУЛЫ: X/10
-КОЖА: X/10
-ГРУМИНГ_STYLE: X/10
-
-РЕКОМЕНДАЦИИ:
-1. Softmax: ...
-2. ...
-```
-
-- Каждая категория: `МЕТКА: число/10` на своей строке, затем текст.
-- Рекомендации: только **пронумерованные строки** идут в список (парсер
-  отбрасывает всё остальное), по одной рекомендации на строку.
-- Промпт целиком собирается в функции `callAI()` (`app.js`). Калибровка баллов,
-  привязка симметрии к измеренному `%` и запрет шаблонных фраз — там же.
-
----
-
-## Ключевые функции и DOM (для навигации)
-
-- `initFaceLandmarker()` — ленивая инициализация MediaPipe (dynamic import).
-- `loadFrontFile()` / `loadSideFile()` — загрузка фото, превью, показ кнопки анализа.
-- `processImage(img, sideImage)` — `FaceLandmarker.detect()` (синхронно в IMAGE),
-  метрики, форма лица, запуск анимации, затем `callAI()`.
-- `computeFaceMetrics(lm)` → `{ cheekboneWidth, jawWidth, foreheadWidth, faceHeight, widthHeightRatio, symmetryScore }`.
-- `classifyFaceShape(metrics)` → `{ shape }` (oval/round/square/heart/diamond/oblong).
-- Анимация canvas: `animateScan`, `drawScanLine`, `drawMeshUpTo`, `drawFullMesh`,
-  `drawScannerCrosshairs`, `animateMeasurements` (+ `draw*Line/Label`).
-- ИИ: `callAI()`, `startAIHUD()/stopAIHUD()`, `canvasToBase64()/compositeToBase64()`,
-  `parseAIReport()`, `renderAIReport()`.
-- `clearReport()` — обнуляет блок результатов при старте нового анализа.
-- Утилита: глобальный класс `.hidden { display:none }` прячет элементы; многие
-  состояния переключаются добавлением/снятием этого класса.
-
-Основные DOM id: `frontArea/sideArea`, `fileInput/sideInput`, `analyzeBtn`,
-`canvas`, `loading`, `results`, `aiLoading` (HUD), `aiReport`, `overallScoreNum`,
-`categoryScores`, `aiRecs/recsList`, `aiError`, `errorBox`, `resetBtn`.
-
----
+Одна строка `model` в `worker.js` (поле в `buildBody`), задеплоить. Модель обязана
+поддерживать vision. Альтернативы: `qwen/qwen2.5-vl-72b-instruct` (дёшево, но кучкует баллы),
+`openai/gpt-4o` (сильно, но иногда отказывает), `mistralai/pixtral-large-2411`.
+⚠️ НЕ добавлять `provider:{allow_fallbacks}` — ломает запрос («Provider returned error»).
 
 ## Локальный запуск
 
-`import()` модели работает только по http(s), не по `file://`:
-
 ```bash
-cd face-metrics
-python -m http.server 8000
-# открыть http://localhost:8000
+python3 -m http.server 8000   # http(s), не file:// (иначе не грузится MediaPipe)
 ```
 
-ИИ-часть требует рабочего воркера (URL в `WORKER_URL`). Без него геометрия и
-анимация работают, а ИИ-отчёт покажет ошибку.
-
----
-
-## Частые правки
-
-- **Сменить модель / лимит токенов:** `worker.js` → `wrangler deploy`.
-- **Изменить промпт/калибровку оценок:** функция `callAI()` в `app.js`.
-- **НЕ менять** русские метки формата (см. выше) без правки `parseAIReport()`.
-- **Сменить домен:** файл `CNAME` в ветке `gh-pages`.
-
 ## Лицензия
+
 MIT.
