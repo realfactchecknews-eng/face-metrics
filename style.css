@@ -24,6 +24,60 @@ html, body {
   overflow-x: hidden;
 }
 
+/* == LANGUAGE GATE (first visit) == */
+#langGate {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--bg-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+#langGate.lg-exit { opacity: 0; visibility: hidden; pointer-events: none; }
+#langGate.lg-hidden { display: none; }
+
+.lg-corners { position: absolute; inset: 0; pointer-events: none; }
+.lgc { position: absolute; width: 40px; height: 40px; border: 1px solid var(--text-dim); }
+.lgc-tl { top: 40px; left: 40px; border-right: none; border-bottom: none; }
+.lgc-tr { top: 40px; right: 40px; border-left: none; border-bottom: none; }
+.lgc-bl { bottom: 40px; left: 40px; border-right: none; border-top: none; }
+.lgc-br { bottom: 40px; right: 40px; border-left: none; border-top: none; }
+
+.lg-body { text-align: center; padding: 24px; max-width: 480px; }
+.lg-eyebrow {
+  font-size: 0.7rem; letter-spacing: 0.25em; color: var(--text-dim);
+  text-transform: uppercase; margin-bottom: 22px;
+}
+.lg-title {
+  font-weight: 300; font-size: 2.6rem; letter-spacing: 0.04em;
+  color: var(--text-bright); margin-bottom: 34px;
+}
+.lg-slash { color: var(--accent); padding: 0 6px; }
+.lg-btns { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+.lg-btn {
+  flex: 1 1 170px; max-width: 200px;
+  background: rgba(196,164,107,0.05);
+  border: 1px solid rgba(196,164,107,0.35);
+  border-radius: 12px;
+  padding: 20px 18px;
+  display: flex; flex-direction: column; gap: 6px;
+  cursor: pointer;
+  transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+  font-family: 'Cormorant Garamond', serif;
+}
+.lg-btn:hover, .lg-btn:focus-visible {
+  background: rgba(196,164,107,0.14);
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.lg-btn-main { color: var(--text-bright); font-size: 1.3rem; font-weight: 400; }
+.lg-btn-sub { color: var(--text-dim); font-size: 0.85rem; }
+.lg-note { margin-top: 26px; font-size: 0.8rem; color: var(--text-dim); }
+
 /* == INTRO OVERLAY == */
 #introOverlay {
   position: fixed;
@@ -1920,8 +1974,14 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 
 /* ═══════════ WHO MOGS: сравнение ═══════════ */
 #compareSection { max-width: 900px; margin: 0 auto; }
-.cmp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.cmp-title { font-size: 1.9rem; font-weight: 400; color: var(--text-bright); }
+.cmp-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin-bottom: 6px; }
+.cmp-head #cmpBackBtn { width: auto; flex: none; justify-self: start; padding: 10px 18px; }
+.cmp-title { grid-column: 2; font-size: 1.9rem; font-weight: 400; color: var(--text-bright); text-align: center; }
+.cmp-head-spacer { justify-self: end; }
+@media (max-width: 600px) {
+  .cmp-head { grid-template-columns: auto 1fr; }
+  .cmp-head-spacer { display: none; }
+}
 .cmp-sub { text-align: center; color: var(--text-dim); font-size: 0.92rem; margin-bottom: 24px; }
 .cmp-grid { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 20px; }
 .cmp-slot {

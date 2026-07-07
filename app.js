@@ -82,7 +82,7 @@ var I18N = {
     consentBody: "<p>By pressing “I agree” you confirm that:</p><ul>" +
       "<li>you are <b>18 or older</b>;</li>" +
       "<li>this service is <b>for entertainment</b>; its scores are a subjective AI heuristic, <b>not</b> medical, psychological or any professional diagnosis, and not objective truth;</li>" +
-      "<li>face geometry is computed in your browser, but <b>the photo itself is sent</b> to a third-party AI service (OpenRouter) to generate the report; the service does not store photos after processing;</li>" +
+      "<li>face geometry is computed in your browser, but <b>the photo itself is sent</b> to a third-party AI service to generate the report; the service does not store photos after processing;</li>" +
       "<li>you upload <b>only your own image</b> or a photo of a person <b>who gave consent</b>; no photos of minors or third parties without consent;</li>" +
       "<li>you consent to processing of the uploaded image for these purposes and may stop using the service at any time;</li>" +
       "<li>you use the service at your own risk; <b>the administration is not liable</b> for your decisions or any consequences based on the results.</li></ul>" +
@@ -113,10 +113,10 @@ var I18N = {
     histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
     histAvg: "Average score: ", histCount: " · analyses: ",
     howHtml: "<div class='how'>" +
-      "<p><b>1. Geometry — locally.</b> MediaPipe finds 468 facial landmarks right in your browser and computes proportions (cheekbones, jaw, fWHR, symmetry). The photo never leaves your device at this step.</p>" +
-      "<p><b>2. AI scoring.</b> The photo and metrics go to a secure server that queries a vision model. It returns a PSL score, an 8-category breakdown and recommendations.</p>" +
-      "<p><b>3. Result.</b> Save it, share the card, and compare with past attempts in History.</p>" +
-      "<p class='how-note'>This is an entertainment service. The score is a subjective heuristic, not objective truth. Mild asymmetry is normal for everyone.</p></div>",
+      "<p><b>1. Geometry — no mercy, no upload.</b> 468 points, mapped on your face in your browser in under a second. Cheekbones, jaw, fWHR, symmetry — cold numbers, zero flattery. Nothing leaves your device at this step.</p>" +
+      "<p><b>2. The verdict.</b> Your photo and metrics get sent off to a vision model that doesn't care about your feelings. It comes back with a PSL score, an 8-category breakdown, and recommendations — earned, not given.</p>" +
+      "<p><b>3. Take it or leave it.</b> Save the score, flex the card, track it against every past attempt. Progress is a number going up. Nothing else counts.</p>" +
+      "<p class='how-note'>Entertainment only. The score is a subjective AI heuristic, not objective truth — treat it accordingly. Mild asymmetry is normal for every human face.</p></div>",
     fbSub: "What should we improve? What's missing? Found a bug? Tell us — it really helps.",
     fbName: "Name or nick (optional)", fbEmail: "Email for reply (optional)", fbMsg: "Your message…",
     fbSend: "Send", fbSending: "Sending…", fbOk: "Thank you! Message sent.", fbErr: "Could not send. Try later.",
@@ -126,13 +126,13 @@ var I18N = {
     errGeneric: "Analysis error. Try refreshing the page.",
     emptyAnswer: "Empty response.",
     gateRestricted: "Access restricted.", errPrefix: "Error: ",
-    tCompare: "Who mogs?", tCompareSub: "Face-off: compare two faces",
-    cmpTitle: "Who mogs?", cmpSub: "Upload two faces — AI decides who mogs whom. 1 credit.",
+    tCompare: "Who Moggs?", tCompareSub: "Face-off: compare two faces",
+    cmpTitle: "Who Moggs?", cmpSub: "Upload two faces — AI decides who mogs whom. 1 credit.",
     cmpRun: "FACE-OFF", cmpLoading: "DECIDING WHO MOGS…", cmpAgain: "↻ New face-off",
     cmpNeedTwo: "Add both photos first.", cmpNoFaceA: "No face detected in photo A.",
     cmpNoFaceB: "No face detected in photo B.", cmpErrGen: "Something went wrong, try again.",
     cmpMogs: "MOGS", cmpVerdict: "VERDICT", cmpMogged: "MOGGED",
-    cmpShareText: "Who mogs? — facerate.ru",
+    cmpShareText: "Who Moggs? — facerate.ru",
   },
   ru: {
     begin: "НАЧАТЬ АНАЛИЗ",
@@ -165,7 +165,7 @@ var I18N = {
     consentBody: "<p>Нажимая «Принимаю», вы подтверждаете, что:</p><ul>" +
       "<li>вам <b>исполнилось 18 лет</b>;</li>" +
       "<li>сервис носит <b>развлекательный характер</b>, его оценки — субъективная эвристика нейросети, а <b>не</b> диагноз и не объективная истина;</li>" +
-      "<li>геометрия считается в браузере, но <b>фото отправляется</b> на сторонний AI-сервис (OpenRouter) для формирования отчёта; фото не хранится после обработки;</li>" +
+      "<li>геометрия считается в браузере, но <b>фото отправляется</b> на сторонний AI-сервис для формирования отчёта; фото не хранится после обработки;</li>" +
       "<li>вы загружаете <b>только своё изображение</b> либо фото человека, <b>давшего согласие</b>; без фото несовершеннолетних и третьих лиц без согласия;</li>" +
       "<li>вы даёте согласие на обработку изображения и можете прекратить использование в любой момент;</li>" +
       "<li>вы используете сервис на свой риск; <b>администрация не несёт ответственности</b> за ваши решения и последствия.</li></ul>" +
@@ -195,10 +195,10 @@ var I18N = {
     histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
     histAvg: "Средний балл: ", histCount: " · оценок: ",
     howHtml: "<div class='how'>" +
-      "<p><b>1. Геометрия — локально.</b> MediaPipe находит 468 точек лица прямо в браузере и считает пропорции.</p>" +
-      "<p><b>2. AI-оценка.</b> Фото и метрики уходят на защищённый сервер → vision-модель даёт PSL-балл, разбор по 8 категориям и рекомендации.</p>" +
-      "<p><b>3. Результат.</b> Можно сохранить, поделиться карточкой и сравнить с прошлыми попытками.</p>" +
-      "<p class='how-note'>Это развлекательный сервис. Оценка — субъективная эвристика. Лёгкая асимметрия — норма у всех.</p></div>",
+      "<p><b>1. Геометрия — без пощады и без загрузки.</b> 468 точек лица считаются прямо в твоём браузере меньше чем за секунду. Скулы, челюсть, fWHR, симметрия — холодные цифры без лести. Фото на этом шаге никуда не уходит.</p>" +
+      "<p><b>2. Приговор.</b> Фото и метрики уходят к vision-модели, которой плевать на твои чувства. В ответ — PSL-балл, разбор по 8 категориям и рекомендации. Без поблажек.</p>" +
+      "<p><b>3. Забирай или проваливай.</b> Сохраняй балл, флексуй карточкой, сверяй с прошлыми попытками. Прогресс — это цифра, которая растёт. Остальное неважно.</p>" +
+      "<p class='how-note'>Только развлечение. Балл — субъективная эвристика ИИ, а не объективная истина. Лёгкая асимметрия — норма для любого лица.</p></div>",
     fbSub: "Что улучшить? Чего не хватает? Нашли ошибку? Напишите — это реально помогает.",
     fbName: "Имя или ник (необязательно)", fbEmail: "Email для ответа (необязательно)", fbMsg: "Ваше сообщение…",
     fbSend: "Отправить", fbSending: "Отправка…", fbOk: "Спасибо! Сообщение отправлено.", fbErr: "Не удалось отправить. Попробуйте позже.",
@@ -208,13 +208,13 @@ var I18N = {
     errGeneric: "Ошибка при анализе. Попробуйте обновить страницу.",
     emptyAnswer: "Пустой ответ.",
     gateRestricted: "Доступ ограничен.", errPrefix: "Ошибка: ",
-    tCompare: "Кто моггит?", tCompareSub: "Дуэль: сравни два лица",
-    cmpTitle: "Кто моггит?", cmpSub: "Загрузи два лица — ИИ решит, кто кого моггит. 1 кредит.",
-    cmpRun: "ДУЭЛЬ", cmpLoading: "РЕШАЮ, КТО МОГГИТ…", cmpAgain: "↻ Новая дуэль",
+    tCompare: "Who Moggs?", tCompareSub: "Дуэль: сравни два лица",
+    cmpTitle: "Who Moggs?", cmpSub: "Загрузи два лица — ИИ решит, кто кого моггает. 1 кредит.",
+    cmpRun: "ДУЭЛЬ", cmpLoading: "РЕШАЮ, КТО МОГГАЕТ…", cmpAgain: "↻ Новая дуэль",
     cmpNeedTwo: "Сначала добавь оба фото.", cmpNoFaceA: "На фото A не найдено лицо.",
     cmpNoFaceB: "На фото B не найдено лицо.", cmpErrGen: "Что-то пошло не так, попробуй ещё раз.",
-    cmpMogs: "МОГГИТ", cmpVerdict: "ВЕРДИКТ", cmpMogged: "MOGGED",
-    cmpShareText: "Кто моггит? — facerate.ru",
+    cmpMogs: "МОГГАЕТ", cmpVerdict: "ВЕРДИКТ", cmpMogged: "MOGGED",
+    cmpShareText: "Who Moggs? — facerate.ru",
   },
 };
 
@@ -413,7 +413,7 @@ function transitionToAnalysis() {
 }
 
 // -- Bootstrap ----------------------------------------------------------
-window.addEventListener("DOMContentLoaded", function() {
+function runIntro() {
   var overlay = document.getElementById("introOverlay");
   if (overlay) {
     setTimeout(function() {
@@ -425,6 +425,32 @@ window.addEventListener("DOMContentLoaded", function() {
     }, 2800);
   } else {
     startLanding();
+  }
+}
+
+window.addEventListener("DOMContentLoaded", function() {
+  var gate = document.getElementById("langGate");
+  if (gate) {
+    if (localStorage.getItem("fm-lang-picked") === "1") {
+      gate.remove();
+      runIntro();
+    } else {
+      var btns = gate.querySelectorAll(".lg-btn");
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].addEventListener("click", function(e) {
+          var chosen = e.currentTarget.getAttribute("data-lang");
+          localStorage.setItem("fm-lang-picked", "1");
+          setLang(chosen);
+          gate.classList.add("lg-exit");
+          gate.addEventListener("transitionend", function() {
+            gate.remove();
+            runIntro();
+          }, { once: true });
+        });
+      }
+    }
+  } else {
+    runIntro();
   }
   var beginBtn = document.getElementById("beginBtn");
   if (beginBtn) beginBtn.addEventListener("click", enterMenu);
@@ -2184,8 +2210,10 @@ function pwRecheck(silent) {
 
   function comparePrompt(){
     var ru = lang() === "ru";
-    var langLine = ru ? "Пиши VERDICT на русском." : "Write the VERDICT in English.";
-    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. Rate each on the PSL 1-10 scale (one decimal, be discriminating, real spread), then decide who MOGS the other (higher overall aesthetics). Be brutally honest and witty. " + langLine + "\n\nReply STRICTLY in this plain format, nothing else:\nSCORE_A: 0.0\nSCORE_B: 0.0\nWINNER: A\nVERDICT: one punchy savage sentence on who mogs whom and why (max 18 words).";
+    var langLine = ru
+      ? "Пиши TRAITS_A, TRAITS_B и VERDICT на русском. ВАЖНО: глагол «моггать» в этом контексте пишется «моггает» (наст. время) или «могнул» (прош. время) — форма «моггит» ГРАММАТИЧЕСКИ НЕВЕРНА и запрещена, никогда её не используй."
+      : "Write TRAITS_A, TRAITS_B and VERDICT in English.";
+    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. Rate each on the PSL 1-10 scale (one decimal, be discriminating, real spread). For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine + "\n\nReply STRICTLY in this plain format, nothing else:\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).";
   }
 
   function doCompare(){
@@ -2211,12 +2239,19 @@ function pwRecheck(silent) {
 
   function parseCompare(txt){
     function num(re){ var m = txt.match(re); return m ? parseFloat(m[1]) : null; }
+    function traits(re){
+      var m = txt.match(re);
+      if (!m) return [];
+      return m[1].split(";").map(function(s){ return s.trim(); }).filter(Boolean).slice(0,3);
+    }
     var a = num(/SCORE_A:\s*(\d+(?:\.\d+)?)/i);
     var b = num(/SCORE_B:\s*(\d+(?:\.\d+)?)/i);
+    var traitsA = traits(/TRAITS_A:\s*([^\n]+)/i);
+    var traitsB = traits(/TRAITS_B:\s*([^\n]+)/i);
     var wm = txt.match(/WINNER:\s*([AB])/i);
     var vm = txt.match(/VERDICT:\s*([\s\S]+?)(?:\n\s*\n|$)/i);
     var winner = wm ? wm[1].toUpperCase() : (a!==null&&b!==null ? (a>=b?"A":"B") : "A");
-    return { a:a, b:b, winner:winner, verdict: vm ? vm[1].replace(/\s+/g," ").trim() : "" };
+    return { a:a, b:b, traitsA:traitsA, traitsB:traitsB, winner:winner, verdict: vm ? vm[1].replace(/\s+/g," ").trim() : "" };
   }
 
   // Рисует лицо в квадратную ячейку, возвращает Y-координату глаз в ячейке.
@@ -2244,7 +2279,7 @@ function pwRecheck(silent) {
 
   function buildCompareCard(res){
     return new Promise(function(resolve){
-      var W = 1080, H = 1350;
+      var W = 1080, H = 1620;
       var c = document.createElement("canvas"); c.width=W; c.height=H;
       var cv = $("cmpCanvas"); cv.width=W; cv.height=H;
       var g = cv.getContext("2d");
@@ -2257,14 +2292,14 @@ function pwRecheck(silent) {
       g.fillStyle=glow; g.fillRect(0,0,W,850);
       g.strokeStyle="rgba(196,164,107,0.35)"; g.lineWidth=2; roundRect(g,22,22,W-44,H-44,30); g.stroke();
 
-      // шапка
+      // шапка — заголовок всегда на английском, независимо от языка сайта
       g.textAlign="left"; g.textBaseline="alphabetic"; g.font="bold 56px Georgia,serif"; ls(3);
       var bw=g.measureText("FACERATE").width, pw=74, gp=22, sx=(W-(pw+gp+bw))/2;
       drawBrandPill(g, sx+pw/2, 86, pw, 32);
       var bg=g.createLinearGradient(0,58,0,104); bg.addColorStop(0,"#f4ead2"); bg.addColorStop(1,"#cbb789");
       g.fillStyle=bg; g.fillText("FACERATE", sx+pw+gp, 104); ls(0);
       g.textAlign="center"; g.font="26px Georgia,serif"; ls(8); g.fillStyle=GOLD;
-      g.fillText(t("cmpTitle").toUpperCase(), W/2, 150); ls(0);
+      g.fillText("WHO MOGGS?", W/2, 150); ls(0);
 
       // две ячейки
       var size=390, gap=60, y=210;
@@ -2280,12 +2315,12 @@ function pwRecheck(silent) {
         g.fillStyle="rgba(0,0,0,0.7)"; roundRect(g,k[1]+14,y+14,54,40,10); g.fill();
         g.fillStyle=GOLD_HI; g.font="26px Georgia,serif"; g.textAlign="center"; g.fillText(k[0], k[1]+41, y+42);
       });
-      // MOGGED плашка на глазах проигравшего
+      // MOGGED плашка на глазах проигравшего (всегда на английском)
       var loserX = winA ? xB : xA, loserEyeY = winA ? eyeB : eyeA;
       var barH=54, barPad=26;
       g.fillStyle="#000"; g.fillRect(loserX+barPad, loserEyeY-barH/2, size-barPad*2, barH);
       g.fillStyle="#ff2d2d"; g.font="bold 34px Georgia,serif"; g.textAlign="center"; ls(3);
-      g.fillText(t("cmpMogged"), loserX+size/2, loserEyeY+12); ls(0);
+      g.fillText("MOGGED", loserX+size/2, loserEyeY+12); ls(0);
 
       // баллы под ячейками
       function scoreUnder(x, val, win){
@@ -2296,20 +2331,33 @@ function pwRecheck(silent) {
       }
       scoreUnder(xA, res.a, winA); scoreUnder(xB, res.b, !winA);
 
+      // характеристики лица под баллом — до 3 коротких строк на каждого
+      function traitsUnder(x, traits, win){
+        g.textAlign="center"; g.font="24px Georgia,serif";
+        g.fillStyle = win ? "#d8c9a3" : "#8a8378";
+        var ty = y+size+140;
+        (traits||[]).forEach(function(tr, i){
+          var line = tr.length > 30 ? tr.slice(0,29)+"…" : tr;
+          g.fillText(line, x+size/2, ty+i*32);
+        });
+      }
+      traitsUnder(xA, res.traitsA, winA); traitsUnder(xB, res.traitsB, !winA);
+
       // VS в центре между
       g.fillStyle=DIM; g.font="italic 40px Georgia,serif"; g.textAlign="center";
       g.fillText("vs", W/2, y+size/2+14);
 
-      // заголовок вердикта: "A MOGS B"
-      var winLabel = res.winner + " " + t("cmpMogs") + " " + (winA?"B":"A");
-      var vy = y+size+190;
+      // заголовок вердикта: "A MOGS B" — всегда на английском
+      var winLabel = res.winner + " MOGS " + (winA?"B":"A");
+      var vy = y+size+340;
       g.font="bold 72px Georgia,serif"; ls(2);
       var vg=g.createLinearGradient(0,vy-60,0,vy); vg.addColorStop(0,"#f0dfae"); vg.addColorStop(1,"#b3924f");
       g.fillStyle=vg; g.fillText(winLabel, W/2, vy); ls(0);
 
-      // строка вердикта (перенос)
+      // эйбров + строка вердикта (перенос, до 5 строк)
+      g.font="20px Georgia,serif"; ls(6); g.fillStyle=GOLD; g.fillText("VERDICT", W/2, vy+46); ls(0);
       g.font="34px Georgia,serif"; g.fillStyle="#c9bfad";
-      wrapText(g, res.verdict, W/2, vy+64, W-200, 46);
+      wrapText(g, res.verdict, W/2, vy+92, W-200, 46, 5);
 
       // футер
       g.font="42px Georgia,serif"; ls(2);
@@ -2320,14 +2368,14 @@ function pwRecheck(silent) {
     });
   }
 
-  function wrapText(g, text, cx, y, maxW, lh){
+  function wrapText(g, text, cx, y, maxW, lh, maxLines){
     var words=(text||"").split(" "), line="", lines=[];
     for (var i=0;i<words.length;i++){
       var test=line?line+" "+words[i]:words[i];
       if (g.measureText(test).width>maxW && line){ lines.push(line); line=words[i]; } else line=test;
     }
     if (line) lines.push(line);
-    lines.slice(0,3).forEach(function(l,i){ g.fillText(l, cx, y+i*lh); });
+    lines.slice(0, maxLines || 3).forEach(function(l,i){ g.fillText(l, cx, y+i*lh); });
   }
 
   function shareBlob(){ return new Promise(function(res){ $("cmpCanvas").toBlob(function(b){ res(b); }, "image/png"); }); }

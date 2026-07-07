@@ -20,6 +20,29 @@
 </head>
 <body>
 
+<!-- LANGUAGE GATE (первый визит) -->
+<div id="langGate">
+  <div class="lg-corners">
+    <span class="lgc lgc-tl"></span><span class="lgc lgc-tr"></span>
+    <span class="lgc lgc-bl"></span><span class="lgc lgc-br"></span>
+  </div>
+  <div class="lg-body">
+    <p class="lg-eyebrow">FACERATE &middot; ASCEND &amp; FORGET</p>
+    <h1 class="lg-title">EN <span class="lg-slash">/</span> RU</h1>
+    <div class="lg-btns">
+      <button type="button" class="lg-btn" data-lang="en">
+        <span class="lg-btn-main">English</span>
+        <span class="lg-btn-sub">Continue in English</span>
+      </button>
+      <button type="button" class="lg-btn" data-lang="ru">
+        <span class="lg-btn-main">Русский</span>
+        <span class="lg-btn-sub">Продолжить на русском</span>
+      </button>
+    </div>
+    <p class="lg-note">Can be changed anytime &middot; Можно сменить в любой момент</p>
+  </div>
+</div>
+
 <!-- INTRO OVERLAY -->
 <div id="introOverlay">
   <div class="intro-corners">
@@ -112,7 +135,7 @@
     <p class="menu-eyebrow">ASCEND &amp; FORGET</p>
     <h2 class="menu-title">Меню</h2>
     <div class="menu-tiles">
-      <button class="menu-tile menu-tile-hot" id="compareTile"><span class="mt-ic">⚔️</span><span class="mt-tx"><b data-i18n="tCompare">Who mogs?</b><i data-i18n="tCompareSub">Face-off: compare two faces</i></span></button>
+      <button class="menu-tile menu-tile-hot" id="compareTile"><span class="mt-ic">⚔</span><span class="mt-tx"><b data-i18n="tCompare">Who Moggs?</b><i data-i18n="tCompareSub">Face-off: compare two faces</i></span></button>
       <button class="menu-tile" data-view="history"><span class="mt-ic">✦</span><span class="mt-tx"><b>История оценок</b><i>Прошлые результаты</i></span></button>
       <button class="menu-tile" data-view="glossary"><span class="mt-ic">❡</span><span class="mt-tx"><b>Луксмакс-словарь</b><i>Термины простыми словами</i></span></button>
       <button class="menu-tile" data-view="how"><span class="mt-ic">◎</span><span class="mt-tx"><b>Как это работает</b><i>Геометрия + AI</i></span></button>
@@ -329,8 +352,8 @@
   <section id="compareSection" class="hidden">
     <div class="cmp-head">
       <button id="cmpBackBtn" class="btn-reset" type="button">&larr; Menu</button>
-      <h2 class="cmp-title" data-i18n="cmpTitle">Who mogs?</h2>
-      <span style="width:60px"></span>
+      <h2 class="cmp-title" data-i18n="cmpTitle">Who Moggs?</h2>
+      <span class="cmp-head-spacer" style="width:60px"></span>
     </div>
     <p class="cmp-sub" data-i18n="cmpSub">Upload two faces — AI decides who mogs whom. 1 credit.</p>
 
@@ -360,7 +383,7 @@
         <span class="btn-analyze-fill"></span>
         <span class="btn-analyze-inner">
           <span class="btn-analyze-text" data-i18n="cmpRun">FACE-OFF</span>
-          <span class="btn-analyze-arr">⚔️</span>
+          <span class="btn-analyze-arr">⚔</span>
         </span>
       </button>
       <p id="cmpErr" class="cmp-err hidden"></p>
@@ -405,7 +428,7 @@
             субъективная эвристика нейросети, а <b>не</b> медицинская, психологическая
             или иная профессиональная диагностика и не объективная истина;</li>
         <li>геометрия лица считается в вашем браузере, но <b>само фото
-            отправляется</b> на сторонний AI-сервис (OpenRouter) для формирования
+            отправляется</b> на сторонний AI-сервис для формирования
             отчёта; сервис не хранит фотографии после обработки;</li>
         <li>вы загружаете <b>только собственное изображение</b> либо фото лица,
             <b>давшего на это согласие</b>; вы не загружаете фотографии
