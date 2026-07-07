@@ -11,7 +11,8 @@
 //   POST /support-webhook— вебхук саппорт-бота: AI-ответ + эскалация оператору
 //
 // Секреты: OPENROUTER_API_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
-//          LAVA_API_KEY + LAVA_OFFER_IDS (карта РФ, приоритетный провайдер — см. блок Lava.top),
+//          LAVA_API_KEY + LAVA_OFFER_IDS + LAVA_WEBHOOK_LOGIN/LAVA_WEBHOOK_PASS (карта РФ,
+//          приоритетный провайдер — см. блок Lava.top),
 //          YUKASSA_PROVIDER_TOKEN (карты РФ через Telegram, фолбэк если Lava не настроена),
 //          CRYPTOBOT_TOKEN (Crypto Pay API),
 //          SUPPORT_BOT_TOKEN, SUPPORT_ADMIN_ID (куда падают обращения), SUPPORT_WEBHOOK_SECRET (опц.).
@@ -357,14 +358,13 @@ async function createLavaInvoice(env, tgid, packId, L) {
   return { ok: true, link: r.paymentUrl };
 }
 
-// Вебхук Lava.top: сверяем секрет из заголовка (задаётся при настройке вебхука в их кабинете),
+// Вебхук Lava.top: аутентификация Basic (логин/пароль задаются при настройке вебхука в их кабинете),
 // tgid достаём из синтетического email, пакет — обратным поиском offerId в LAVA_OFFER_IDS.
 async function lavaWebhook(request, env) {
-  if (env.LAVA_WEBHOOK_SECRET) {
-    const key = request.headers.get('x-api-key') || request.headers.get('authorization') || '';
-    if (key !== env.LAVA_WEBHOOK_SECRET && key !== `Api-Key ${env.LAVA_WEBHOOK_SECRET}`) {
-      return new Response('forbidden', { status: 403 });
-    }
+  if (env.LAVA_WEBHOOK_LOGIN) {
+    const auth = request.headers.get('authorization') || '';
+    const expected = 'Basic ' + btoa(`${env.LAVA_WEBHOOK_LOGIN}:${env.LAVA_WEBHOOK_PASS}`);
+    if (auth !== expected) return new Response('forbidden', { status: 403 });
   }
   let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
   if (upd.eventType !== 'payment.success') return new Response('ok');
