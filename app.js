@@ -539,7 +539,7 @@ function loadSideFile(file) {
 analyzeBtn.addEventListener("click", function() {
   if (!frontImg) return;
   // Перед первой генерацией — показать соглашение и взять согласие.
-  if (localStorage.getItem("fm-consent") !== "1") {
+  if (localStorage.getItem("fm-consent-v2") !== "1") {
     showConsent();
     return;
   }
@@ -583,7 +583,7 @@ function showConsent() {
   }
   accept.addEventListener("click", function() {
     if (check && !check.checked) return;
-    localStorage.setItem("fm-consent", "1");
+    localStorage.setItem("fm-consent-v2", "1");
     localStorage.setItem("fm-consent-date", new Date().toISOString());
     modal.classList.add("hidden");
     runAnalysis();
