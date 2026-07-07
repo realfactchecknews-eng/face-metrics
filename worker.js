@@ -368,6 +368,7 @@ async function cryptoWebhook(request, env) {
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
+    await logTx(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '' });
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note), reply_markup: menuKb(L) });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -754,6 +755,11 @@ async function handlePayment(env, msg, L) {
     } else {
       note = await grantPack(env, tgid, pack, L, sp);
     }
+    await logTx(env, {
+      tgid, pack: payload.pack || '', method: sp.currency === 'XTR' ? 'stars' : 'rub',
+      amount: sp.currency === 'XTR' ? sp.total_amount : sp.total_amount / 100, currency: sp.currency,
+      username: msg.from.username || '', name: msg.from.first_name || '',
+    });
     await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note), reply_markup: menuKb(L || 'en') });
   } catch { /* payload сломан — молча игнор */ }
 }
@@ -807,14 +813,47 @@ const SUP = {
     faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в день).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
   },
 };
-function supMenuKb(L) {
+function supMenuKb(L, isAdmin) {
   const b = SUP[L];
-  return { inline_keyboard: [
+  const rows = [
     [{ text: b.kbFaq, callback_data: 'faq' }],
     [{ text: b.human, callback_data: 'human' }],
     [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbBuy, url: 'https://t.me/faceratepay_bot' }],
     [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
+  ];
+  if (isAdmin) rows.push([{ text: '⚙️ Admin', callback_data: 'admin' }]);
+  return { inline_keyboard: rows };
+}
+
+// ─── Админ-панель модератора (только SUPPORT_ADMIN_ID) ───
+function adminPanelKb() {
+  return { inline_keyboard: [
+    [{ text: '📂 Открытые чаты', callback_data: 'admtickets' }],
+    [{ text: '💳 Транзакции', callback_data: 'admtx' }],
+    [{ text: '← Меню', callback_data: 'menu' }],
   ]};
+}
+async function showTicketsKb(env) {
+  const list = await getList(env, 'suptickets');
+  if (!list.length) return { text: '📂 Открытых чатов нет.', kb: { inline_keyboard: [[{ text: '← Admin', callback_data: 'admin' }]] } };
+  const rows = list.map(t => ([
+    { text: `👤 ${t.name || t.uid}${t.username ? ' @' + t.username : ''} — ${t.preview}`, callback_data: `admopen:${t.uid}` },
+    { text: '✖', callback_data: `admclose:${t.uid}` },
+  ]));
+  rows.push([{ text: '← Admin', callback_data: 'admin' }]);
+  return { text: `📂 Открытые чаты (${list.length}):`, kb: { inline_keyboard: rows } };
+}
+async function txSummaryText(env) {
+  const list = await getList(env, 'translog');
+  if (!list.length) return '💳 Транзакций пока нет.';
+  const line = (t) => {
+    const d = new Date(t.ts);
+    const dt = d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const who = t.name || t.username ? `${t.name || ''}${t.username ? ' @' + t.username : ''}` : `id${t.tgid}`;
+    const price = t.method === 'stars' ? `${t.amount}⭐` : t.method === 'crypto' ? `${t.amount} ${t.currency}` : `${t.amount}₽`;
+    return `${dt} — ${who} — ${t.pack} — ${price} (${t.method})`;
+  };
+  return `💳 Последние транзакции (${list.length}):\n\n` + list.slice(0, 20).map(line).join('\n');
 }
 const SUP_FAQ = {
   ru: `Ты — вежливый саппорт сервиса FaceRate (facerate.ru) — это AI-оценка лица по канонам луксмаксинга (сайт + Telegram-бот).
@@ -856,12 +895,36 @@ async function forwardToAdmin(env, msg, L) {
   const b = SUP[L];
   if (!env.SUPPORT_ADMIN_ID) { await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.noAdmin }); return; }
   const u = msg.from;
+  await addTicket(env, u, msg.text || '[нетекстовое сообщение]');
   const sent = await supportApi(env, 'sendMessage', {
     chat_id: env.SUPPORT_ADMIN_ID,
-    text: `💬 ${u.first_name || ''} @${u.username || ''} (id ${u.id}):\n\n${msg.text || '[нетекстовое сообщение]'}\n\n↩️ Ответь реплаем на это сообщение.`,
+    text: `💬 ${u.first_name || ''} @${u.username || ''} (id ${u.id}):\n\n${msg.text || '[нетекстовое сообщение]'}\n\n↩️ Ответь реплаем, или открой «📂 Открытые чаты» в /admin.`,
   });
   if (sent.ok) await env.RATE_LIMIT.put(`supmap:${sent.result.message_id}`, String(u.id), { expirationTtl: 60 * 60 * 24 * 3 });
   await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.sent });
+}
+
+// ─── Тикеты (открытые обращения) и лог транзакций — общие JSON-списки в KV ───
+async function getList(env, key) {
+  const raw = await env.RATE_LIMIT.get(key);
+  try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+async function putList(env, key, list, ttl) {
+  await env.RATE_LIMIT.put(key, JSON.stringify(list), ttl ? { expirationTtl: ttl } : undefined);
+}
+async function addTicket(env, u, preview) {
+  const list = (await getList(env, 'suptickets')).filter(t => t.uid !== u.id);
+  list.unshift({ uid: u.id, name: u.first_name || '', username: u.username || '', preview: String(preview).slice(0, 60), ts: Date.now() });
+  await putList(env, 'suptickets', list.slice(0, 30));
+}
+async function removeTicket(env, uid) {
+  const list = (await getList(env, 'suptickets')).filter(t => t.uid !== Number(uid));
+  await putList(env, 'suptickets', list);
+}
+async function logTx(env, entry) {
+  const list = await getList(env, 'translog');
+  list.unshift({ ...entry, ts: Date.now() });
+  await putList(env, 'translog', list.slice(0, 50));
 }
 
 async function supportWebhook(request, env) {
@@ -875,13 +938,14 @@ async function supportWebhook(request, env) {
     const cq = upd.callback_query;
     const chat = cq.message.chat.id, fromId = String(cq.from.id), data = cq.data || '';
     await supportApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
+    const isAdmin = env.SUPPORT_ADMIN_ID && fromId === String(env.SUPPORT_ADMIN_ID);
     let L = await userLang(env, cq.from.id);
     if (data === 'lang:ru' || data === 'lang:en') {
       L = data.slice(5);
       await env.RATE_LIMIT.put(`lang:${fromId}`, L);
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].langSet, reply_markup: supMenuKb(L) });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].langSet, reply_markup: supMenuKb(L, isAdmin) });
     } else if (data === 'menu') {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].menu, reply_markup: supMenuKb(L) });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].menu, reply_markup: supMenuKb(L, isAdmin) });
     } else if (data === 'faq') {
       await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].faq, reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] } });
     } else if (data === 'human') {
@@ -889,8 +953,29 @@ async function supportWebhook(request, env) {
       await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].humanOn });
       if (env.SUPPORT_ADMIN_ID) {
         const u = cq.from;
-        await supportApi(env, 'sendMessage', { chat_id: env.SUPPORT_ADMIN_ID, text: `🆘 ${u.first_name || ''} @${u.username || ''} (id ${fromId}) просит оператора. Его сообщения будут приходить сюда — отвечай реплаем. Закрыть диалог: /close ${fromId}` });
+        await addTicket(env, u, '(нажал «Позвать оператора»)');
+        await supportApi(env, 'sendMessage', { chat_id: env.SUPPORT_ADMIN_ID, text: `🆘 ${u.first_name || ''} @${u.username || ''} (id ${fromId}) просит оператора.`, reply_markup: { inline_keyboard: [[{ text: '💬 Открыть чат', callback_data: `admopen:${fromId}` }]] } });
       }
+    } else if (data === 'admin' && isAdmin) {
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '⚙️ Панель модератора:', reply_markup: adminPanelKb() });
+    } else if (data === 'admtickets' && isAdmin) {
+      const { text: tt, kb } = await showTicketsKb(env);
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: tt, reply_markup: kb });
+    } else if (data === 'admtx' && isAdmin) {
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: await txSummaryText(env), reply_markup: { inline_keyboard: [[{ text: '← Admin', callback_data: 'admin' }]] } });
+    } else if (data.startsWith('admopen:') && isAdmin) {
+      const uid = data.slice(8);
+      await env.RATE_LIMIT.put(`admtarget:${fromId}`, uid, { expirationTtl: 60 * 30 });
+      const uL = await userLang(env, uid);
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: `✏️ Теперь пишешь пользователю ${uid}. Просто отправляй текст (без реплая). Закрыть: «✖» в списке чатов.\nЕго язык: ${uL}.` });
+    } else if (data.startsWith('admclose:') && isAdmin) {
+      const uid = data.slice(9);
+      await removeTicket(env, uid);
+      await env.RATE_LIMIT.delete(`suphuman:${uid}`);
+      const cur = await env.RATE_LIMIT.get(`admtarget:${fromId}`);
+      if (cur === uid) await env.RATE_LIMIT.delete(`admtarget:${fromId}`);
+      const { text: tt, kb } = await showTicketsKb(env);
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '✅ Чат закрыт.\n\n' + tt, reply_markup: kb });
     }
     return new Response('ok');
   }
@@ -902,8 +987,35 @@ async function supportWebhook(request, env) {
   const L = await userLang(env, msg.from.id);
   const text = (msg.text || '').trim();
 
-  // Ответ оператора реплаем → пересылаем пользователю.
-  if (adminId && fromId === adminId && msg.reply_to_message) {
+  const isAdmin = adminId && fromId === adminId;
+
+  if (isAdmin && (text === '/admin')) {
+    await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: '⚙️ Панель модератора:', reply_markup: adminPanelKb() });
+    return new Response('ok');
+  }
+  // Оператор закрывает диалог: /close <id>
+  if (isAdmin && text.startsWith('/close')) {
+    const uid = (text.split(' ')[1] || '').trim();
+    if (uid) {
+      await env.RATE_LIMIT.delete(`suphuman:${uid}`);
+      await removeTicket(env, uid);
+      const cur = await env.RATE_LIMIT.get(`admtarget:${fromId}`);
+      if (cur === uid) await env.RATE_LIMIT.delete(`admtarget:${fromId}`);
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: 'Диалог с ' + uid + ' закрыт.' });
+    }
+    return new Response('ok');
+  }
+  // Оператор выбрал чат кнопкой «📂 Открытые чаты» → пишет без реплая, летит выбранному uid.
+  if (isAdmin && !msg.reply_to_message) {
+    const target = await env.RATE_LIMIT.get(`admtarget:${fromId}`);
+    if (target) {
+      const uL = await userLang(env, target);
+      await supportApi(env, 'sendMessage', { chat_id: target, text: (uL === 'ru' ? '🛠 Поддержка: ' : '🛠 Support: ') + text });
+      return new Response('ok');
+    }
+  }
+  // Ответ оператора реплаем (старый способ, всё ещё работает) → пересылаем пользователю.
+  if (isAdmin && msg.reply_to_message) {
     const uid = await env.RATE_LIMIT.get(`supmap:${msg.reply_to_message.message_id}`);
     if (uid) {
       const uL = await userLang(env, uid);
@@ -912,15 +1024,9 @@ async function supportWebhook(request, env) {
     }
     return new Response('ok');
   }
-  // Оператор закрывает диалог: /close <id>
-  if (adminId && fromId === adminId && text.startsWith('/close')) {
-    const uid = (text.split(' ')[1] || '').trim();
-    if (uid) { await env.RATE_LIMIT.delete(`suphuman:${uid}`); await supportApi(env, 'sendMessage', { chat_id: adminId, text: 'Диалог с ' + uid + ' закрыт.' }); }
-    return new Response('ok');
-  }
 
   if (text === '/start' || text === '/menu') {
-    await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: SUP[L].hello, reply_markup: supMenuKb(L) });
+    await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: SUP[L].hello, reply_markup: supMenuKb(L, isAdmin) });
     return new Response('ok');
   }
 
