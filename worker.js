@@ -1045,16 +1045,25 @@ async function forwardToAdmin(env, msg, L) {
 }
 
 // ─── Реферальные ссылки для медийных партнёров ───
-// ref:КОД        — { label, clicks, purchases, revenueRub, createdAt }, TTL нет (живёт пока не удалят).
+// ref:КОД        — { label, pct, clicks, purchases, revenueRub, createdAt }, TTL нет (живёт пока не удалят).
+// pct            — % от revenueRub, который причитается медийке (её реальная комиссия, не наш доход).
 // refby:tgid     — код реферера, приаттачился при первом /start ref_КОД (first-touch, не перезаписывается).
 async function refExists(env, code) { return !!(await env.RATE_LIMIT.get(`ref:${code}`)); }
 async function getRef(env, code) {
   const raw = await env.RATE_LIMIT.get(`ref:${code}`);
   try { return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
-async function createRef(env, code, label) {
-  await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify({ label: label || '', clicks: 0, purchases: 0, revenueRub: 0, createdAt: Date.now() }));
+async function createRef(env, code, label, pct) {
+  await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify({ label: label || '', pct: pct || 0, clicks: 0, purchases: 0, revenueRub: 0, createdAt: Date.now() }));
 }
+async function setRefPct(env, code, pct) {
+  const ref = await getRef(env, code);
+  if (!ref) return false;
+  ref.pct = pct;
+  await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
+  return true;
+}
+function refPayout(ref) { return Math.round((ref.revenueRub || 0) * (ref.pct || 0) / 100); }
 // Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
 async function attributeReferral(env, tgid, code) {
   const ref = await getRef(env, code);
@@ -1091,7 +1100,7 @@ async function refListText(env) {
     const r = await getRef(env, k.name.slice(4));
     if (!r) continue;
     const code = k.name.slice(4);
-    lines.push(`🔗 ${code}${r.label ? ' (' + r.label + ')' : ''} — ${r.clicks || 0} перех., ${r.purchases || 0} покупок, ~${r.revenueRub || 0}₽`);
+    lines.push(`🔗 ${code}${r.label ? ' (' + r.label + ')' : ''} — ${r.clicks || 0} перех., ${r.purchases || 0} покупок, ~${r.revenueRub || 0}₽, ${r.pct || 0}% → ~${refPayout(r)}₽ медийке`);
   }
   return `🔗 Реферальные ссылки (${lines.length}):\n\n` + lines.join('\n');
 }
@@ -1117,9 +1126,9 @@ async function myRefStatsText(env, tgid) {
   for (const code of codes) {
     const r = await getRef(env, code);
     if (!r) continue;
-    lines.push(`🔗 ${code} — ${r.clicks || 0} переходов, ${r.purchases || 0} покупок, ~${r.revenueRub || 0}₽ выручки`);
+    lines.push(`🔗 ${code} — ${r.clicks || 0} переходов, ${r.purchases || 0} покупок\nТвоя доля: ~${refPayout(r)}₽ (${r.pct || 0}% от ~${r.revenueRub || 0}₽)`);
   }
-  return `📊 Твоя статистика:\n\n` + lines.join('\n');
+  return `📊 Твоя статистика:\n\n` + lines.join('\n\n');
 }
 function mediaMenuKb() {
   return { inline_keyboard: [[{ text: '🔑 Привязать код', callback_data: 'claim' }], [{ text: '📊 Моя статистика', callback_data: 'mystats' }]] };
@@ -1253,10 +1262,13 @@ async function supportWebhook(request, env) {
       await env.RATE_LIMIT.put(`admpromowait:${fromId}`, '1', { expirationTtl: 600 });
       await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Отправь одним сообщением:\n\nКОД КОЛ-ВО_АКТИВАЦИЙ credits=3\nили\nКОД КОЛ-ВО_АКТИВАЦИЙ hours=24\n\nНапример: SALE20 15 credits=1' });
     } else if (data === 'admref' && isAdmin) {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: await refListText(env), reply_markup: { inline_keyboard: [[{ text: '+ Создать реф-ссылку', callback_data: 'admrefadd' }], [{ text: '← Admin', callback_data: 'admin' }]] } });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: await refListText(env), reply_markup: { inline_keyboard: [[{ text: '+ Создать реф-ссылку', callback_data: 'admrefadd' }], [{ text: '✏️ Изменить %', callback_data: 'admrefpct' }], [{ text: '← Admin', callback_data: 'admin' }]] } });
     } else if (data === 'admrefadd' && isAdmin) {
       await env.RATE_LIMIT.put(`admrefwait:${fromId}`, '1', { expirationTtl: 600 });
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔗 Отправь одним сообщением:\n\nКОД Название\n\nНапример: ANNA Анна Иванова (блогер)\n\nКод — латиницей/цифрами, без пробелов, станет частью ссылки.' });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔗 Отправь одним сообщением:\n\nКОД ПРОЦЕНТ Название\n\nНапример: ANNA 20 Анна Иванова (блогер)\n\nКод — латиницей/цифрами, без пробелов, станет частью ссылки. Процент — сколько % от выручки причитается медийке.' });
+    } else if (data === 'admrefpct' && isAdmin) {
+      await env.RATE_LIMIT.put(`admrefpctwait:${fromId}`, '1', { expirationTtl: 600 });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '✏️ Отправь одним сообщением:\n\nКОД ПРОЦЕНТ\n\nНапример: ANNA 25' });
     } else if (data.startsWith('admopen:') && isAdmin) {
       const uid = data.slice(8);
       await env.RATE_LIMIT.put(`admtarget:${fromId}`, uid, { expirationTtl: 60 * 30 });
@@ -1321,9 +1333,9 @@ async function supportWebhook(request, env) {
   }
   // Оператор в процессе создания реферальной ссылки (нажал «+ Создать реф-ссылку»).
   if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admrefwait:${fromId}`)) {
-    const m = text.match(/^([a-z0-9_-]{1,40})\s*(.*)$/i);
+    const m = text.match(/^([a-z0-9_-]{1,40})\s+(\d{1,3})\s*(.*)$/i);
     if (!m) {
-      await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Код может быть только латиницей/цифрами, без пробелов. Пример: ANNA Анна Иванова' });
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Формат: КОД ПРОЦЕНТ Название. Пример: ANNA 20 Анна Иванова' });
       return new Response('ok');
     }
     const code = m[1].toUpperCase();
@@ -1331,13 +1343,29 @@ async function supportWebhook(request, env) {
       await supportApi(env, 'sendMessage', { chat_id: adminId, text: `⚠️ Код ${code} уже занят.` });
       return new Response('ok');
     }
-    await createRef(env, code, m[2].trim());
+    await createRef(env, code, m[3].trim(), Math.min(100, parseInt(m[2], 10)));
     await env.RATE_LIMIT.delete(`admrefwait:${fromId}`);
     const link = `https://t.me/${env.BOT_USERNAME || 'faceratepay_bot'}?start=ref_${code}`;
     await supportApi(env, 'sendMessage', {
       chat_id: adminId,
       text: `✅ Реферальная ссылка создана.\n\nОтдавай эту ссылку партнёру:\n${link}\n\n` + await refListText(env),
       reply_markup: { inline_keyboard: [[{ text: '+ Создать ещё', callback_data: 'admrefadd' }], [{ text: '← Admin', callback_data: 'admin' }]] },
+    });
+    return new Response('ok');
+  }
+  // Оператор в процессе изменения % медийке (нажал «✏️ Изменить %»).
+  if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admrefpctwait:${fromId}`)) {
+    const m = text.match(/^([a-z0-9_-]{1,40})\s+(\d{1,3})/i);
+    const code = m ? m[1].toUpperCase() : '';
+    if (!m || !(await setRefPct(env, code, Math.min(100, parseInt(m[2], 10))))) {
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: `⚠️ Не понял формат или код ${code} не найден. Пример: ANNA 25` });
+      return new Response('ok');
+    }
+    await env.RATE_LIMIT.delete(`admrefpctwait:${fromId}`);
+    await supportApi(env, 'sendMessage', {
+      chat_id: adminId,
+      text: `✅ Процент для ${code} обновлён.\n\n` + await refListText(env),
+      reply_markup: { inline_keyboard: [[{ text: '✏️ Изменить ещё', callback_data: 'admrefpct' }], [{ text: '← Admin', callback_data: 'admin' }]] },
     });
     return new Response('ok');
   }
