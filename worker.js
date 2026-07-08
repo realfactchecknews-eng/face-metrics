@@ -267,18 +267,21 @@ async function buy(request, env) {
   const L = body.lang === 'ru' ? 'ru' : 'en';
   const method = body.method || 'stars';
 
+  const discPct = await buyerDiscountPct(env, sess.id);
+  await env.RATE_LIMIT.delete(`pendingDiscount:${sess.id}`); // промо-скидка одноразовая
+
   if (method === 'crypto') {
-    const d = await createCryptoInvoice(env, sess.id, body.pack, L);
+    const d = await createCryptoInvoice(env, sess.id, body.pack, L, discPct);
     if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.error || '') });
     return json({ link: d.link });
   }
   if (method === 'rub' && lavaConfigured(env)) {
-    const d = await createLavaInvoice(env, sess.id, body.pack, L);
+    const d = await createLavaInvoice(env, sess.id, body.pack, L, discPct);
     if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.error || '') });
     return json({ link: d.link });
   }
   // stars | rub-через-ЮKassa — оба через Telegram createInvoiceLink (для rub нужен provider_token)
-  const d = await createInvoice(env, sess.id, body.pack, L, method);
+  const d = await createInvoice(env, sess.id, body.pack, L, method, discPct);
   if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.description || '') });
   return json({ link: d.result });
 }
@@ -302,7 +305,7 @@ async function sendCard(request, env) {
 }
 
 // Создание инвойса-ссылки через Telegram. method: 'stars' (XTR) | 'rub' (карта РФ, ЮKassa).
-async function createInvoice(env, tgid, packId, L, method = 'stars') {
+async function createInvoice(env, tgid, packId, L, method = 'stars', discPct = 0) {
   const pack = PACKS[packId];
   const unlimRu = pack.hours >= 720 ? 'на месяц' : pack.hours >= 168 ? 'на неделю' : 'на 24 часа';
   const unlimEn = pack.hours >= 720 ? 'for a month' : pack.hours >= 168 ? 'for a week' : 'for 24 hours';
@@ -321,13 +324,13 @@ async function createInvoice(env, tgid, packId, L, method = 'stars') {
     description: L === 'ru' ? descRu : descEn,
     payload: JSON.stringify({ tgid, pack: packId }),
     currency: 'XTR',
-    prices: [{ label: packLabel(pack, L), amount: pack.stars }],
+    prices: [{ label: packLabel(pack, L), amount: applyDiscount(pack.stars, discPct) }],
   };
   if (method === 'rub') {
     // Карта РФ через ЮKassa: рубли в копейках + provider_token из BotFather.
     req.currency = 'RUB';
     req.provider_token = env.YUKASSA_PROVIDER_TOKEN;
-    req.prices = [{ label: packLabel(pack, L), amount: pack.rub * 100 }];
+    req.prices = [{ label: packLabel(pack, L), amount: applyDiscount(pack.rub, discPct) * 100 }];
     // Если ЮKassa требует фискальный чек (54-ФЗ) — добавь req.provider_data
     // с receipt (см. доку ЮKassa) и need_email/send_email_to_provider.
   } else if (pack.type === 'sub') {
@@ -365,7 +368,7 @@ async function lavaProductPrice(env, offerId) {
   }
   return null;
 }
-async function createLavaInvoice(env, tgid, packId, L) {
+async function createLavaInvoice(env, tgid, packId, L, discPct = 0) {
   const offerId = lavaOfferIds(env)[packId];
   if (!offerId) return { ok: false, error: 'оффер для этого тарифа не настроен в Lava.top' };
   const amount = await lavaProductPrice(env, offerId);
@@ -376,7 +379,9 @@ async function createLavaInvoice(env, tgid, packId, L) {
     periodicity: 'ONE_TIME',
     buyerLanguage: L === 'ru' ? 'RU' : 'EN',
   };
-  if (amount != null) body.amount = amount;
+  // Скидку можно применить только у офферов с динамической ценой (amount != null) —
+  // у фикс-цены Lava.top не даёт передавать amount вообще.
+  if (amount != null) body.amount = applyDiscount(amount, discPct);
   const r = await fetch('https://gate.lava.top/api/v3/invoice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': env.LAVA_API_KEY },
@@ -417,7 +422,7 @@ async function lavaWebhook(request, env) {
 
 // ─────────────────────────── CryptoBot (Crypto Pay API) ───────────────────────────
 // createInvoice в фиате RUB — оплата любой поддержанной криптой, курс считает CryptoBot.
-async function createCryptoInvoice(env, tgid, packId, L) {
+async function createCryptoInvoice(env, tgid, packId, L, discPct = 0) {
   const pack = PACKS[packId];
   const descRu = pack.type === 'credits' ? `${pack.credits} AI-анализ(а) на facerate.ru`
     : pack.hours >= 720 ? 'Безлимит на месяц на facerate.ru' : 'Безлимит на день на facerate.ru';
@@ -426,7 +431,7 @@ async function createCryptoInvoice(env, tgid, packId, L) {
   const r = await cryptoApi(env, 'createInvoice', {
     currency_type: 'fiat',
     fiat: 'RUB',
-    amount: String(pack.rub),
+    amount: String(applyDiscount(pack.rub, discPct)),
     description: L === 'ru' ? descRu : descEn,
     payload: JSON.stringify({ tgid, pack: packId }),
     paid_btn_name: 'openBot',
@@ -528,6 +533,7 @@ const BL = {
     promoOut: '😞 All activations of this code are gone.',
     promoOkCredits: (n) => `+${n} analyses`,
     promoOkUnlim: (h) => `unlimited for ${h}h`,
+    promoOkDiscount: (p) => `${p}% off your next purchase (24h)`,
     promoOk: (g) => `🎉 Promo code activated: ${g}! Open facerate.ru and enjoy.`,
     payCredits: (n) => `credits added: ${n}`,
     payUnlim: (d) => `👑 unlimited until ${d}`,
@@ -576,6 +582,7 @@ const BL = {
     promoOut: '😞 Увы, все активации этого промокода уже разобрали.',
     promoOkCredits: (n) => `+${n} анализ(а)`,
     promoOkUnlim: (h) => `безлимит на ${h} ч`,
+    promoOkDiscount: (p) => `скидка ${p}% на следующую покупку (24ч)`,
     promoOk: (g) => `🎉 Промокод активирован: ${g}! Открывай facerate.ru и пользуйся.`,
     payCredits: (n) => `начислено анализов: ${n}`,
     payUnlim: (d) => `👑 безлимит до ${d}`,
@@ -677,11 +684,11 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
-  // ── Админ: /addpromo КОД использований credits=N | hours=H ──
+  // ── Админ: /addpromo КОД использований credits=N | hours=H | discount=N ──
   if (text.startsWith('/addpromo') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
-    const m = text.match(/^\/addpromo\s+(\S+)\s+(\d+)\s+(credits|hours)=(\d+)/i);
+    const m = text.match(/^\/addpromo\s+(\S+)\s+(\d+)\s+(credits|hours|discount)=(\d+)/i);
     if (!m) {
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ credits=3\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ hours=24' });
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ credits=3\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ hours=24\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ discount=20' });
     } else {
       const promo = { uses: parseInt(m[2], 10), max: parseInt(m[2], 10) };
       promo[m[3].toLowerCase()] = parseInt(m[4], 10);
@@ -742,12 +749,14 @@ async function handleCallback(env, cq) {
     const [, packId, method] = data.split(':');
     const pack = PACKS[packId];
     if (!pack) return;
+    const discPct = await buyerDiscountPct(env, tgid);
+    await env.RATE_LIMIT.delete(`pendingDiscount:${tgid}`); // промо-скидка одноразовая; реф-скидка не тут, а в самом ref-объекте
     if (method === 'crypto') {
-      const d = await createCryptoInvoice(env, tgid, packId, L);
+      const d = await createCryptoInvoice(env, tgid, packId, L, discPct);
       if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.cryptoBtn, url: d.link }]] } });
       else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
     } else if (method === 'rub' && lavaConfigured(env)) {
-      const d = await createLavaInvoice(env, tgid, packId, L);
+      const d = await createLavaInvoice(env, tgid, packId, L, discPct);
       if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.payCard, url: d.link }]] } });
       else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
     } else {
@@ -757,12 +766,12 @@ async function handleCallback(env, cq) {
         description: pack.type === 'sub' ? b.subDesc : b.packDesc(packLabel(pack, L)),
         payload: JSON.stringify({ tgid, pack: packId }),
         currency: 'XTR',
-        prices: [{ label: packLabel(pack, L), amount: pack.stars }],
+        prices: [{ label: packLabel(pack, L), amount: applyDiscount(pack.stars, discPct) }],
       };
       if (method === 'rub') {
         inv.currency = 'RUB';
         inv.provider_token = env.YUKASSA_PROVIDER_TOKEN;
-        inv.prices = [{ label: packLabel(pack, L), amount: pack.rub * 100 }];
+        inv.prices = [{ label: packLabel(pack, L), amount: applyDiscount(pack.rub, discPct) * 100 }];
       } else if (pack.type === 'sub') {
         inv.subscription_period = pack.period;
       }
@@ -834,7 +843,11 @@ async function redeemPromo(env, chat, tgid, code, L) {
   await env.RATE_LIMIT.put(`promoused:${code}:${tgid}`, '1', { expirationTtl: 60 * 60 * 24 * 90 });
 
   let grant;
-  if (promo.credits) {
+  if (promo.discount) {
+    // Скидка не начисляется сразу — применяется к следующей оплате в течение 24ч.
+    await env.RATE_LIMIT.put(`pendingDiscount:${tgid}`, String(promo.discount), { expirationTtl: 60 * 60 * 24 });
+    grant = b.promoOkDiscount(promo.discount);
+  } else if (promo.credits) {
     const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
     await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + promo.credits));
     grant = b.promoOkCredits(promo.credits);
@@ -957,7 +970,7 @@ async function promoListText(env) {
     if (!raw) continue;
     let p; try { p = JSON.parse(raw); } catch { continue; }
     const code = k.name.slice('promo:'.length);
-    const gift = p.credits ? `+${p.credits} анализ(ов)` : p.hours ? `безлимит ${p.hours}ч` : '?';
+    const gift = p.credits ? `+${p.credits} анализ(ов)` : p.hours ? `безлимит ${p.hours}ч` : p.discount ? `скидка ${p.discount}%` : '?';
     const used = p.max ? `${p.max - p.uses}/${p.max} использовано` : `осталось ${p.uses}`;
     lines.push(`🎟 ${code} — ${gift} — ${used}`);
   }
@@ -1054,7 +1067,8 @@ async function getRef(env, code) {
   try { return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
 async function createRef(env, code, label, pct) {
-  await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify({ label: label || '', pct: pct || 0, clicks: 0, purchases: 0, revenueRub: 0, createdAt: Date.now() }));
+  // buyerPct — скидка, которую получает покупатель, пришедший по этой ссылке (0 = без скидки).
+  await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify({ label: label || '', pct: pct || 0, buyerPct: 0, clicks: 0, purchases: 0, revenueRub: 0, createdAt: Date.now() }));
 }
 async function setRefPct(env, code, pct) {
   const ref = await getRef(env, code);
@@ -1063,7 +1077,24 @@ async function setRefPct(env, code, pct) {
   await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
   return true;
 }
+async function setRefBuyerPct(env, code, pct) {
+  const ref = await getRef(env, code);
+  if (!ref) return false;
+  ref.buyerPct = pct;
+  await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
+  return true;
+}
 function refPayout(ref) { return Math.round((ref.revenueRub || 0) * (ref.pct || 0) / 100); }
+// Скидка покупателя: приоритет у промокода (pendingDiscount), иначе — скидка по реф-ссылке, если пришёл по ней.
+async function buyerDiscountPct(env, tgid) {
+  const pd = await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`);
+  if (pd) return parseInt(pd, 10) || 0;
+  const code = await env.RATE_LIMIT.get(`refby:${tgid}`);
+  if (!code) return 0;
+  const ref = await getRef(env, code);
+  return ref?.buyerPct || 0;
+}
+function applyDiscount(amount, pct) { return pct > 0 ? Math.max(1, Math.round(amount * (100 - pct) / 100)) : amount; }
 // Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
 async function attributeReferral(env, tgid, code) {
   const ref = await getRef(env, code);
@@ -1113,6 +1144,7 @@ async function refDetailText(env, code) {
     + `Покупок: ${r.purchases || 0}\n`
     + `Выручка: ~${r.revenueRub || 0}₽\n`
     + `Комиссия медийки: ${r.pct || 0}% → ~${refPayout(r)}₽\n`
+    + `Скидка покупателю по ссылке: ${r.buyerPct || 0}%\n`
     + `Владелец в @FaceRateMedia_bot: ${owner ? 'id ' + owner : 'ещё не привязал'}\n`
     + `Создан: ${new Date(r.createdAt || 0).toLocaleDateString('ru-RU')}`;
 }
@@ -1296,10 +1328,10 @@ async function supportWebhook(request, env) {
       await supportApi(env, 'sendMessage', { chat_id: chat, text: await promoListText(env), reply_markup: { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] } });
     } else if (data === 'admpromoadd' && isAdmin) {
       await env.RATE_LIMIT.put(`admpromowait:${fromId}`, '1', { expirationTtl: 600 });
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Отправь одним сообщением:\n\nКОД КОЛ-ВО_АКТИВАЦИЙ credits=3\nили\nКОД КОЛ-ВО_АКТИВАЦИЙ hours=24\n\nНапример: SALE20 15 credits=1' });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Отправь одним сообщением:\n\nКОД КОЛ-ВО_АКТИВАЦИЙ credits=3\nили hours=24\nили discount=20 (скидка 20% на след. покупку)\n\nНапример: SALE20 15 discount=20' });
     } else if (data === 'admref' && isAdmin) {
       const { text: rt, kb } = await refListKb(env, 'admin');
-      kb.inline_keyboard.splice(-1, 0, [{ text: '✏️ Изменить %', callback_data: 'admrefpct' }]);
+      kb.inline_keyboard.splice(-1, 0, [{ text: '✏️ Комиссия медийке', callback_data: 'admrefpct' }], [{ text: '🎟 Скидка покупателю', callback_data: 'admrefbuyerpct' }]);
       await supportApi(env, 'sendMessage', { chat_id: chat, text: rt, reply_markup: kb });
     } else if (data.startsWith('refview:') && isAdmin) {
       await supportApi(env, 'sendMessage', { chat_id: chat, text: await refDetailText(env, data.slice(8)), parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '← Рефералы', callback_data: 'admref' }]] } });
@@ -1309,6 +1341,9 @@ async function supportWebhook(request, env) {
     } else if (data === 'admrefpct' && isAdmin) {
       await env.RATE_LIMIT.put(`admrefpctwait:${fromId}`, '1', { expirationTtl: 600 });
       await supportApi(env, 'sendMessage', { chat_id: chat, text: '✏️ Отправь одним сообщением:\n\nКОД ПРОЦЕНТ\n\nНапример: ANNA 25' });
+    } else if (data === 'admrefbuyerpct' && isAdmin) {
+      await env.RATE_LIMIT.put(`admrefbuyerwait:${fromId}`, '1', { expirationTtl: 600 });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎟 Отправь одним сообщением:\n\nКОД ПРОЦЕНТ\n\nНапример: ANNA 10 — покупатели по ссылке ANNA получат скидку 10%.\nРаботает для Stars/крипты и для карты только у тарифов с динамической ценой в Lava.top (сейчас это «1 анализ» и «Месяц»).' });
     } else if (data.startsWith('admopen:') && isAdmin) {
       const uid = data.slice(8);
       await env.RATE_LIMIT.put(`admtarget:${fromId}`, uid, { expirationTtl: 60 * 30 });
@@ -1355,9 +1390,9 @@ async function supportWebhook(request, env) {
   }
   // Оператор в процессе добавления промокода (нажал «+ Добавить промокод») → следующее сообщение это код.
   if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admpromowait:${fromId}`)) {
-    const m = text.match(/^(\S+)\s+(\d+)\s+(credits|hours)=(\d+)/i);
+    const m = text.match(/^(\S+)\s+(\d+)\s+(credits|hours|discount)=(\d+)/i);
     if (!m) {
-      await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Не понял формат. Пример: SALE20 15 credits=1' });
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Не понял формат. Пример: SALE20 15 credits=1 (или hours=24, или discount=20 — скидка 20% на следующую покупку)' });
       return new Response('ok');
     }
     const promo = { uses: parseInt(m[2], 10), max: parseInt(m[2], 10) };
@@ -1406,6 +1441,23 @@ async function supportWebhook(request, env) {
       chat_id: adminId,
       text: `✅ Процент для ${code} обновлён.\n\n` + await refListText(env),
       reply_markup: { inline_keyboard: [[{ text: '✏️ Изменить ещё', callback_data: 'admrefpct' }], [{ text: '← Admin', callback_data: 'admin' }]] },
+    });
+    return new Response('ok');
+  }
+  // Оператор в процессе изменения скидки покупателю (нажал «🎟 Скидка покупателю»).
+  if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admrefbuyerwait:${fromId}`)) {
+    const m = text.match(/^([a-z0-9_-]{1,40})\s+(\d{1,3})/i);
+    const code = m ? m[1].toUpperCase() : '';
+    if (!m || !(await setRefBuyerPct(env, code, Math.min(100, parseInt(m[2], 10))))) {
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: `⚠️ Не понял формат или код ${code} не найден. Пример: ANNA 10` });
+      return new Response('ok');
+    }
+    await env.RATE_LIMIT.delete(`admrefbuyerwait:${fromId}`);
+    await supportApi(env, 'sendMessage', {
+      chat_id: adminId,
+      text: `✅ Скидка покупателю для ${code} обновлена.\n\n` + await refDetailText(env, code),
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '🎟 Изменить ещё', callback_data: 'admrefbuyerpct' }], [{ text: '← Admin', callback_data: 'admin' }]] },
     });
     return new Response('ok');
   }
