@@ -1219,20 +1219,29 @@ async function setRefBuyerPct(env, code, pct) {
   return true;
 }
 function refPayout(ref) { return Math.round((ref.revenueRub || 0) * (ref.pct || 0) / 100); }
-// Скидка покупателя: приоритет у промокода (pendingDiscount), иначе — скидка по реф-ссылке, если пришёл по ней.
-// Персональные ссылки (см. ниже): как только по ссылке прошло 5 ЛЮБЫХ покупок (не обязательно этого
-// покупателя — суммарно по ссылке), дальнейшие покупки по ней получают скидку 15%, на любой тариф.
+// Скидка покупателя: приоритет у промокода (pendingDiscount), иначе — максимум из:
+// (а) скидки по реф-ссылке, если пришёл по чужой ссылке, (б) скидки владельцу СВОЕЙ персональной
+// ссылки, если по ней уже прошло 5+ покупок — тогда владелец сам покупает со скидкой.
+// Персональные ссылки: как только по ссылке прошло 5 ЛЮБЫХ покупок (суммарно по ссылке, не только
+// этого покупателя), дальнейшие покупки по ней получают скидку 15% на любой тариф.
 const PERSONAL_REF_DISCOUNT_THRESHOLD = 5;
 const PERSONAL_REF_DISCOUNT_PCT = 15;
+const PERSONAL_REF_OWNER_DISCOUNT_PCT = 10;
 async function buyerDiscountPct(env, tgid, packId) {
   const pd = await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`);
   if (pd) return parseInt(pd, 10) || 0;
+  let best = 0;
   const code = await env.RATE_LIMIT.get(`refby:${tgid}`);
-  if (!code) return 0;
-  const ref = await getRef(env, code);
-  if (!ref) return 0;
-  if (ref.personal) return (ref.purchases || 0) >= PERSONAL_REF_DISCOUNT_THRESHOLD ? PERSONAL_REF_DISCOUNT_PCT : 0;
-  return ref.buyerPct || 0;
+  if (code) {
+    const ref = await getRef(env, code);
+    if (ref) best = Math.max(best, ref.personal ? ((ref.purchases || 0) >= PERSONAL_REF_DISCOUNT_THRESHOLD ? PERSONAL_REF_DISCOUNT_PCT : 0) : (ref.buyerPct || 0));
+  }
+  const myCode = await env.RATE_LIMIT.get(`myrefcode:${tgid}`);
+  if (myCode) {
+    const myRef = await getRef(env, myCode);
+    if ((myRef?.purchases || 0) >= PERSONAL_REF_DISCOUNT_THRESHOLD) best = Math.max(best, PERSONAL_REF_OWNER_DISCOUNT_PCT);
+  }
+  return best;
 }
 function applyDiscount(amount, pct) { return pct > 0 ? Math.max(1, Math.round(amount * (100 - pct) / 100)) : amount; }
 
@@ -1259,9 +1268,9 @@ async function myPersonalRefText(env, tgid, L) {
   const link = refLink(env, code);
   const left = Math.max(0, PERSONAL_REF_DISCOUNT_THRESHOLD - (r.purchases || 0));
   if (L === 'ru') {
-    return `🔗 Твоя реферальная ссылка:\n${link}\n\nЗа каждую покупку ЛЮБОГО тарифа по этой ссылке тебе начисляется +1 анализ. А после ${PERSONAL_REF_DISCOUNT_THRESHOLD} покупок по ссылке (суммарно) все дальнейшие покупки по ней получают скидку ${PERSONAL_REF_DISCOUNT_PCT}%.\n\nПереходов: ${r.clicks || 0}\nПокупок: ${r.purchases || 0}${left > 0 ? `\nДо скидки покупателям: ещё ${left} покупок(и)` : `\nСкидка ${PERSONAL_REF_DISCOUNT_PCT}% уже активна по ссылке`}\nЗаработано анализов: ${r.creditsEarned || 0}`;
+    return `🔗 Твоя реферальная ссылка:\n${link}\n\nЗа каждую покупку ЛЮБОГО тарифа по этой ссылке тебе начисляется +1 анализ.\nПосле ${PERSONAL_REF_DISCOUNT_THRESHOLD} покупок по ссылке (суммарно): тем, кто покупает по ней — скидка ${PERSONAL_REF_DISCOUNT_PCT}%, а ТЕБЕ САМОМУ на все свои покупки — скидка ${PERSONAL_REF_OWNER_DISCOUNT_PCT}%.\n\nПереходов: ${r.clicks || 0}\nПокупок: ${r.purchases || 0}${left > 0 ? `\nДо скидок: ещё ${left} покупок(и)` : `\nСкидки уже активны`}\nЗаработано анализов: ${r.creditsEarned || 0}`;
   }
-  return `🔗 Your personal referral link:\n${link}\n\nFor every purchase (any pack) made through this link, you get +1 free analysis. Once ${PERSONAL_REF_DISCOUNT_THRESHOLD} purchases have gone through this link (total), every further purchase through it gets ${PERSONAL_REF_DISCOUNT_PCT}% off.\n\nClicks: ${r.clicks || 0}\nPurchases: ${r.purchases || 0}${left > 0 ? `\nPurchases until discount unlocks: ${left}` : `\n${PERSONAL_REF_DISCOUNT_PCT}% discount is already active on this link`}\nAnalyses earned: ${r.creditsEarned || 0}`;
+  return `🔗 Your personal referral link:\n${link}\n\nFor every purchase (any pack) made through this link, you get +1 free analysis.\nOnce ${PERSONAL_REF_DISCOUNT_THRESHOLD} purchases have gone through this link (total): buyers get ${PERSONAL_REF_DISCOUNT_PCT}% off, and YOU get ${PERSONAL_REF_OWNER_DISCOUNT_PCT}% off all your own purchases.\n\nClicks: ${r.clicks || 0}\nPurchases: ${r.purchases || 0}${left > 0 ? `\nPurchases until discounts unlock: ${left}` : `\nDiscounts are already active`}\nAnalyses earned: ${r.creditsEarned || 0}`;
 }
 // Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
 async function attributeReferral(env, tgid, code) {
