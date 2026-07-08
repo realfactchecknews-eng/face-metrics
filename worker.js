@@ -962,6 +962,29 @@ function adminPanelKb() {
     [{ text: '← Меню', callback_data: 'menu' }],
   ]};
 }
+// Мастер создания промокода — полностью кнопками, кроме самого кода (уникальная строка).
+function promoTypeKb() {
+  return { inline_keyboard: [
+    [{ text: '🎁 Кредиты (анализы)', callback_data: 'ptype:credits' }],
+    [{ text: '⏳ Безлимит (часы)', callback_data: 'ptype:hours' }],
+    [{ text: '🎟 Скидка (%)', callback_data: 'ptype:discount' }],
+    [{ text: '← Промокоды', callback_data: 'admpromo' }],
+  ]};
+}
+const PROMO_AMOUNT_PRESETS = { credits: [1, 3, 5, 10], hours: [24, 72, 168, 720], discount: [10, 15, 20, 25, 30, 50] };
+function promoAmountKb(type) {
+  const fmt = (v) => type === 'discount' ? `${v}%` : type === 'hours' ? `${v}ч` : `${v}`;
+  const rows = PROMO_AMOUNT_PRESETS[type].map((v) => ([{ text: fmt(v), callback_data: `pamt:${v}` }]));
+  rows.push([{ text: '✏️ Другое число', callback_data: 'pamt:custom' }]);
+  rows.push([{ text: '← Назад', callback_data: 'admpromoadd' }]);
+  return { inline_keyboard: rows };
+}
+const PROMO_USES_PRESETS = [1, 5, 10, 25, 50, 100];
+function promoUsesKb() {
+  const rows = PROMO_USES_PRESETS.map((v) => ([{ text: `${v}`, callback_data: `puses:${v}` }]));
+  rows.push([{ text: '✏️ Другое число', callback_data: 'puses:custom' }]);
+  return { inline_keyboard: rows };
+}
 async function promoListText(env) {
   const list = await env.RATE_LIMIT.list({ prefix: 'promo:' });
   const lines = [];
@@ -1327,8 +1350,42 @@ async function supportWebhook(request, env) {
     } else if (data === 'admpromo' && isAdmin) {
       await supportApi(env, 'sendMessage', { chat_id: chat, text: await promoListText(env), reply_markup: { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] } });
     } else if (data === 'admpromoadd' && isAdmin) {
-      await env.RATE_LIMIT.put(`admpromowait:${fromId}`, '1', { expirationTtl: 600 });
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Отправь одним сообщением:\n\nКОД КОЛ-ВО_АКТИВАЦИЙ credits=3\nили hours=24\nили discount=20 (скидка 20% на след. покупку)\n\nНапример: SALE20 15 discount=20' });
+      await env.RATE_LIMIT.delete(`admpromowiz:${fromId}`);
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Какой тип промокода?', reply_markup: promoTypeKb() });
+    } else if (data.startsWith('ptype:') && isAdmin) {
+      const type = data.slice(6);
+      await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify({ type }), { expirationTtl: 600 });
+      const ask = type === 'credits' ? '🎁 Сколько анализов даёт код?' : type === 'hours' ? '⏳ На сколько часов безлимит?' : '🎟 Какой процент скидки?';
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: ask, reply_markup: promoAmountKb(type) });
+    } else if (data.startsWith('pamt:') && isAdmin) {
+      const wizRaw = await env.RATE_LIMIT.get(`admpromowiz:${fromId}`);
+      if (!wizRaw) { await supportApi(env, 'sendMessage', { chat_id: chat, text: '⚠️ Сессия истекла, начни заново.', reply_markup: { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }]] } }); return new Response('ok'); }
+      const wiz = JSON.parse(wizRaw);
+      const val = data.slice(5);
+      if (val === 'custom') {
+        wiz.step = 'amount_custom';
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        await supportApi(env, 'sendMessage', { chat_id: chat, text: '✏️ Отправь число одним сообщением.' });
+      } else {
+        wiz.amount = parseInt(val, 10);
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔢 Сколько активаций у кода?', reply_markup: promoUsesKb() });
+      }
+    } else if (data.startsWith('puses:') && isAdmin) {
+      const wizRaw = await env.RATE_LIMIT.get(`admpromowiz:${fromId}`);
+      if (!wizRaw) { await supportApi(env, 'sendMessage', { chat_id: chat, text: '⚠️ Сессия истекла, начни заново.', reply_markup: { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }]] } }); return new Response('ok'); }
+      const wiz = JSON.parse(wizRaw);
+      const val = data.slice(6);
+      if (val === 'custom') {
+        wiz.step = 'uses_custom';
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        await supportApi(env, 'sendMessage', { chat_id: chat, text: '✏️ Отправь число одним сообщением.' });
+      } else {
+        wiz.uses = parseInt(val, 10);
+        wiz.step = 'code';
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔤 Отправь код одним словом (например SALE20).' });
+      }
     } else if (data === 'admref' && isAdmin) {
       const { text: rt, kb } = await refListKb(env, 'admin');
       kb.inline_keyboard.splice(-1, 0, [{ text: '✏️ Комиссия медийке', callback_data: 'admrefpct' }], [{ text: '🎟 Скидка покупателю', callback_data: 'admrefbuyerpct' }]);
@@ -1388,23 +1445,52 @@ async function supportWebhook(request, env) {
     }
     return new Response('ok');
   }
-  // Оператор в процессе добавления промокода (нажал «+ Добавить промокод») → следующее сообщение это код.
-  if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admpromowait:${fromId}`)) {
-    const m = text.match(/^(\S+)\s+(\d+)\s+(credits|hours|discount)=(\d+)/i);
-    if (!m) {
-      await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Не понял формат. Пример: SALE20 15 credits=1 (или hours=24, или discount=20 — скидка 20% на следующую покупку)' });
-      return new Response('ok');
+  // Мастер создания промокода кнопками: тип/сумма/активации выбираются кнопками,
+  // единственный шаг текстом — сам код (это уникальная строка, кнопкой не выбрать).
+  if (isAdmin && !msg.reply_to_message) {
+    const wizRaw = await env.RATE_LIMIT.get(`admpromowiz:${fromId}`);
+    if (wizRaw) {
+      const wiz = JSON.parse(wizRaw);
+      if (wiz.step === 'amount_custom') {
+        const n = parseInt(text, 10);
+        if (!Number.isFinite(n) || n <= 0) {
+          await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Нужно положительное число.' });
+          return new Response('ok');
+        }
+        wiz.amount = n; delete wiz.step;
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        await supportApi(env, 'sendMessage', { chat_id: adminId, text: '🔢 Сколько активаций у кода?', reply_markup: promoUsesKb() });
+        return new Response('ok');
+      }
+      if (wiz.step === 'uses_custom') {
+        const n = parseInt(text, 10);
+        if (!Number.isFinite(n) || n <= 0) {
+          await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Нужно положительное число.' });
+          return new Response('ok');
+        }
+        wiz.uses = n; wiz.step = 'code';
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        await supportApi(env, 'sendMessage', { chat_id: adminId, text: '🔤 Отправь код одним словом (например SALE20).' });
+        return new Response('ok');
+      }
+      if (wiz.step === 'code') {
+        const code = text.trim().toUpperCase().replace(/\s+/g, '');
+        if (!/^[A-Z0-9_-]{2,32}$/.test(code)) {
+          await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Код может быть только латиницей/цифрами, 2-32 символа.' });
+          return new Response('ok');
+        }
+        const promo = { uses: wiz.uses, max: wiz.uses };
+        promo[wiz.type] = wiz.amount;
+        await env.RATE_LIMIT.put(`promo:${code}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
+        await env.RATE_LIMIT.delete(`admpromowiz:${fromId}`);
+        await supportApi(env, 'sendMessage', {
+          chat_id: adminId,
+          text: `✅ Промокод ${code} создан.\n\n` + await promoListText(env),
+          reply_markup: { inline_keyboard: [[{ text: '+ Добавить ещё', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] },
+        });
+        return new Response('ok');
+      }
     }
-    const promo = { uses: parseInt(m[2], 10), max: parseInt(m[2], 10) };
-    promo[m[3].toLowerCase()] = parseInt(m[4], 10);
-    await env.RATE_LIMIT.put(`promo:${m[1].toUpperCase()}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
-    await env.RATE_LIMIT.delete(`admpromowait:${fromId}`);
-    await supportApi(env, 'sendMessage', {
-      chat_id: adminId,
-      text: `✅ Промокод ${m[1].toUpperCase()} создан.\n\n` + await promoListText(env),
-      reply_markup: { inline_keyboard: [[{ text: '+ Добавить ещё', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] },
-    });
-    return new Response('ok');
   }
   // Оператор в процессе создания реферальной ссылки (нажал «+ Создать реф-ссылку»).
   if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admrefwait:${fromId}`)) {
