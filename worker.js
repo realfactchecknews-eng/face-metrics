@@ -15,7 +15,8 @@
 //          приоритетный провайдер — см. блок Lava.top),
 //          YUKASSA_PROVIDER_TOKEN (карты РФ через Telegram, фолбэк если Lava не настроена),
 //          CRYPTOBOT_TOKEN (Crypto Pay API),
-//          SUPPORT_BOT_TOKEN, SUPPORT_ADMIN_ID (куда падают обращения), SUPPORT_WEBHOOK_SECRET (опц.).
+//          SUPPORT_BOT_TOKEN, SUPPORT_ADMIN_ID (куда падают обращения), SUPPORT_WEBHOOK_SECRET (опц.),
+//          MEDIA_BOT_TOKEN (бот для медийных партнёров — своя статистика по реф-коду), MEDIA_WEBHOOK_SECRET (опц.).
 // KV: RATE_LIMIT.
 
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/день
@@ -56,6 +57,7 @@ export default {
       if (path === '/crypto-webhook') return await cryptoWebhook(request, env);
       if (path === '/lava-webhook') return await lavaWebhook(request, env);
       if (path === '/support-webhook') return await supportWebhook(request, env);
+      if (path === '/media-webhook')   return await mediaWebhook(request, env);
       if (path === '/auth')       return await authTg(request, env);
       if (path === '/authpoll')   return await authPoll(request, env);
       if (path === '/me')         return await me(request, env);
@@ -1092,6 +1094,95 @@ async function refListText(env) {
     lines.push(`🔗 ${code}${r.label ? ' (' + r.label + ')' : ''} — ${r.clicks || 0} перех., ${r.purchases || 0} покупок, ~${r.revenueRub || 0}₽`);
   }
   return `🔗 Реферальные ссылки (${lines.length}):\n\n` + lines.join('\n');
+}
+
+// ─── Привязка реф-кода к аккаунту медийщика (для бота @media-бот, самостоятельная статистика) ───
+// refowner:КОД     — tgid медийщика, которому принадлежит код (один раз, не переписывается).
+// refowned:tgid    — JSON-массив кодов, привязанных этим медийщиком (можно несколько).
+async function refOwner(env, code) { return await env.RATE_LIMIT.get(`refowner:${code}`); }
+async function ownedCodes(env, tgid) {
+  const raw = await env.RATE_LIMIT.get(`refowned:${tgid}`);
+  try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+async function claimRef(env, tgid, code) {
+  await env.RATE_LIMIT.put(`refowner:${code}`, String(tgid));
+  const list = await ownedCodes(env, tgid);
+  if (!list.includes(code)) list.push(code);
+  await env.RATE_LIMIT.put(`refowned:${tgid}`, JSON.stringify(list));
+}
+async function myRefStatsText(env, tgid) {
+  const codes = await ownedCodes(env, tgid);
+  if (!codes.length) return '📊 У тебя пока нет привязанных кодов. Нажми «🔑 Привязать код» и отправь код, который тебе выдали.';
+  const lines = [];
+  for (const code of codes) {
+    const r = await getRef(env, code);
+    if (!r) continue;
+    lines.push(`🔗 ${code} — ${r.clicks || 0} переходов, ${r.purchases || 0} покупок, ~${r.revenueRub || 0}₽ выручки`);
+  }
+  return `📊 Твоя статистика:\n\n` + lines.join('\n');
+}
+function mediaMenuKb() {
+  return { inline_keyboard: [[{ text: '🔑 Привязать код', callback_data: 'claim' }], [{ text: '📊 Моя статистика', callback_data: 'mystats' }]] };
+}
+function mediaApi(env, method, body) {
+  return fetch(`https://api.telegram.org/bot${env.MEDIA_BOT_TOKEN}/${method}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then(r => r.json()).catch(e => ({ ok: false, description: e.message }));
+}
+// Бот для медийных партнёров: привязывают выданный им реф-код и сами следят за статистикой
+// (переходы/покупки/выручка), без обращения в поддержку каждый раз.
+async function mediaWebhook(request, env) {
+  if (env.MEDIA_WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.MEDIA_WEBHOOK_SECRET) {
+    return new Response('forbidden', { status: 403 });
+  }
+  let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
+
+  if (upd.callback_query) {
+    const cq = upd.callback_query;
+    const chat = cq.message.chat.id, tgid = String(cq.from.id), data = cq.data || '';
+    await mediaApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
+    if (data === 'claim') {
+      await env.RATE_LIMIT.put(`medwait:${tgid}`, '1', { expirationTtl: 600 });
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '🔑 Отправь одним сообщением код, который тебе дали (например ANNA).' });
+    } else if (data === 'mystats') {
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: await myRefStatsText(env, tgid), reply_markup: mediaMenuKb() });
+    }
+    return new Response('ok');
+  }
+
+  const msg = upd.message;
+  if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
+  const chat = msg.chat.id, tgid = String(msg.from.id);
+  const text = (msg.text || '').trim();
+
+  if (text === '/start' || text === '/menu') {
+    await mediaApi(env, 'sendMessage', {
+      chat_id: chat,
+      text: '👋 Привет! Это бот для партнёров FaceRate.\n\nПривяжи свой реф-код, чтобы видеть переходы, покупки и выручку по своей ссылке в любой момент.',
+      reply_markup: mediaMenuKb(),
+    });
+    return new Response('ok');
+  }
+
+  if (await env.RATE_LIMIT.get(`medwait:${tgid}`)) {
+    await env.RATE_LIMIT.delete(`medwait:${tgid}`);
+    const code = text.replace(/^ref_/i, '').toUpperCase().trim();
+    if (!/^[A-Z0-9_-]{1,40}$/.test(code) || !(await refExists(env, code))) {
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '❌ Такого кода нет. Проверь и попробуй ещё раз через «🔑 Привязать код».', reply_markup: mediaMenuKb() });
+      return new Response('ok');
+    }
+    const owner = await refOwner(env, code);
+    if (owner && owner !== tgid) {
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '❌ Этот код уже привязан к другому аккаунту. Напиши в поддержку, если это ошибка.', reply_markup: mediaMenuKb() });
+      return new Response('ok');
+    }
+    await claimRef(env, tgid, code);
+    await mediaApi(env, 'sendMessage', { chat_id: chat, text: `✅ Код ${code} привязан к тебе!\n\n` + await myRefStatsText(env, tgid), reply_markup: mediaMenuKb() });
+    return new Response('ok');
+  }
+
+  await mediaApi(env, 'sendMessage', { chat_id: chat, text: '👋 Используй кнопки ниже.', reply_markup: mediaMenuKb() });
+  return new Response('ok');
 }
 
 // ─── Тикеты (открытые обращения) и лог транзакций — общие JSON-списки в KV ───
