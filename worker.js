@@ -269,7 +269,7 @@ async function buy(request, env) {
   const L = body.lang === 'ru' ? 'ru' : 'en';
   const method = body.method || 'stars';
 
-  const discPct = await buyerDiscountPct(env, sess.id);
+  const discPct = await buyerDiscountPct(env, sess.id, body.pack);
   await env.RATE_LIMIT.delete(`pendingDiscount:${sess.id}`); // промо-скидка одноразовая
 
   if (method === 'crypto') {
@@ -540,6 +540,7 @@ const BL = {
   en: {
     menu: 'FaceRate menu:',
     kbStatus: '💎 My status', kbShop: '⭐ Buy analyses / unlimited', kbOrders: '📦 My orders', kbPromo: '🎁 Enter promo code',
+    kbMyRef: '🔗 My referral link',
     kbSub: '🔄 My subscription', kbGw: '🎉 Giveaways', kbSite: '🌐 Open FaceRate', kbLang: '🌍 Язык: Русский',
     kbSupport: '💬 Support',
     kbBack: '← Menu',
@@ -590,6 +591,7 @@ const BL = {
   ru: {
     menu: 'Меню FaceRate:',
     kbStatus: '💎 Мой статус', kbShop: '⭐ Купить анализы / безлимит', kbOrders: '📦 Мои заказы', kbPromo: '🎁 Ввести промокод',
+    kbMyRef: '🔗 Моя реферальная ссылка',
     kbSub: '🔄 Моя подписка', kbGw: '🎉 Розыгрыши', kbSite: '🌐 Открыть FaceRate', kbLang: '🌍 Language: English',
     kbSupport: '💬 Поддержка',
     kbBack: '← Меню',
@@ -650,6 +652,7 @@ function menuKb(L) {
     [{ text: b.kbShop, callback_data: 'shop' }],
     [{ text: b.kbOrders, callback_data: 'orders' }],
     [{ text: b.kbPromo, callback_data: 'promo' }],
+    [{ text: b.kbMyRef, callback_data: 'myref' }],
     [{ text: b.kbSub, callback_data: 'mysub' }, { text: b.kbGw, callback_data: 'gw' }],
     [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbSupport, url: 'https://t.me/FaceRateSupport_bot' }],
     [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
@@ -798,7 +801,7 @@ async function handleCallback(env, cq) {
     const [, packId, method] = data.split(':');
     const pack = PACKS[packId];
     if (!pack) return;
-    const discPct = await buyerDiscountPct(env, tgid);
+    const discPct = await buyerDiscountPct(env, tgid, packId);
     await env.RATE_LIMIT.delete(`pendingDiscount:${tgid}`); // промо-скидка одноразовая; реф-скидка не тут, а в самом ref-объекте
     if (method === 'crypto') {
       const d = await createCryptoInvoice(env, tgid, packId, L, discPct);
@@ -839,6 +842,8 @@ async function handleCallback(env, cq) {
   } else if (data === 'promo') {
     await env.RATE_LIMIT.put(`pmstate:${tgid}`, '1', { expirationTtl: 300 });
     await reply(b.promoAsk, { inline_keyboard: [[{ text: b.kbBack, callback_data: 'menu' }]] });
+  } else if (data === 'myref') {
+    await reply(await myPersonalRefText(env, tgid, L), { inline_keyboard: [[{ text: b.kbBack, callback_data: 'menu' }]] });
   } else if (data === 'mysub') {
     const unlim = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
     const isRec = await env.RATE_LIMIT.get(`subrec:${tgid}`);
@@ -1054,8 +1059,7 @@ function promoAmountKb(type) {
 }
 // Выбор существующего реф-кода для промо типа "для медийки" (или ручной ввод, если код ещё не создан).
 async function refPickKb(env) {
-  const list = await env.RATE_LIMIT.list({ prefix: 'ref:' });
-  const codes = list.keys.map((k) => k.name.slice(4)).sort();
+  const codes = await nonPersonalRefCodes(env);
   const rows = codes.map((c) => ([{ text: `🔗 ${c}`, callback_data: `pamt:${c}` }]));
   rows.push([{ text: '✏️ Другой код', callback_data: 'pamt:custom' }]);
   rows.push([{ text: '← Назад', callback_data: 'admpromoadd' }]);
@@ -1215,19 +1219,50 @@ async function setRefBuyerPct(env, code, pct) {
 }
 function refPayout(ref) { return Math.round((ref.revenueRub || 0) * (ref.pct || 0) / 100); }
 // Скидка покупателя: приоритет у промокода (pendingDiscount), иначе — скидка по реф-ссылке, если пришёл по ней.
-async function buyerDiscountPct(env, tgid) {
+// Персональные ссылки (см. ниже) дают скидку 10% только на пакет "5 анализов" (p5), а не на всё подряд.
+async function buyerDiscountPct(env, tgid, packId) {
   const pd = await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`);
   if (pd) return parseInt(pd, 10) || 0;
   const code = await env.RATE_LIMIT.get(`refby:${tgid}`);
   if (!code) return 0;
   const ref = await getRef(env, code);
-  return ref?.buyerPct || 0;
+  if (!ref) return 0;
+  if (ref.personal) return packId === 'p5' ? 10 : 0;
+  return ref.buyerPct || 0;
 }
 function applyDiscount(amount, pct) { return pct > 0 ? Math.max(1, Math.round(amount * (100 - pct) / 100)) : amount; }
+
+// ─── Персональная реферальная ссылка (каждый пользователь может сделать свою) ───
+// myrefcode:tgid — код, который принадлежит этому пользователю (один на юзера, создаётся один раз).
+// ref:<CODE> для такого кода дополнительно содержит personal:true и ownerTgid.
+// Награда — НЕ % от выручки, а +1 анализ владельцу ссылки за каждую покупку любого тарифа по ней.
+async function getOrCreateMyRef(env, tgid) {
+  const existing = await env.RATE_LIMIT.get(`myrefcode:${tgid}`);
+  if (existing) return existing;
+  const code = 'U' + BigInt(tgid).toString(36).toUpperCase();
+  await env.RATE_LIMIT.put(`myrefcode:${tgid}`, code);
+  if (!(await refExists(env, code))) {
+    await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify({
+      label: '', pct: 0, buyerPct: 0, personal: true, ownerTgid: String(tgid),
+      clicks: 0, purchases: 0, revenueRub: 0, creditsEarned: 0, createdAt: Date.now(),
+    }));
+  }
+  return code;
+}
+async function myPersonalRefText(env, tgid, L) {
+  const code = await getOrCreateMyRef(env, tgid);
+  const r = await getRef(env, code) || {};
+  const link = refLink(env, code);
+  if (L === 'ru') {
+    return `🔗 Твоя реферальная ссылка:\n${link}\n\nЗа каждую покупку ЛЮБОГО тарифа по этой ссылке тебе начисляется +1 анализ. А тем, кто купит по ней «5 анализов» — скидка 10%.\n\nПереходов: ${r.clicks || 0}\nПокупок: ${r.purchases || 0}\nЗаработано анализов: ${r.creditsEarned || 0}`;
+  }
+  return `🔗 Your personal referral link:\n${link}\n\nFor every purchase (any pack) made through this link, you get +1 free analysis. Buyers get 10% off the "5 analyses" pack when bought through it.\n\nClicks: ${r.clicks || 0}\nPurchases: ${r.purchases || 0}\nAnalyses earned: ${r.creditsEarned || 0}`;
+}
 // Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
 async function attributeReferral(env, tgid, code) {
   const ref = await getRef(env, code);
   if (!ref) return; // код не создан админом — игнорируем мусорные ссылки
+  if (ref.personal && String(ref.ownerTgid) === String(tgid)) return; // нельзя рефералить самого себя
   const already = await env.RATE_LIMIT.get(`refby:${tgid}`);
   if (already) return;
   await env.RATE_LIMIT.put(`refby:${tgid}`, code);
@@ -1252,15 +1287,31 @@ async function trackReferralPurchase(env, tgid, pack, method) {
     const ref = await getRef(env, code);
     if (!ref) return;
     ref.purchases = (ref.purchases || 0) + 1;
-    ref.revenueRub = (ref.revenueRub || 0) + packRevenueRub(pack, method);
+    if (ref.personal) {
+      // Награда владельцу персональной ссылки — +1 анализ за любую покупку по ней (не % от суммы).
+      if (String(ref.ownerTgid) !== String(tgid)) {
+        const cur = parseInt(await env.RATE_LIMIT.get(`credits:${ref.ownerTgid}`) || '0', 10);
+        await env.RATE_LIMIT.put(`credits:${ref.ownerTgid}`, String(cur + 1));
+        ref.creditsEarned = (ref.creditsEarned || 0) + 1;
+      }
+    } else {
+      ref.revenueRub = (ref.revenueRub || 0) + packRevenueRub(pack, method);
+    }
     await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
     if (override) await env.RATE_LIMIT.delete(`pendingRefCode:${tgid}`); // одноразовое переключение
   } catch { /* учёт рефералки не должен ронять оплату */ }
 }
-// Кликабельный список — по одной кнопке на код, вместо простыни текста.
-async function refListKb(env, backCb) {
+// Персональные ссылки (каждый пользователь может сделать свою в главном боте) не показываем
+// в админ-панели медийок — иначе список зарастёт сотнями пользовательских кодов.
+async function nonPersonalRefCodes(env) {
   const list = await env.RATE_LIMIT.list({ prefix: 'ref:' });
   const codes = list.keys.map((k) => k.name.slice(4)).sort();
+  const flags = await Promise.all(codes.map((c) => getRef(env, c)));
+  return codes.filter((_, i) => !flags[i]?.personal);
+}
+// Кликабельный список — по одной кнопке на код, вместо простыни текста.
+async function refListKb(env, backCb) {
+  const codes = await nonPersonalRefCodes(env);
   const rows = codes.map((code) => ([{ text: `🔗 ${code}`, callback_data: `refview:${code}` }]));
   rows.push([{ text: '+ Создать реф-ссылку', callback_data: 'admrefadd' }]);
   rows.push([{ text: '← Admin', callback_data: backCb || 'admin' }]);
@@ -1283,13 +1334,12 @@ async function refDetailText(env, code) {
     + `Создан: ${new Date(r.createdAt || 0).toLocaleDateString('ru-RU')}`;
 }
 async function refListText(env) {
-  const list = await env.RATE_LIMIT.list({ prefix: 'ref:' });
-  if (!list.keys.length) return '🔗 Реферальных ссылок пока нет.';
+  const codes = await nonPersonalRefCodes(env);
+  if (!codes.length) return '🔗 Реферальных ссылок пока нет.';
   const lines = [];
-  for (const k of list.keys) {
-    const r = await getRef(env, k.name.slice(4));
+  for (const code of codes) {
+    const r = await getRef(env, code);
     if (!r) continue;
-    const code = k.name.slice(4);
     lines.push(`🔗 ${code}${r.label ? ' (' + r.label + ')' : ''} — ${r.clicks || 0} перех., ${r.purchases || 0} покупок, ~${r.revenueRub || 0}₽, ${r.pct || 0}% → ~${refPayout(r)}₽ медийке`);
   }
   return `🔗 Реферальные ссылки (${lines.length}):\n\n` + lines.join('\n');
