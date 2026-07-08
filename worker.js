@@ -20,6 +20,7 @@
 // KV: RATE_LIMIT.
 
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/день
+const LAVA_MIN_RUB = 50;                 // минимальная сумма инвойса у Lava.top — ниже нельзя ни при какой скидке
 const FREE_PER_DAY = 1;                  // бесплатных анализов в день подписчику
 const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
 const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
@@ -390,8 +391,9 @@ async function createLavaInvoice(env, tgid, packId, L, discPct = 0, sbp = false)
   };
   if (sbp) { body.paymentProvider = 'PAY2ME'; body.paymentMethod = 'SBP'; }
   // Скидку можно применить только у офферов с динамической ценой (amount != null) —
-  // у фикс-цены Lava.top не даёт передавать amount вообще.
-  if (amount != null) body.amount = applyDiscount(amount, discPct);
+  // у фикс-цены Lava.top не даёт передавать amount вообще. LAVA_MIN_RUB — их минималка
+  // по цене инвойса; ниже нельзя, иначе Lava.top отклонит запрос целиком.
+  if (amount != null) body.amount = Math.max(LAVA_MIN_RUB, applyDiscount(amount, discPct));
   const r = await fetch('https://gate.lava.top/api/v3/invoice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': env.LAVA_API_KEY },
