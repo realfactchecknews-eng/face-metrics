@@ -340,19 +340,40 @@ async function createInvoice(env, tgid, packId, L, method = 'stars') {
 function lavaOfferIds(env) {
   try { return JSON.parse(env.LAVA_OFFER_IDS || '{}'); } catch { return {}; }
 }
+// Товары с "ценой по запросу через API" (isDynamicPrice:true) требуют явный amount
+// в запросе на инвойс, иначе Lava.top отвечает "invoice cannot be created". Тянем
+// актуальную цену прямо из их каталога — так правки цены в личном кабинете Lava.top
+// подхватываются сами, без правки кода/деплоя.
+async function lavaProductPrice(env, offerId) {
+  const r = await fetch('https://gate.lava.top/api/v2/products?feedVisibility=ALL', {
+    headers: { 'X-Api-Key': env.LAVA_API_KEY },
+  }).then(x => x.json()).catch(() => null);
+  for (const item of r?.items || []) {
+    for (const offer of item.offers || []) {
+      if (offer.id === offerId) {
+        const p = (offer.prices || []).find(p => p.currency === 'RUB');
+        return p ? p.amount : null;
+      }
+    }
+  }
+  return null;
+}
 async function createLavaInvoice(env, tgid, packId, L) {
   const offerId = lavaOfferIds(env)[packId];
   if (!offerId) return { ok: false, error: 'оффер для этого тарифа не настроен в Lava.top' };
+  const amount = await lavaProductPrice(env, offerId);
+  const body = {
+    email: `tg${tgid}@facerate.ru`,
+    offerId,
+    currency: 'RUB',
+    periodicity: 'ONE_TIME',
+    buyerLanguage: L === 'ru' ? 'RU' : 'EN',
+  };
+  if (amount != null) body.amount = amount;
   const r = await fetch('https://gate.lava.top/api/v3/invoice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': env.LAVA_API_KEY },
-    body: JSON.stringify({
-      email: `tg${tgid}@facerate.ru`,
-      offerId,
-      currency: 'RUB',
-      periodicity: 'ONE_TIME',
-      buyerLanguage: L === 'ru' ? 'RU' : 'EN',
-    }),
+    body: JSON.stringify(body),
   }).then(x => x.json()).catch(e => ({ error: e.message }));
   if (!r.paymentUrl) return { ok: false, error: r.error?.message || r.message || JSON.stringify(r).slice(0, 200) };
   return { ok: true, link: r.paymentUrl };
