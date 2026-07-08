@@ -1092,6 +1092,30 @@ async function trackReferralPurchase(env, tgid, pack, method) {
     await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
   } catch { /* учёт рефералки не должен ронять оплату */ }
 }
+// Кликабельный список — по одной кнопке на код, вместо простыни текста.
+async function refListKb(env, backCb) {
+  const list = await env.RATE_LIMIT.list({ prefix: 'ref:' });
+  const codes = list.keys.map((k) => k.name.slice(4)).sort();
+  const rows = codes.map((code) => ([{ text: `🔗 ${code}`, callback_data: `refview:${code}` }]));
+  rows.push([{ text: '+ Создать реф-ссылку', callback_data: 'admrefadd' }]);
+  rows.push([{ text: '← Admin', callback_data: backCb || 'admin' }]);
+  return { text: codes.length ? `🔗 Реферальные ссылки (${codes.length}) — жми на код для деталей:` : '🔗 Реферальных ссылок пока нет.', kb: { inline_keyboard: rows } };
+}
+function refLink(env, code) { return `https://t.me/${env.BOT_USERNAME || 'faceratepay_bot'}?start=ref_${code}`; }
+// Полная карточка одного кода — ссылка + все цифры, для админа (в обоих ботах).
+async function refDetailText(env, code) {
+  const r = await getRef(env, code);
+  if (!r) return `Код ${code} не найден.`;
+  const owner = await refOwner(env, code);
+  return `🔗 <b>${code}</b>${r.label ? ' — ' + r.label : ''}\n\n`
+    + `Ссылка: ${refLink(env, code)}\n\n`
+    + `Переходов: ${r.clicks || 0}\n`
+    + `Покупок: ${r.purchases || 0}\n`
+    + `Выручка: ~${r.revenueRub || 0}₽\n`
+    + `Комиссия медийки: ${r.pct || 0}% → ~${refPayout(r)}₽\n`
+    + `Владелец в @FaceRateMedia_bot: ${owner ? 'id ' + owner : 'ещё не привязал'}\n`
+    + `Создан: ${new Date(r.createdAt || 0).toLocaleDateString('ru-RU')}`;
+}
 async function refListText(env) {
   const list = await env.RATE_LIMIT.list({ prefix: 'ref:' });
   if (!list.keys.length) return '🔗 Реферальных ссылок пока нет.';
@@ -1130,8 +1154,10 @@ async function myRefStatsText(env, tgid) {
   }
   return `📊 Твоя статистика:\n\n` + lines.join('\n\n');
 }
-function mediaMenuKb() {
-  return { inline_keyboard: [[{ text: '🔑 Привязать код', callback_data: 'claim' }], [{ text: '📊 Моя статистика', callback_data: 'mystats' }]] };
+function mediaMenuKb(isAdmin) {
+  const rows = [[{ text: '🔑 Привязать код', callback_data: 'claim' }], [{ text: '📊 Моя статистика', callback_data: 'mystats' }]];
+  if (isAdmin) rows.push([{ text: '📋 Все рефералки', callback_data: 'alladmin' }]);
+  return { inline_keyboard: rows };
 }
 function mediaApi(env, method, body) {
   return fetch(`https://api.telegram.org/bot${env.MEDIA_BOT_TOKEN}/${method}`, {
@@ -1149,12 +1175,21 @@ async function mediaWebhook(request, env) {
   if (upd.callback_query) {
     const cq = upd.callback_query;
     const chat = cq.message.chat.id, tgid = String(cq.from.id), data = cq.data || '';
+    const isAdmin = isAdminId(env, tgid);
     await mediaApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
     if (data === 'claim') {
       await env.RATE_LIMIT.put(`medwait:${tgid}`, '1', { expirationTtl: 600 });
       await mediaApi(env, 'sendMessage', { chat_id: chat, text: '🔑 Отправь одним сообщением код, который тебе дали (например ANNA).' });
     } else if (data === 'mystats') {
-      await mediaApi(env, 'sendMessage', { chat_id: chat, text: await myRefStatsText(env, tgid), reply_markup: mediaMenuKb() });
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: await myRefStatsText(env, tgid), reply_markup: mediaMenuKb(isAdmin) });
+    } else if (data === 'alladmin' && isAdmin) {
+      const { text: rt, kb } = await refListKb(env, 'alladmin');
+      kb.inline_keyboard[kb.inline_keyboard.length - 1] = [{ text: '← Меню', callback_data: 'menu' }];
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: rt, reply_markup: kb });
+    } else if (data.startsWith('refview:') && isAdmin) {
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: await refDetailText(env, data.slice(8)), parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '← Все рефералки', callback_data: 'alladmin' }]] } });
+    } else if (data === 'menu') {
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '👋 Меню:', reply_markup: mediaMenuKb(isAdmin) });
     }
     return new Response('ok');
   }
@@ -1163,12 +1198,13 @@ async function mediaWebhook(request, env) {
   if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
   const chat = msg.chat.id, tgid = String(msg.from.id);
   const text = (msg.text || '').trim();
+  const isAdmin = isAdminId(env, tgid);
 
   if (text === '/start' || text === '/menu') {
     await mediaApi(env, 'sendMessage', {
       chat_id: chat,
       text: '👋 Привет! Это бот для партнёров FaceRate.\n\nПривяжи свой реф-код, чтобы видеть переходы, покупки и выручку по своей ссылке в любой момент.',
-      reply_markup: mediaMenuKb(),
+      reply_markup: mediaMenuKb(isAdmin),
     });
     return new Response('ok');
   }
@@ -1177,20 +1213,20 @@ async function mediaWebhook(request, env) {
     await env.RATE_LIMIT.delete(`medwait:${tgid}`);
     const code = text.replace(/^ref_/i, '').toUpperCase().trim();
     if (!/^[A-Z0-9_-]{1,40}$/.test(code) || !(await refExists(env, code))) {
-      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '❌ Такого кода нет. Проверь и попробуй ещё раз через «🔑 Привязать код».', reply_markup: mediaMenuKb() });
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '❌ Такого кода нет. Проверь и попробуй ещё раз через «🔑 Привязать код».', reply_markup: mediaMenuKb(isAdmin) });
       return new Response('ok');
     }
     const owner = await refOwner(env, code);
     if (owner && owner !== tgid) {
-      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '❌ Этот код уже привязан к другому аккаунту. Напиши в поддержку, если это ошибка.', reply_markup: mediaMenuKb() });
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '❌ Этот код уже привязан к другому аккаунту. Напиши в поддержку, если это ошибка.', reply_markup: mediaMenuKb(isAdmin) });
       return new Response('ok');
     }
     await claimRef(env, tgid, code);
-    await mediaApi(env, 'sendMessage', { chat_id: chat, text: `✅ Код ${code} привязан к тебе!\n\n` + await myRefStatsText(env, tgid), reply_markup: mediaMenuKb() });
+    await mediaApi(env, 'sendMessage', { chat_id: chat, text: `✅ Код ${code} привязан к тебе!\n\n` + await myRefStatsText(env, tgid), reply_markup: mediaMenuKb(isAdmin) });
     return new Response('ok');
   }
 
-  await mediaApi(env, 'sendMessage', { chat_id: chat, text: '👋 Используй кнопки ниже.', reply_markup: mediaMenuKb() });
+  await mediaApi(env, 'sendMessage', { chat_id: chat, text: '👋 Используй кнопки ниже.', reply_markup: mediaMenuKb(isAdmin) });
   return new Response('ok');
 }
 
@@ -1262,7 +1298,11 @@ async function supportWebhook(request, env) {
       await env.RATE_LIMIT.put(`admpromowait:${fromId}`, '1', { expirationTtl: 600 });
       await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Отправь одним сообщением:\n\nКОД КОЛ-ВО_АКТИВАЦИЙ credits=3\nили\nКОД КОЛ-ВО_АКТИВАЦИЙ hours=24\n\nНапример: SALE20 15 credits=1' });
     } else if (data === 'admref' && isAdmin) {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: await refListText(env), reply_markup: { inline_keyboard: [[{ text: '+ Создать реф-ссылку', callback_data: 'admrefadd' }], [{ text: '✏️ Изменить %', callback_data: 'admrefpct' }], [{ text: '← Admin', callback_data: 'admin' }]] } });
+      const { text: rt, kb } = await refListKb(env, 'admin');
+      kb.inline_keyboard.splice(-1, 0, [{ text: '✏️ Изменить %', callback_data: 'admrefpct' }]);
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: rt, reply_markup: kb });
+    } else if (data.startsWith('refview:') && isAdmin) {
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: await refDetailText(env, data.slice(8)), parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '← Рефералы', callback_data: 'admref' }]] } });
     } else if (data === 'admrefadd' && isAdmin) {
       await env.RATE_LIMIT.put(`admrefwait:${fromId}`, '1', { expirationTtl: 600 });
       await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔗 Отправь одним сообщением:\n\nКОД ПРОЦЕНТ Название\n\nНапример: ANNA 20 Анна Иванова (блогер)\n\nКод — латиницей/цифрами, без пробелов, станет частью ссылки. Процент — сколько % от выручки причитается медийке.' });
