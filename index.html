@@ -166,30 +166,32 @@
 
 <main class="container" id="mainContent">
 
-  <section id="uploadSection">
-
-    <!-- Аккаунт: вход через Telegram / статус квоты / покупка кредитов -->
-    <div id="accountBar" class="account-bar">
-      <div id="accLoggedOut" class="acc-loggedout">
-        <div class="acc-lo-text">
-          <b>Войди через Telegram</b>
-          <i>Подписка на <a href="https://t.me/wwwfacerateru" target="_blank" rel="noopener">канал</a> = 1 бесплатный анализ в день</i>
-        </div>
-        <div id="tgLoginWrap"></div>
+  <!-- Аккаунт: вход через Telegram / статус квоты / покупка кредитов.
+       Живёт на уровне mainContent (не внутри uploadSection), чтобы быть
+       видимым и на экране обычного анализа, и на экране сравнения (Who Moggs?). -->
+  <div id="accountBar" class="account-bar">
+    <div id="accLoggedOut" class="acc-loggedout">
+      <div class="acc-lo-text">
+        <b>Войди через Telegram</b>
+        <i>Подписка на <a href="https://t.me/wwwfacerateru" target="_blank" rel="noopener">канал</a> = 1 бесплатный анализ в день</i>
       </div>
-      <div id="accLoggedIn" class="acc-loggedin hidden">
-        <img id="accAvatar" class="acc-avatar" alt="" />
-        <div class="acc-user">
-          <b id="accName"></b>
-          <i id="accQuota">…</i>
-        </div>
-        <div class="acc-actions">
-          <button id="buyP1" class="acc-buy" type="button">+1 · 30⭐</button>
-          <button id="buyP5" class="acc-buy" type="button">+5 · 100⭐</button>
-          <button id="accLogout" class="acc-logout" type="button" title="Выйти">✕</button>
-        </div>
+      <div id="tgLoginWrap"></div>
+    </div>
+    <div id="accLoggedIn" class="acc-loggedin hidden">
+      <img id="accAvatar" class="acc-avatar" alt="" />
+      <div class="acc-user">
+        <b id="accName"></b>
+        <i id="accQuota">…</i>
+      </div>
+      <div class="acc-actions">
+        <button id="buyP1" class="acc-buy" type="button">+1 · 30⭐</button>
+        <button id="buyP5" class="acc-buy" type="button">+5 · 100⭐</button>
+        <button id="accLogout" class="acc-logout" type="button" title="Выйти">✕</button>
       </div>
     </div>
+  </div>
+
+  <section id="uploadSection">
 
     <div id="lastResultBanner" class="last-result-banner hidden">
       <span class="lrb-label">ПРОШЛЫЙ РЕЗУЛЬТАТ</span>
@@ -395,6 +397,7 @@
 
     <div id="cmpResult" class="hidden">
       <div class="photo-card"><div class="canvas-wrap" style="border:none;background:none"><canvas id="cmpCanvas"></canvas></div></div>
+      <div id="cmpCatScores" class="card scores-card cmp-cat-card hidden"></div>
       <div class="photo-actions">
         <button id="cmpShareBtn" class="btn-share" type="button" data-i18n="share">Share result</button>
         <button id="cmpTgBtn" class="btn-share btn-share-tg" type="button" data-i18n="tgCard">📩 Send card to Telegram</button>

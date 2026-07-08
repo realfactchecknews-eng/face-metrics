@@ -2208,12 +2208,26 @@ function pwRecheck(silent) {
     }).catch(function(){ doCompare(); });
   }
 
+  // Короткие ключи категорий для промпта/парсинга сравнения + метки для отображения.
+  var CMP_CATS = [
+    { key:"SYM",      label:t("labelSym") },
+    { key:"EYES",     label:"Canthal Tilt / Eyes" },
+    { key:"MAXILLA",  label:"Midface / Maxilla" },
+    { key:"MANDIBLE", label:"Jawline / Mandible" },
+    { key:"NOSE",     label:"Nose" },
+    { key:"LIPS",     label:t("labelLips") },
+    { key:"SKIN",     label:"Skin" },
+    { key:"GROOM",    label:"Grooming / Style" },
+  ];
+
   function comparePrompt(){
     var ru = lang() === "ru";
     var langLine = ru
-      ? "Пиши TRAITS_A, TRAITS_B и VERDICT на русском. ВАЖНО: глагол «моггать» в этом контексте пишется «моггает» (наст. время) или «могнул» (прош. время) — форма «моггит» ГРАММАТИЧЕСКИ НЕВЕРНА и запрещена, никогда её не используй."
+      ? "Пиши TRAITS_A, TRAITS_B и VERDICT на русском. ВАЖНО: глагол «моггать» в этом контексте пишется «моггает» (наст. время) или «могнул» (прош. время) — форма «моггит» ГРАММАТИЧЕСКИ НЕВЕРНА и запрещена, никогда её не используй. Используй англоязычные луксмаксерские термины ПРЯМО ВНУТРИ русского текста (canthal tilt, gonial angle, zygomatic arch, maxilla, philtrum, malar fat pad, hunter eyes/prey eyes и т.п.) — не переводи их на русский, это профессиональный жаргон."
       : "Write TRAITS_A, TRAITS_B and VERDICT in English.";
-    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. Rate each on the PSL 1-10 scale (one decimal, be discriminating, real spread). For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine + "\n\nReply STRICTLY in this plain format, nothing else:\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).";
+    var catLines = CMP_CATS.map(function(c){ return "CAT_" + c.key + ": A=0.0 B=0.0"; }).join("\n");
+    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. Rate each on the PSL 1-10 scale (one decimal, be discriminating, real spread). For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine +
+      "\n\nAlso rate BOTH A and B on these 8 categories: Symmetry, Canthal Tilt/Eyes, Midface/Maxilla, Jawline/Mandible, Nose, Lips/Cheekbones, Skin, Grooming/Style. One decimal each (never .0), real spread between categories per person (do not give every category the same score) — this must be consistent with the overall SCORE_A/SCORE_B.\n\nReply STRICTLY in this plain format, nothing else:\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).\n" + catLines;
   }
 
   function doCompare(){
@@ -2230,6 +2244,7 @@ function pwRecheck(silent) {
       if (parsed.a === null || parsed.b === null){ $("cmpLoading").classList.add("hidden"); showSetup(); cmpErr(t("cmpErrGen")); return; }
       if (typeof d.creditsLeft !== "undefined") updateQuotaChip(d.freeLeft, d.creditsLeft, d.subscribed, d.unlimUntil);
       lastResult = parsed;
+      renderCmpCats(parsed);
       buildCompareCard(parsed).then(function(){
         $("cmpLoading").classList.add("hidden");
         $("cmpResult").classList.remove("hidden");
@@ -2251,7 +2266,39 @@ function pwRecheck(silent) {
     var wm = txt.match(/WINNER:\s*([AB])/i);
     var vm = txt.match(/VERDICT:\s*([\s\S]+?)(?:\n\s*\n|$)/i);
     var winner = wm ? wm[1].toUpperCase() : (a!==null&&b!==null ? (a>=b?"A":"B") : "A");
-    return { a:a, b:b, traitsA:traitsA, traitsB:traitsB, winner:winner, verdict: vm ? vm[1].replace(/\s+/g," ").trim() : "" };
+    var cats = CMP_CATS.map(function(c){
+      var m = txt.match(new RegExp("CAT_" + c.key + ":\\s*A=(\\d+(?:\\.\\d+)?)\\s*B=(\\d+(?:\\.\\d+)?)", "i"));
+      return m ? { label:c.label, a:parseFloat(m[1]), b:parseFloat(m[2]) } : null;
+    }).filter(Boolean);
+    return { a:a, b:b, traitsA:traitsA, traitsB:traitsB, winner:winner, verdict: vm ? vm[1].replace(/\s+/g," ").trim() : "", cats:cats };
+  }
+
+  // Отрисовка построчного сравнения по 8 категориям (A vs B) в DOM.
+  function renderCmpCats(res){
+    var box = $("cmpCatScores");
+    if (!box) return;
+    box.innerHTML = "";
+    if (!res.cats || !res.cats.length) { box.classList.add("hidden"); return; }
+    box.classList.remove("hidden");
+    var eyebrow = document.createElement("span");
+    eyebrow.className = "eyebrow"; eyebrow.textContent = t("detailEyebrow");
+    box.appendChild(eyebrow);
+    res.cats.forEach(function(cat){
+      var row = document.createElement("div"); row.className = "cmp-cat-row";
+      var name = document.createElement("div"); name.className = "cmp-cat-name"; name.textContent = cat.label;
+      var bars = document.createElement("div"); bars.className = "cmp-cat-bars";
+      var valA = document.createElement("span"); valA.className = "cmp-cat-val"; valA.textContent = cat.a.toFixed(1);
+      var trackA = document.createElement("div"); trackA.className = "cmp-cat-track";
+      var fillA = document.createElement("div"); fillA.className = "cmp-cat-fill cmp-cat-fill-a" + (cat.a >= cat.b ? " cmp-cat-fill-win" : "");
+      fillA.style.width = (cat.a * 10) + "%"; trackA.appendChild(fillA);
+      var trackB = document.createElement("div"); trackB.className = "cmp-cat-track";
+      var fillB = document.createElement("div"); fillB.className = "cmp-cat-fill cmp-cat-fill-b" + (cat.b > cat.a ? " cmp-cat-fill-win" : "");
+      fillB.style.width = (cat.b * 10) + "%"; trackB.appendChild(fillB);
+      var valB = document.createElement("span"); valB.className = "cmp-cat-val"; valB.textContent = cat.b.toFixed(1);
+      bars.appendChild(valA); bars.appendChild(trackA); bars.appendChild(trackB); bars.appendChild(valB);
+      row.appendChild(name); row.appendChild(bars);
+      box.appendChild(row);
+    });
   }
 
   // Рисует лицо в квадратную ячейку, возвращает Y-координату глаз в ячейке.
@@ -2279,7 +2326,7 @@ function pwRecheck(silent) {
 
   function buildCompareCard(res){
     return new Promise(function(resolve){
-      var W = 1080, H = 1620;
+      var W = 1080, H = 2080;
       var c = document.createElement("canvas"); c.width=W; c.height=H;
       var cv = $("cmpCanvas"); cv.width=W; cv.height=H;
       var g = cv.getContext("2d");
@@ -2358,6 +2405,29 @@ function pwRecheck(silent) {
       g.font="20px Georgia,serif"; ls(6); g.fillStyle=GOLD; g.fillText("VERDICT", W/2, vy+46); ls(0);
       g.font="34px Georgia,serif"; g.fillStyle="#c9bfad";
       wrapText(g, res.verdict, W/2, vy+92, W-200, 46, 5);
+
+      // компактный список из 8 категорий: A слева, B справа, имя по центру
+      if (res.cats && res.cats.length){
+        var cy0 = vy + 330;
+        g.textAlign="center"; g.font="22px Georgia,serif"; ls(6); g.fillStyle=GOLD;
+        g.fillText("BREAKDOWN", W/2, cy0); ls(0);
+        var rowH = 54, colW = 300;
+        res.cats.forEach(function(cat, i){
+          var ry = cy0 + 46 + i*rowH;
+          var winCatA = cat.a >= cat.b;
+          g.font="26px Georgia,serif";
+          g.textAlign="left"; g.fillStyle = winCatA ? GOLD_HI : "#8a8378";
+          g.fillText(cat.a.toFixed(1), W/2 - colW, ry);
+          g.textAlign="right"; g.fillStyle = !winCatA ? GOLD_HI : "#8a8378";
+          g.fillText(cat.b.toFixed(1), W/2 + colW, ry);
+          g.textAlign="center"; g.font="20px Georgia,serif"; g.fillStyle="#9a9084";
+          g.fillText(cat.label, W/2, ry);
+          if (i < res.cats.length - 1){
+            g.strokeStyle="rgba(196,164,107,0.12)"; g.lineWidth=1;
+            g.beginPath(); g.moveTo(W/2-colW+40, ry+18); g.lineTo(W/2+colW-40, ry+18); g.stroke();
+          }
+        });
+      }
 
       // футер
       g.font="42px Georgia,serif"; ls(2);

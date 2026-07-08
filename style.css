@@ -2005,8 +2005,22 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 #cmpCanvas { max-width: 100%; max-height: 78vh; width: auto; height: auto; display: block; margin: 0 auto; border-radius: 14px; }
 .menu-tile-hot { border-color: rgba(196,164,107,0.5); background: rgba(28,24,16,0.7); }
 .menu-tile-hot .mt-ic { filter: drop-shadow(0 0 6px rgba(196,164,107,0.5)); }
+
+/* Who Moggs: построчное сравнение по категориям A vs B */
+.cmp-cat-card { margin-top: 18px; }
+.cmp-cat-row { margin-bottom: 20px; }
+.cmp-cat-row:last-child { margin-bottom: 0; }
+.cmp-cat-name { text-align: center; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px; }
+.cmp-cat-bars { display: grid; grid-template-columns: auto 1fr 1fr auto; align-items: center; gap: 10px; }
+.cmp-cat-val { font-family: 'SF Mono', Consolas, monospace; font-size: 0.95rem; color: var(--text-dim); width: 2.4em; text-align: center; }
+.cmp-cat-track { height: 2px; background: rgba(196,164,107,0.15); overflow: hidden; }
+.cmp-cat-fill { height: 100%; background: rgba(196,164,107,0.35); }
+.cmp-cat-track:first-of-type .cmp-cat-fill { margin-left: auto; }
+.cmp-cat-fill-win { background: var(--accent); }
+
 @media (max-width: 600px){
   .cmp-grid { gap: 8px; }
   .cmp-vs { font-size: 1.1rem; }
   .cmp-title { font-size: 1.4rem; }
+  .cmp-cat-val { font-size: 0.8rem; width: 2em; }
 }
