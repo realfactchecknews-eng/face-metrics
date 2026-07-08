@@ -55,6 +55,7 @@ export default {
     if (request.method !== 'POST') return cors('Method not allowed', 405);
     const path = new URL(request.url).pathname;
     try {
+      if (path === '/setup-webhook') return await setupWebhook(request, env);
       if (path === '/tg-webhook') return await tgWebhook(request, env);
       if (path === '/crypto-webhook') return await cryptoWebhook(request, env);
       if (path === '/lava-webhook') return await lavaWebhook(request, env);
@@ -71,6 +72,20 @@ export default {
     }
   },
 };
+
+// Разовый вызов (защищён тем же секретом, что и сам вебхук) — перерегистрирует вебхук с
+// allowed_updates, включающим chat_boost (Telegram не шлёт его по умолчанию). Нужно вызвать
+// один раз после деплоя этой фичи: curl -X POST "<WORKER_URL>/setup-webhook?secret=<TG_WEBHOOK_SECRET>".
+async function setupWebhook(request, env) {
+  const secret = new URL(request.url).searchParams.get('secret');
+  if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return new Response('forbidden', { status: 403 });
+  const r = await tgApi(env, 'setWebhook', {
+    url: 'https://face-metrics-ai.realfactchecknews.workers.dev/tg-webhook',
+    secret_token: env.TG_WEBHOOK_SECRET,
+    allowed_updates: ['message', 'callback_query', 'pre_checkout_query', 'chat_boost'],
+  });
+  return json(r);
+}
 
 // ─────────────────────────── Анализ ───────────────────────────
 async function analyze(request, env) {
@@ -688,6 +703,31 @@ async function tgWebhook(request, env) {
   // Подтверждаем оплату (в т.ч. продления подписки).
   if (upd.pre_checkout_query) {
     await tgApi(env, 'answerPreCheckoutQuery', { pre_checkout_query_id: upd.pre_checkout_query.id, ok: true });
+    return new Response('ok');
+  }
+
+  // ── Буст канала → +1 бесплатный анализ (один раз на человека, не фармится снятием/повтором буста) ──
+  if (upd.chat_boost) {
+    try {
+      const b = upd.chat_boost.boost;
+      const chatUsername = upd.chat_boost.chat?.username ? '@' + upd.chat_boost.chat.username : '';
+      const user = b?.source?.source === 'premium' ? b.source.user : null;
+      if (user && !user.is_bot && chatUsername.toLowerCase() === CHANNEL.toLowerCase()) {
+        const boosterTgid = user.id;
+        const seenKey = `boosted:${boosterTgid}`;
+        if (!(await env.RATE_LIMIT.get(seenKey))) {
+          await env.RATE_LIMIT.put(seenKey, '1');
+          const cur = parseInt(await env.RATE_LIMIT.get(`credits:${boosterTgid}`) || '0', 10);
+          await env.RATE_LIMIT.put(`credits:${boosterTgid}`, String(cur + 1));
+          const L = await userLang(env, boosterTgid);
+          await tgApi(env, 'sendMessage', {
+            chat_id: boosterTgid,
+            text: L === 'ru' ? '🚀 Спасибо за буст канала! +1 анализ уже на счету.' : '🚀 Thanks for boosting the channel! +1 free analysis has been added.',
+            reply_markup: menuKb(L),
+          }).catch(() => {}); // юзер мог не запускать бота — сообщение не критично
+        }
+      }
+    } catch { /* не роняем вебхук из-за буста */ }
     return new Response('ok');
   }
 
