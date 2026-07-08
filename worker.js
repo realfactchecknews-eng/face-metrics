@@ -407,6 +407,7 @@ async function lavaWebhook(request, env) {
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     await logTx(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '' });
+    await trackReferralPurchase(env, tgid, pack, 'card');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note), reply_markup: menuKb(L) });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -466,6 +467,7 @@ async function cryptoWebhook(request, env) {
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     await logTx(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '' });
+    await trackReferralPurchase(env, tgid, pack, 'crypto');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note), reply_markup: menuKb(L) });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -650,7 +652,7 @@ async function tgWebhook(request, env) {
 
   const text = (msg.text || '').trim();
 
-  // ── /start [код входа с сайта] ──
+  // ── /start [код входа с сайта | ref_КОД реферальной ссылки] ──
   if (text.startsWith('/start')) {
     const code = text.split(' ')[1] || '';
     if (/^[a-z0-9-]{10,80}$/i.test(code)) {
@@ -659,6 +661,9 @@ async function tgWebhook(request, env) {
       await env.RATE_LIMIT.put(`sess:${token}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 30 });
       await env.RATE_LIMIT.put(`authcode:${code}`, JSON.stringify({ token, user }), { expirationTtl: 600 });
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.loginOk, reply_markup: menuKb(L) });
+    } else if (/^ref_[a-z0-9_-]{1,40}$/i.test(code)) {
+      await attributeReferral(env, tgid, code.slice(4).toUpperCase());
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: b.hello, reply_markup: menuKb(L) });
     } else {
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.hello, reply_markup: menuKb(L) });
     }
@@ -861,6 +866,7 @@ async function handlePayment(env, msg, L) {
       amount: sp.currency === 'XTR' ? sp.total_amount : sp.total_amount / 100, currency: sp.currency,
       username: msg.from.username || '', name: msg.from.first_name || '',
     });
+    await trackReferralPurchase(env, tgid, pack, sp.currency === 'XTR' ? 'stars' : 'rub');
     await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note), reply_markup: menuKb(L || 'en') });
   } catch { /* payload сломан — молча игнор */ }
 }
@@ -937,6 +943,7 @@ function adminPanelKb() {
     [{ text: '📂 Открытые чаты', callback_data: 'admtickets' }],
     [{ text: '💳 Транзакции', callback_data: 'admtx' }],
     [{ text: '🎁 Промокоды', callback_data: 'admpromo' }],
+    [{ text: '🔗 Рефералы', callback_data: 'admref' }],
     [{ text: '← Меню', callback_data: 'menu' }],
   ]};
 }
@@ -1035,6 +1042,58 @@ async function forwardToAdmin(env, msg, L) {
   await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.sent });
 }
 
+// ─── Реферальные ссылки для медийных партнёров ───
+// ref:КОД        — { label, clicks, purchases, revenueRub, createdAt }, TTL нет (живёт пока не удалят).
+// refby:tgid     — код реферера, приаттачился при первом /start ref_КОД (first-touch, не перезаписывается).
+async function refExists(env, code) { return !!(await env.RATE_LIMIT.get(`ref:${code}`)); }
+async function getRef(env, code) {
+  const raw = await env.RATE_LIMIT.get(`ref:${code}`);
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+async function createRef(env, code, label) {
+  await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify({ label: label || '', clicks: 0, purchases: 0, revenueRub: 0, createdAt: Date.now() }));
+}
+// Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
+async function attributeReferral(env, tgid, code) {
+  const ref = await getRef(env, code);
+  if (!ref) return; // код не создан админом — игнорируем мусорные ссылки
+  const already = await env.RATE_LIMIT.get(`refby:${tgid}`);
+  if (already) return;
+  await env.RATE_LIMIT.put(`refby:${tgid}`, code);
+  ref.clicks = (ref.clicks || 0) + 1;
+  await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
+}
+// Грубая оценка выручки в рублях для отчёта партнёру — не бухгалтерская точность, а ориентир.
+function packRevenueRub(pack, method) {
+  if (!pack) return 0;
+  if (method === 'card' || method === 'rub') return pack.lavaRub || pack.rub || 0;
+  return pack.rub || 0;
+}
+// Вызывается после любой успешной оплаты (Stars/ЮKassa, Lava.top, CryptoBot).
+async function trackReferralPurchase(env, tgid, pack, method) {
+  try {
+    const code = await env.RATE_LIMIT.get(`refby:${tgid}`);
+    if (!code) return;
+    const ref = await getRef(env, code);
+    if (!ref) return;
+    ref.purchases = (ref.purchases || 0) + 1;
+    ref.revenueRub = (ref.revenueRub || 0) + packRevenueRub(pack, method);
+    await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
+  } catch { /* учёт рефералки не должен ронять оплату */ }
+}
+async function refListText(env) {
+  const list = await env.RATE_LIMIT.list({ prefix: 'ref:' });
+  if (!list.keys.length) return '🔗 Реферальных ссылок пока нет.';
+  const lines = [];
+  for (const k of list.keys) {
+    const r = await getRef(env, k.name.slice(4));
+    if (!r) continue;
+    const code = k.name.slice(4);
+    lines.push(`🔗 ${code}${r.label ? ' (' + r.label + ')' : ''} — ${r.clicks || 0} перех., ${r.purchases || 0} покупок, ~${r.revenueRub || 0}₽`);
+  }
+  return `🔗 Реферальные ссылки (${lines.length}):\n\n` + lines.join('\n');
+}
+
 // ─── Тикеты (открытые обращения) и лог транзакций — общие JSON-списки в KV ───
 async function getList(env, key) {
   const raw = await env.RATE_LIMIT.get(key);
@@ -1102,6 +1161,11 @@ async function supportWebhook(request, env) {
     } else if (data === 'admpromoadd' && isAdmin) {
       await env.RATE_LIMIT.put(`admpromowait:${fromId}`, '1', { expirationTtl: 600 });
       await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Отправь одним сообщением:\n\nКОД КОЛ-ВО_АКТИВАЦИЙ credits=3\nили\nКОД КОЛ-ВО_АКТИВАЦИЙ hours=24\n\nНапример: SALE20 15 credits=1' });
+    } else if (data === 'admref' && isAdmin) {
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: await refListText(env), reply_markup: { inline_keyboard: [[{ text: '+ Создать реф-ссылку', callback_data: 'admrefadd' }], [{ text: '← Admin', callback_data: 'admin' }]] } });
+    } else if (data === 'admrefadd' && isAdmin) {
+      await env.RATE_LIMIT.put(`admrefwait:${fromId}`, '1', { expirationTtl: 600 });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔗 Отправь одним сообщением:\n\nКОД Название\n\nНапример: ANNA Анна Иванова (блогер)\n\nКод — латиницей/цифрами, без пробелов, станет частью ссылки.' });
     } else if (data.startsWith('admopen:') && isAdmin) {
       const uid = data.slice(8);
       await env.RATE_LIMIT.put(`admtarget:${fromId}`, uid, { expirationTtl: 60 * 30 });
@@ -1161,6 +1225,28 @@ async function supportWebhook(request, env) {
       chat_id: adminId,
       text: `✅ Промокод ${m[1].toUpperCase()} создан.\n\n` + await promoListText(env),
       reply_markup: { inline_keyboard: [[{ text: '+ Добавить ещё', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] },
+    });
+    return new Response('ok');
+  }
+  // Оператор в процессе создания реферальной ссылки (нажал «+ Создать реф-ссылку»).
+  if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admrefwait:${fromId}`)) {
+    const m = text.match(/^([a-z0-9_-]{1,40})\s*(.*)$/i);
+    if (!m) {
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Код может быть только латиницей/цифрами, без пробелов. Пример: ANNA Анна Иванова' });
+      return new Response('ok');
+    }
+    const code = m[1].toUpperCase();
+    if (await refExists(env, code)) {
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: `⚠️ Код ${code} уже занят.` });
+      return new Response('ok');
+    }
+    await createRef(env, code, m[2].trim());
+    await env.RATE_LIMIT.delete(`admrefwait:${fromId}`);
+    const link = `https://t.me/${env.BOT_USERNAME || 'faceratepay_bot'}?start=ref_${code}`;
+    await supportApi(env, 'sendMessage', {
+      chat_id: adminId,
+      text: `✅ Реферальная ссылка создана.\n\nОтдавай эту ссылку партнёру:\n${link}\n\n` + await refListText(env),
+      reply_markup: { inline_keyboard: [[{ text: '+ Создать ещё', callback_data: 'admrefadd' }], [{ text: '← Admin', callback_data: 'admin' }]] },
     });
     return new Response('ok');
   }
