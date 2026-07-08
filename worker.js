@@ -352,7 +352,9 @@ async function lavaProductPrice(env, offerId) {
     for (const offer of item.offers || []) {
       if (offer.id === offerId) {
         const p = (offer.prices || []).find(p => p.currency === 'RUB');
-        return p ? p.amount : null;
+        // amount разрешён в /invoice ТОЛЬКО для offer'ов с isDynamicPrice:true —
+        // на фикс-цену Lava.top отвечает "is not dynamic price", если его передать.
+        return item.isDynamicPrice && p ? p.amount : null;
       }
     }
   }
