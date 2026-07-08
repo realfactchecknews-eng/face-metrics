@@ -355,6 +355,21 @@ async function createInvoice(env, tgid, packId, L, method = 'stars', discPct = 0
 function lavaOfferIds(env) {
   try { return JSON.parse(env.LAVA_OFFER_IDS || '{}'); } catch { return {}; }
 }
+// Вебхук Lava.top шлёт product.id — это ID ТОВАРА, а не оффера (см. их openapi-спеку,
+// gate.lava.top/docs/documentation.yaml, пример successful_purchase_webhook_payload).
+// LAVA_OFFER_IDS хранит ID ОФФЕРА (нужен для /invoice), поэтому напрямую их сравнивать нельзя —
+// раньше это тихо ломало начисление на каждой реальной оплате картой/СБП. Матчим через каталог.
+async function lavaPackIdByProductId(env, productId) {
+  if (!productId) return null;
+  const r = await fetch('https://gate.lava.top/api/v2/products?feedVisibility=ALL', {
+    headers: { 'X-Api-Key': env.LAVA_API_KEY },
+  }).then(x => x.json()).catch(() => null);
+  const item = (r?.items || []).find((i) => i.id === productId);
+  const offerId = item?.offers?.[0]?.id;
+  if (!offerId) return null;
+  const offerIds = lavaOfferIds(env);
+  return Object.keys(offerIds).find((k) => offerIds[k] === offerId) || null;
+}
 // Товары с "ценой по запросу через API" (isDynamicPrice:true) требуют явный amount
 // в запросе на инвойс, иначе Lava.top отвечает "invoice cannot be created". Тянем
 // актуальную цену прямо из их каталога — так правки цены в личном кабинете Lava.top
@@ -416,13 +431,14 @@ async function lavaWebhook(request, env) {
   try {
     const seenKey = `lavapaid:${upd.contractId}`;
     if (await env.RATE_LIMIT.get(seenKey)) return new Response('ok');
-    await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const m = /^tg(\d+)@/.exec(upd.buyer?.email || '');
     const tgid = m ? m[1] : null;
-    const offerIds = lavaOfferIds(env);
-    const packId = Object.keys(offerIds).find((k) => offerIds[k] === upd.product?.id);
+    const packId = await lavaPackIdByProductId(env, upd.product?.id);
     const pack = PACKS[packId];
+    // Не помечаем как "обработано", если не смогли распознать покупателя/тариф — иначе
+    // при сбое сопоставления платёж тихо теряется навсегда без шанса на ретрай/дозачисление.
     if (!tgid || !pack) return new Response('ok');
+    await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     const orderId = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '' });
