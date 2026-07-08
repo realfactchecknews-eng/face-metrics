@@ -650,7 +650,7 @@ async function tgWebhook(request, env) {
     if (!m) {
       await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ credits=3\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ hours=24' });
     } else {
-      const promo = { uses: parseInt(m[2], 10) };
+      const promo = { uses: parseInt(m[2], 10), max: parseInt(m[2], 10) };
       promo[m[3].toLowerCase()] = parseInt(m[4], 10);
       await env.RATE_LIMIT.put(`promo:${m[1].toUpperCase()}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
       await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Промокод ${m[1].toUpperCase()} создан: ${m[2]} активаций, ${m[3]}=${m[4]}.\nКидай его в канал — это и есть розыгрыш.` });
@@ -910,8 +910,24 @@ function adminPanelKb() {
   return { inline_keyboard: [
     [{ text: '📂 Открытые чаты', callback_data: 'admtickets' }],
     [{ text: '💳 Транзакции', callback_data: 'admtx' }],
+    [{ text: '🎁 Промокоды', callback_data: 'admpromo' }],
     [{ text: '← Меню', callback_data: 'menu' }],
   ]};
+}
+async function promoListText(env) {
+  const list = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+  const lines = [];
+  for (const k of list.keys) {
+    const raw = await env.RATE_LIMIT.get(k.name);
+    if (!raw) continue;
+    let p; try { p = JSON.parse(raw); } catch { continue; }
+    const code = k.name.slice('promo:'.length);
+    const gift = p.credits ? `+${p.credits} анализ(ов)` : p.hours ? `безлимит ${p.hours}ч` : '?';
+    const used = p.max ? `${p.max - p.uses}/${p.max} использовано` : `осталось ${p.uses}`;
+    lines.push(`🎟 ${code} — ${gift} — ${used}`);
+  }
+  if (!lines.length) return '🎁 Активных промокодов нет.';
+  return `🎁 Активные промокоды (${lines.length}):\n\n` + lines.join('\n');
 }
 const ADMIN_BTN = '⚙️ Admin';
 // Постоянная клавиатура внизу экрана — не пропадает между сообщениями,
@@ -1055,6 +1071,11 @@ async function supportWebhook(request, env) {
       await supportApi(env, 'sendMessage', { chat_id: chat, text: tt, reply_markup: kb });
     } else if (data === 'admtx' && isAdmin) {
       await supportApi(env, 'sendMessage', { chat_id: chat, text: await txSummaryText(env), reply_markup: { inline_keyboard: [[{ text: '← Admin', callback_data: 'admin' }]] } });
+    } else if (data === 'admpromo' && isAdmin) {
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: await promoListText(env), reply_markup: { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] } });
+    } else if (data === 'admpromoadd' && isAdmin) {
+      await env.RATE_LIMIT.put(`admpromowait:${fromId}`, '1', { expirationTtl: 600 });
+      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Отправь одним сообщением:\n\nКОД КОЛ-ВО_АКТИВАЦИЙ credits=3\nили\nКОД КОЛ-ВО_АКТИВАЦИЙ hours=24\n\nНапример: SALE20 15 credits=1' });
     } else if (data.startsWith('admopen:') && isAdmin) {
       const uid = data.slice(8);
       await env.RATE_LIMIT.put(`admtarget:${fromId}`, uid, { expirationTtl: 60 * 30 });
@@ -1097,6 +1118,24 @@ async function supportWebhook(request, env) {
       if (cur === uid) await env.RATE_LIMIT.delete(`admtarget:${fromId}`);
       await supportApi(env, 'sendMessage', { chat_id: adminId, text: 'Диалог с ' + uid + ' закрыт.' });
     }
+    return new Response('ok');
+  }
+  // Оператор в процессе добавления промокода (нажал «+ Добавить промокод») → следующее сообщение это код.
+  if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admpromowait:${fromId}`)) {
+    const m = text.match(/^(\S+)\s+(\d+)\s+(credits|hours)=(\d+)/i);
+    if (!m) {
+      await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Не понял формат. Пример: SALE20 15 credits=1' });
+      return new Response('ok');
+    }
+    const promo = { uses: parseInt(m[2], 10), max: parseInt(m[2], 10) };
+    promo[m[3].toLowerCase()] = parseInt(m[4], 10);
+    await env.RATE_LIMIT.put(`promo:${m[1].toUpperCase()}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
+    await env.RATE_LIMIT.delete(`admpromowait:${fromId}`);
+    await supportApi(env, 'sendMessage', {
+      chat_id: adminId,
+      text: `✅ Промокод ${m[1].toUpperCase()} создан.\n\n` + await promoListText(env),
+      reply_markup: { inline_keyboard: [[{ text: '+ Добавить ещё', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] },
+    });
     return new Response('ok');
   }
   // Оператор выбрал чат кнопкой «📂 Открытые чаты» → пишет без реплая, летит выбранному uid.
