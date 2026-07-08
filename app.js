@@ -109,7 +109,7 @@ var I18N = {
     chipUnlim: "👑 Unlimited until ",
     gateHint: "After subscribing, come back and press “Analyze” again.",
     invoiceCreating: "Creating invoice…", invoiceOpening: "Opening Telegram…", invoiceErr: "Error, try again", netErr: "Network unavailable",
-    pwPickMethod: "Choose payment method", pwPickPack: "Choose a package", payStars: "⭐ Telegram Stars", payCard: "💳 Card (RUB)", payCrypto: "🪙 Crypto", pwBack: "← Back",
+    pwPickMethod: "Choose payment method", pwPickPack: "Choose a package", payStars: "⭐ Telegram Stars", payCard: "💳 Card (RUB)", paySbp: "📲 SBP (RUB)", payCrypto: "🪙 Crypto", pwBack: "← Back",
     histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
     histAvg: "Average score: ", histCount: " · analyses: ",
     howHtml: "<div class='how'>" +
@@ -191,7 +191,7 @@ var I18N = {
     chipUnlim: "👑 Безлимит до ",
     gateHint: "После подписки вернись и нажми «Анализировать» ещё раз.",
     invoiceCreating: "Создаю счёт…", invoiceOpening: "Открываю Telegram…", invoiceErr: "Ошибка, ещё раз", netErr: "Сеть недоступна",
-    pwPickMethod: "Выбери способ оплаты", pwPickPack: "Выбери пакет", payStars: "⭐ Telegram Stars", payCard: "💳 Картой (₽)", payCrypto: "🪙 Криптой", pwBack: "← Назад",
+    pwPickMethod: "Выбери способ оплаты", pwPickPack: "Выбери пакет", payStars: "⭐ Telegram Stars", payCard: "💳 Картой (₽)", paySbp: "📲 СБП (₽)", payCrypto: "🪙 Криптой", pwBack: "← Назад",
     histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
     histAvg: "Средний балл: ", histCount: " · оценок: ",
     howHtml: "<div class='how'>" +
@@ -2073,14 +2073,14 @@ function showPaywall(state, st) {
     };
     var methods = (st && st.methods) || ["stars"];
     var packNames = { p1: t("packP1"), p5: t("packP5"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1") };
-    var methodNames = { stars: t("payStars"), rub: t("payCard"), crypto: t("payCrypto") };
+    var methodNames = { stars: t("payStars"), rub: t("payCard"), sbp: t("paySbp"), crypto: t("payCrypto") };
     // Шаг 2: тарифы под выбранный способ (цена в его валюте).
     function showPacks(method) {
       actions.innerHTML = "";
       title.textContent = t("pwPickPack"); sub.textContent = methodNames[method] || "";
       function packBtn(id) {
         var p = packs[id]; if (!p) return;
-        var price = method === "stars" ? (p.stars + "⭐") : ((method === "rub" && p.lavaRub ? p.lavaRub : p.rub) + "₽");
+        var price = method === "stars" ? (p.stars + "⭐") : (((method === "rub" || method === "sbp") && p.lavaRub ? p.lavaRub : p.rub) + "₽");
         var top = id === "m1" ? " <i class='pw-hit'>top</i>" : "";
         btn(packNames[id] + " — " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
       }
@@ -2090,6 +2090,7 @@ function showPaywall(state, st) {
     // Шаг 1: выбор способа оплаты (только доступные).
     if (methods.indexOf("stars") >= 0) btn(t("payStars"), "pw-btn pw-btn-main", function(){ showPacks("stars"); });
     if (methods.indexOf("rub") >= 0) btn(t("payCard"), "pw-btn pw-btn-main", function(){ showPacks("rub"); });
+    if (methods.indexOf("sbp") >= 0) btn(t("paySbp"), "pw-btn pw-btn-main", function(){ showPacks("sbp"); });
     if (methods.indexOf("crypto") >= 0) btn(t("payCrypto"), "pw-btn pw-btn-main", function(){ showPacks("crypto"); });
     btn(t("pwPaid"), "pw-btn pw-btn-ghost", function(b){
       b.textContent = t("pwChecking"); pwRecheck();

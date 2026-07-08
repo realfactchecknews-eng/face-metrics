@@ -39,6 +39,7 @@ function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS)
 function enabledMethods(env) {
   const m = ['stars'];
   if (lavaConfigured(env) || env.YUKASSA_PROVIDER_TOKEN) m.push('rub'); // 'rub' = карта РФ, провайдер выбирается автоматически
+  if (lavaConfigured(env)) m.push('sbp'); // СБП — только через Lava.top (PAY2ME), у ЮKassa нет прямого СБП в этом флоу
   if (env.CRYPTOBOT_TOKEN) m.push('crypto');
   return m;
 }
@@ -276,7 +277,12 @@ async function buy(request, env) {
     return json({ link: d.link });
   }
   if (method === 'rub' && lavaConfigured(env)) {
-    const d = await createLavaInvoice(env, sess.id, body.pack, L, discPct);
+    const d = await createLavaInvoice(env, sess.id, body.pack, L, discPct, false);
+    if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.error || '') });
+    return json({ link: d.link });
+  }
+  if (method === 'sbp' && lavaConfigured(env)) {
+    const d = await createLavaInvoice(env, sess.id, body.pack, L, discPct, true);
     if (!d.ok) return json({ error: 'invoice', text: 'Не удалось создать счёт: ' + (d.error || '') });
     return json({ link: d.link });
   }
@@ -368,7 +374,10 @@ async function lavaProductPrice(env, offerId) {
   }
   return null;
 }
-async function createLavaInvoice(env, tgid, packId, L, discPct = 0) {
+// sbp:true → провайдер PAY2ME/способ SBP (прямой QR-код СБП, найдено в их openapi-спеке
+// gate.lava.top/docs/documentation.yaml — не описано в обычной документации).
+// Без этого флага — провайдер по умолчанию SMART_GLOCAL (карта Visa/MC/МИР).
+async function createLavaInvoice(env, tgid, packId, L, discPct = 0, sbp = false) {
   const offerId = lavaOfferIds(env)[packId];
   if (!offerId) return { ok: false, error: 'оффер для этого тарифа не настроен в Lava.top' };
   const amount = await lavaProductPrice(env, offerId);
@@ -379,6 +388,7 @@ async function createLavaInvoice(env, tgid, packId, L, discPct = 0) {
     periodicity: 'ONE_TIME',
     buyerLanguage: L === 'ru' ? 'RU' : 'EN',
   };
+  if (sbp) { body.paymentProvider = 'PAY2ME'; body.paymentMethod = 'SBP'; }
   // Скидку можно применить только у офферов с динамической ценой (amount != null) —
   // у фикс-цены Lava.top не даёт передавать amount вообще.
   if (amount != null) body.amount = applyDiscount(amount, discPct);
@@ -514,8 +524,8 @@ const BL = {
     packDesc: (l) => l + ' on facerate.ru',
     invoiceFail: (e) => 'Could not create invoice: ' + e,
     payPick: 'How would you like to pay?',
-    payStars: '⭐ Telegram Stars', payCard: '💳 Card / SBP (RUB)', payCrypto: '🪙 Crypto',
-    cryptoBtn: '🪙 Pay in crypto',
+    payStars: '⭐ Telegram Stars', payCard: '💳 Card (RUB)', paySbp: '📲 SBP (RUB)', payCrypto: '🪙 Crypto',
+    cryptoBtn: '🪙 Pay in crypto', paySbpBtn: '📲 Pay via SBP',
     promoAsk: '🎁 Send the promo code as one message:',
     mysubActive: (d) => `👑 Unlimited active until ${d}.`,
     mysubRec: '\n\n🔄 Auto-renewal is ON. Turn off: Telegram settings → My Stars → subscriptions (or the button below).',
@@ -563,8 +573,8 @@ const BL = {
     packDesc: (l) => l + ' на facerate.ru',
     invoiceFail: (e) => 'Не удалось выставить счёт: ' + e,
     payPick: 'Как удобнее оплатить?',
-    payStars: '⭐ Telegram Stars', payCard: '💳 Карта / СБП (₽)', payCrypto: '🪙 Криптой',
-    cryptoBtn: '🪙 Оплатить криптой',
+    payStars: '⭐ Telegram Stars', payCard: '💳 Карта (₽)', paySbp: '📲 СБП (₽)', payCrypto: '🪙 Криптой',
+    cryptoBtn: '🪙 Оплатить криптой', paySbpBtn: '📲 Оплатить через СБП',
     promoAsk: '🎁 Отправь промокод одним сообщением:',
     mysubActive: (d) => `👑 Безлимит активен до ${d}.`,
     mysubRec: '\n\n🔄 Автопродление ВКЛЮЧЕНО. Отключить: настройки Telegram → Мои звёзды → подписки (или кнопкой ниже).',
@@ -614,13 +624,14 @@ function methodKb(L, env) {
   const b = BL[L];
   const rows = [[{ text: b.payStars, callback_data: 'mth:stars' }]];
   if (lavaConfigured(env) || env.YUKASSA_PROVIDER_TOKEN) rows.push([{ text: b.payCard, callback_data: 'mth:rub' }]);
+  if (lavaConfigured(env)) rows.push([{ text: b.paySbp, callback_data: 'mth:sbp' }]);
   if (env.CRYPTOBOT_TOKEN) rows.push([{ text: b.payCrypto, callback_data: 'mth:crypto' }]);
   rows.push([{ text: b.kbBack, callback_data: 'menu' }]);
   return { inline_keyboard: rows };
 }
 // Шаг 2: тарифы с ценой в валюте выбранного способа.
 function packsKb(method, L) {
-  const price = (p) => method === 'stars' ? `${p.stars}⭐` : method === 'rub' ? `${p.lavaRub || p.rub}₽` : `${p.rub}₽`;
+  const price = (p) => method === 'stars' ? `${p.stars}⭐` : (method === 'rub' || method === 'sbp') ? `${p.lavaRub || p.rub}₽` : `${p.rub}₽`;
   const row = (id, emoji) => [{ text: `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`, callback_data: `pay:${id}:${method}` }];
   return { inline_keyboard: [
     row('p1', ''), row('p5', ''), row('d1', '🔥 '), row('m1', '👑 '),
@@ -756,8 +767,12 @@ async function handleCallback(env, cq) {
       if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.cryptoBtn, url: d.link }]] } });
       else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
     } else if (method === 'rub' && lavaConfigured(env)) {
-      const d = await createLavaInvoice(env, tgid, packId, L, discPct);
+      const d = await createLavaInvoice(env, tgid, packId, L, discPct, false);
       if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.payCard, url: d.link }]] } });
+      else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
+    } else if (method === 'sbp' && lavaConfigured(env)) {
+      const d = await createLavaInvoice(env, tgid, packId, L, discPct, true);
+      if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.paySbpBtn, url: d.link }]] } });
       else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
     } else {
       const inv = {
