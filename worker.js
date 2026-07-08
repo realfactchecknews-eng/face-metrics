@@ -447,7 +447,7 @@ async function lavaWebhook(request, env) {
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     const orderId = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '' });
-    await trackReferralPurchase(env, tgid, pack, 'card');
+    await trackReferralPurchase(env, tgid, pack, 'card', upd.amount);
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -507,7 +507,7 @@ async function cryptoWebhook(request, env) {
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     const orderId = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '' });
-    await trackReferralPurchase(env, tgid, pack, 'crypto');
+    await trackReferralPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount));
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -953,12 +953,13 @@ async function handlePayment(env, msg, L) {
     } else {
       note = await grantPack(env, tgid, pack, L, sp);
     }
+    const paidAmount = sp.currency === 'XTR' ? sp.total_amount : sp.total_amount / 100;
     const orderId = await recordOrder(env, {
       tgid, pack: payload.pack || '', method: sp.currency === 'XTR' ? 'stars' : 'rub',
-      amount: sp.currency === 'XTR' ? sp.total_amount : sp.total_amount / 100, currency: sp.currency,
+      amount: paidAmount, currency: sp.currency,
       username: msg.from.username || '', name: msg.from.first_name || '',
     });
-    await trackReferralPurchase(env, tgid, pack, sp.currency === 'XTR' ? 'stars' : 'rub');
+    await trackReferralPurchase(env, tgid, pack, sp.currency === 'XTR' ? 'stars' : 'rub', paidAmount);
     await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note, orderId), reply_markup: menuKb(L || 'en'), parse_mode: 'HTML' });
   } catch { /* payload сломан — молча игнор */ }
 }
@@ -1219,7 +1220,10 @@ async function setRefBuyerPct(env, code, pct) {
 }
 function refPayout(ref) { return Math.round((ref.revenueRub || 0) * (ref.pct || 0) / 100); }
 // Скидка покупателя: приоритет у промокода (pendingDiscount), иначе — скидка по реф-ссылке, если пришёл по ней.
-// Персональные ссылки (см. ниже) дают скидку 10% только на пакет "5 анализов" (p5), а не на всё подряд.
+// Персональные ссылки (см. ниже): как только по ссылке прошло 5 ЛЮБЫХ покупок (не обязательно этого
+// покупателя — суммарно по ссылке), дальнейшие покупки по ней получают скидку 15%, на любой тариф.
+const PERSONAL_REF_DISCOUNT_THRESHOLD = 5;
+const PERSONAL_REF_DISCOUNT_PCT = 15;
 async function buyerDiscountPct(env, tgid, packId) {
   const pd = await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`);
   if (pd) return parseInt(pd, 10) || 0;
@@ -1227,7 +1231,7 @@ async function buyerDiscountPct(env, tgid, packId) {
   if (!code) return 0;
   const ref = await getRef(env, code);
   if (!ref) return 0;
-  if (ref.personal) return packId === 'p5' ? 10 : 0;
+  if (ref.personal) return (ref.purchases || 0) >= PERSONAL_REF_DISCOUNT_THRESHOLD ? PERSONAL_REF_DISCOUNT_PCT : 0;
   return ref.buyerPct || 0;
 }
 function applyDiscount(amount, pct) { return pct > 0 ? Math.max(1, Math.round(amount * (100 - pct) / 100)) : amount; }
@@ -1253,10 +1257,11 @@ async function myPersonalRefText(env, tgid, L) {
   const code = await getOrCreateMyRef(env, tgid);
   const r = await getRef(env, code) || {};
   const link = refLink(env, code);
+  const left = Math.max(0, PERSONAL_REF_DISCOUNT_THRESHOLD - (r.purchases || 0));
   if (L === 'ru') {
-    return `🔗 Твоя реферальная ссылка:\n${link}\n\nЗа каждую покупку ЛЮБОГО тарифа по этой ссылке тебе начисляется +1 анализ. А тем, кто купит по ней «5 анализов» — скидка 10%.\n\nПереходов: ${r.clicks || 0}\nПокупок: ${r.purchases || 0}\nЗаработано анализов: ${r.creditsEarned || 0}`;
+    return `🔗 Твоя реферальная ссылка:\n${link}\n\nЗа каждую покупку ЛЮБОГО тарифа по этой ссылке тебе начисляется +1 анализ. А после ${PERSONAL_REF_DISCOUNT_THRESHOLD} покупок по ссылке (суммарно) все дальнейшие покупки по ней получают скидку ${PERSONAL_REF_DISCOUNT_PCT}%.\n\nПереходов: ${r.clicks || 0}\nПокупок: ${r.purchases || 0}${left > 0 ? `\nДо скидки покупателям: ещё ${left} покупок(и)` : `\nСкидка ${PERSONAL_REF_DISCOUNT_PCT}% уже активна по ссылке`}\nЗаработано анализов: ${r.creditsEarned || 0}`;
   }
-  return `🔗 Your personal referral link:\n${link}\n\nFor every purchase (any pack) made through this link, you get +1 free analysis. Buyers get 10% off the "5 analyses" pack when bought through it.\n\nClicks: ${r.clicks || 0}\nPurchases: ${r.purchases || 0}\nAnalyses earned: ${r.creditsEarned || 0}`;
+  return `🔗 Your personal referral link:\n${link}\n\nFor every purchase (any pack) made through this link, you get +1 free analysis. Once ${PERSONAL_REF_DISCOUNT_THRESHOLD} purchases have gone through this link (total), every further purchase through it gets ${PERSONAL_REF_DISCOUNT_PCT}% off.\n\nClicks: ${r.clicks || 0}\nPurchases: ${r.purchases || 0}${left > 0 ? `\nPurchases until discount unlocks: ${left}` : `\n${PERSONAL_REF_DISCOUNT_PCT}% discount is already active on this link`}\nAnalyses earned: ${r.creditsEarned || 0}`;
 }
 // Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
 async function attributeReferral(env, tgid, code) {
@@ -1269,14 +1274,17 @@ async function attributeReferral(env, tgid, code) {
   ref.clicks = (ref.clicks || 0) + 1;
   await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
 }
-// Грубая оценка выручки в рублях для отчёта партнёру — не бухгалтерская точность, а ориентир.
-function packRevenueRub(pack, method) {
+// Выручка в рублях для отчёта партнёру — по фактически уплаченной сумме (с учётом скидки), если она
+// известна и уже в рублях (card/rub/crypto); для stars (не рублёвая валюта) — приблизительно
+// масштабируем номинал по факту оплаченных звёзд, чтобы скидка тоже отражалась пропорционально.
+function packRevenueRub(pack, method, paidAmount) {
   if (!pack) return 0;
-  if (method === 'card' || method === 'rub') return pack.lavaRub || pack.rub || 0;
+  if (method === 'card' || method === 'rub' || method === 'crypto') return paidAmount != null ? paidAmount : (pack.lavaRub || pack.rub || 0);
+  if (method === 'stars' && pack.stars && paidAmount != null) return Math.round((pack.rub || 0) * paidAmount / pack.stars);
   return pack.rub || 0;
 }
 // Вызывается после любой успешной оплаты (Stars/ЮKassa, Lava.top, CryptoBot).
-async function trackReferralPurchase(env, tgid, pack, method) {
+async function trackReferralPurchase(env, tgid, pack, method, paidAmount) {
   try {
     // pendingRefCode (из промокода «для медийки») перебивает обычную привязку по реф-ссылке —
     // именно эта покупка засчитается указанному в промокоде партнёру, а не тому, чья ссылка
@@ -1295,7 +1303,7 @@ async function trackReferralPurchase(env, tgid, pack, method) {
         ref.creditsEarned = (ref.creditsEarned || 0) + 1;
       }
     } else {
-      ref.revenueRub = (ref.revenueRub || 0) + packRevenueRub(pack, method);
+      ref.revenueRub = (ref.revenueRub || 0) + packRevenueRub(pack, method, paidAmount);
     }
     await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
     if (override) await env.RATE_LIMIT.delete(`pendingRefCode:${tgid}`); // одноразовое переключение
