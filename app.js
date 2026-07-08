@@ -2080,7 +2080,7 @@ function showPaywall(state, st) {
       title.textContent = t("pwPickPack"); sub.textContent = methodNames[method] || "";
       function packBtn(id) {
         var p = packs[id]; if (!p) return;
-        var price = method === "stars" ? (p.stars + "⭐") : (p.rub + "₽");
+        var price = method === "stars" ? (p.stars + "⭐") : ((method === "rub" && p.lavaRub ? p.lavaRub : p.rub) + "₽");
         var top = id === "m1" ? " <i class='pw-hit'>top</i>" : "";
         btn(packNames[id] + " — " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
       }

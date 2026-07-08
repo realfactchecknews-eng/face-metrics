@@ -24,11 +24,14 @@ const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать
 const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
   p1: { type: 'credits', credits: 1, stars: 29,  rub: 50,  label: '1 анализ', labelEn: '1 analysis' }, // 50₽ — минималка Lava.top
   p5: { type: 'credits', credits: 5, stars: 99,  rub: 149, label: '5 анализов', labelEn: '5 analyses' },
-  d1: { type: 'unlim',  hours: 24,   stars: 99,  rub: 149, label: 'Безлимит на день', labelEn: 'Day unlimited' },
+  // lavaRub — реальная цена, настроенная в личном кабинете Lava.top (специально выше rub,
+  // чтобы карта/СБП стоили дороже Stars/крипты); без него кнопка в боте показывала бы
+  // устаревшую сумму, а по факту с человека спишут другую.
+  d1: { type: 'unlim',  hours: 24,   stars: 99,  rub: 149, lavaRub: 300, label: 'Безлимит на день', labelEn: 'Day unlimited' },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 499, rub: 749, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
+  m1: { type: 'unlim',  hours: 720,  stars: 499, rub: 749, lavaRub: 999, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
 };
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
 function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }
@@ -606,7 +609,7 @@ function methodKb(L, env) {
 }
 // Шаг 2: тарифы с ценой в валюте выбранного способа.
 function packsKb(method, L) {
-  const price = (p) => method === 'stars' ? `${p.stars}⭐` : `${p.rub}₽`;
+  const price = (p) => method === 'stars' ? `${p.stars}⭐` : method === 'rub' ? `${p.lavaRub || p.rub}₽` : `${p.rub}₽`;
   const row = (id, emoji) => [{ text: `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`, callback_data: `pay:${id}:${method}` }];
   return { inline_keyboard: [
     row('p1', ''), row('p5', ''), row('d1', '🔥 '), row('m1', '👑 '),
