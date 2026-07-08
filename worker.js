@@ -365,10 +365,15 @@ async function lavaPackIdByProductId(env, productId) {
     headers: { 'X-Api-Key': env.LAVA_API_KEY },
   }).then(x => x.json()).catch(() => null);
   const item = (r?.items || []).find((i) => i.id === productId);
-  const offerId = item?.offers?.[0]?.id;
-  if (!offerId) return null;
   const offerIds = lavaOfferIds(env);
-  return Object.keys(offerIds).find((k) => offerIds[k] === offerId) || null;
+  // Товар может иметь несколько офферов (напр. под разные способы оплаты) — раньше брали
+  // только offers[0], и если LAVA_OFFER_IDS указывал на другой оффер того же товара, матч
+  // не находился и платёж терялся молча. Проверяем все офферы товара.
+  for (const offer of item?.offers || []) {
+    const packId = Object.keys(offerIds).find((k) => offerIds[k] === offer.id);
+    if (packId) return packId;
+  }
+  return null;
 }
 // Товары с "ценой по запросу через API" (isDynamicPrice:true) требуют явный amount
 // в запросе на инвойс, иначе Lava.top отвечает "invoice cannot be created". Тянем
@@ -923,9 +928,17 @@ async function handlePayment(env, msg, L) {
   const b = BL[L || 'en'];
   const sp = msg.successful_payment;
   try {
+    // Telegram ретраит доставку successful_payment, если вебхук не ответил вовремя/200 —
+    // без дедупа это тихо теряет начисление при гонке двух параллельных обработок одного
+    // и того же платежа (recordOrder пишется дважды, а credits/unlim — только один раз,
+    // т.к. оба чтения credits видят одно и то же старое значение). Дедуп как у Lava/CryptoBot.
+    const seenKey = `starspaid:${sp.telegram_payment_charge_id}`;
+    if (await env.RATE_LIMIT.get(seenKey)) return;
+    await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const payload = JSON.parse(sp.invoice_payload);
     const tgid = payload.tgid || msg.from.id;
     const pack = PACKS[payload.pack];
+    if (!pack && !payload.credits) return; // тариф не найден (напр. каталог изменился после выставления счёта) — не логируем заказ без начисления
     let note = '';
     if (payload.credits && !pack) {
       // старый формат payload {tgid, credits}
