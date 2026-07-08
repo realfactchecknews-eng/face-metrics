@@ -2150,6 +2150,7 @@ function pwRecheck(silent) {
   function backToMenuFromCompare(){
     document.body.classList.remove("compare-mode");
     $("compareSection").classList.add("hidden");
+    $("uploadSection").classList.remove("hidden"); // fmOpenCompare прячет его — иначе обычный анализ остаётся пустым
     document.body.classList.remove("post-landing");
     var menu = $("menuScreen");
     if (menu){ menu.classList.remove("hidden"); requestAnimationFrame(function(){ menu.classList.add("in"); }); }
