@@ -1223,10 +1223,10 @@ function refPayout(ref) { return Math.round((ref.revenueRub || 0) * (ref.pct || 
 // (а) скидки по реф-ссылке, если пришёл по чужой ссылке, (б) скидки владельцу СВОЕЙ персональной
 // ссылки, если по ней уже прошло 5+ покупок — тогда владелец сам покупает со скидкой.
 // Персональные ссылки: как только по ссылке прошло 5 ЛЮБЫХ покупок (суммарно по ссылке, не только
-// этого покупателя), дальнейшие покупки по ней получают скидку 15% на любой тариф.
+// этого покупателя), дальнейшие покупки по ней получают скидку 10% на любой тариф.
 const PERSONAL_REF_DISCOUNT_THRESHOLD = 5;
-const PERSONAL_REF_DISCOUNT_PCT = 15;
-const PERSONAL_REF_OWNER_DISCOUNT_PCT = 10;
+const PERSONAL_REF_DISCOUNT_PCT = 10;
+const PERSONAL_REF_OWNER_DISCOUNT_PCT = 15;
 async function buyerDiscountPct(env, tgid, packId) {
   const pd = await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`);
   if (pd) return parseInt(pd, 10) || 0;
