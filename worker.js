@@ -425,9 +425,9 @@ async function lavaWebhook(request, env) {
     if (!tgid || !pack) return new Response('ok');
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
-    await logTx(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '' });
+    const orderId = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '' });
     await trackReferralPurchase(env, tgid, pack, 'card');
-    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note), reply_markup: menuKb(L) });
+    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
 }
@@ -485,9 +485,9 @@ async function cryptoWebhook(request, env) {
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
-    await logTx(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '' });
+    const orderId = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '' });
     await trackReferralPurchase(env, tgid, pack, 'crypto');
-    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note), reply_markup: menuKb(L) });
+    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
 }
@@ -497,6 +497,16 @@ function tgApi(env, method, body) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }).then(r => r.json()).catch(e => ({ ok: false, description: e.message }));
+}
+// При навигации по кнопкам правим ТО ЖЕ сообщение вместо спама новых — apiFn это tgApi/supportApi/mediaApi,
+// уже забинженный на нужный токен. messageId берётся из cq.message.message_id (навигация внутри callback).
+// Падает откатом на sendMessage, если редактировать нечего (текст не поменялся, сообщение — инвойс/фото и т.п.).
+async function editOrSend(apiFn, chat, messageId, text, replyMarkup, extra) {
+  if (messageId) {
+    const r = await apiFn('editMessageText', { chat_id: chat, message_id: messageId, text, reply_markup: replyMarkup, ...extra });
+    if (r.ok) return r;
+  }
+  return apiFn('sendMessage', { chat_id: chat, text, reply_markup: replyMarkup, ...extra });
 }
 
 // ─────────────────────────── Вебхук бота: меню, промокоды, оплаты ───────────────────────────
@@ -508,7 +518,7 @@ async function userLang(env, tgid) {
 const BL = {
   en: {
     menu: 'FaceRate menu:',
-    kbStatus: '💎 My status', kbShop: '⭐ Buy analyses / unlimited', kbPromo: '🎁 Enter promo code',
+    kbStatus: '💎 My status', kbShop: '⭐ Buy analyses / unlimited', kbOrders: '📦 My orders', kbPromo: '🎁 Enter promo code',
     kbSub: '🔄 My subscription', kbGw: '🎉 Giveaways', kbSite: '🌐 Open FaceRate', kbLang: '🌍 Язык: Русский',
     kbSupport: '💬 Support',
     kbBack: '← Menu',
@@ -552,13 +562,13 @@ const BL = {
     payUnlim: (d) => `👑 unlimited until ${d}`,
     paySub: (d) => `👑 month unlimited until ${d}`,
     payRec: ', auto-renewal is on',
-    payOk: (n) => `✅ Payment received! ${n}.\nGo back to facerate.ru — everything is updated.`,
+    payOk: (n, id) => `✅ Payment received! ${n}.\nGo back to facerate.ru — everything is updated.${id ? `\n\nOrder ID: <code>${id}</code> (quote it if you write to support)` : ''}`,
     langSet: '🌍 Language set: English.',
     pickLang: '🌍 Choose language / Выбери язык:',
   },
   ru: {
     menu: 'Меню FaceRate:',
-    kbStatus: '💎 Мой статус', kbShop: '⭐ Купить анализы / безлимит', kbPromo: '🎁 Ввести промокод',
+    kbStatus: '💎 Мой статус', kbShop: '⭐ Купить анализы / безлимит', kbOrders: '📦 Мои заказы', kbPromo: '🎁 Ввести промокод',
     kbSub: '🔄 Моя подписка', kbGw: '🎉 Розыгрыши', kbSite: '🌐 Открыть FaceRate', kbLang: '🌍 Language: English',
     kbSupport: '💬 Поддержка',
     kbBack: '← Меню',
@@ -602,7 +612,7 @@ const BL = {
     payUnlim: (d) => `👑 безлимит до ${d}`,
     paySub: (d) => `👑 месячный безлимит до ${d}`,
     payRec: ', автопродление включено',
-    payOk: (n) => `✅ Оплата получена! ${n}.\nВозвращайся на facerate.ru — всё уже обновлено.`,
+    payOk: (n, id) => `✅ Оплата получена! ${n}.\nВозвращайся на facerate.ru — всё уже обновлено.${id ? `\n\nID заказа: <code>${id}</code> (укажи его, если напишешь в поддержку)` : ''}`,
     langSet: '🌍 Язык переключён: русский.',
     pickLang: '🌍 Choose language / Выбери язык:',
   },
@@ -617,6 +627,7 @@ function menuKb(L) {
   return { inline_keyboard: [
     [{ text: b.kbStatus, callback_data: 'status' }],
     [{ text: b.kbShop, callback_data: 'shop' }],
+    [{ text: b.kbOrders, callback_data: 'orders' }],
     [{ text: b.kbPromo, callback_data: 'promo' }],
     [{ text: b.kbSub, callback_data: 'mysub' }, { text: b.kbGw, callback_data: 'gw' }],
     [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbSupport, url: 'https://t.me/FaceRateSupport_bot' }],
@@ -727,6 +738,8 @@ async function tgWebhook(request, env) {
 
 async function handleCallback(env, cq) {
   const chat = cq.message.chat.id, tgid = cq.from.id, data = cq.data || '';
+  const mid = cq.message.message_id;
+  const reply = (text, kb, extra) => editOrSend((m, bd) => tgApi(env, m, bd), chat, mid, text, kb, extra);
   await tgApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
   let L = await userLang(env, tgid);
 
@@ -734,13 +747,13 @@ async function handleCallback(env, cq) {
   if (data === 'lang:ru' || data === 'lang:en') {
     L = data.slice(5);
     await env.RATE_LIMIT.put(`lang:${tgid}`, L);
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: BL[L].langSet, reply_markup: menuKb(L) });
+    await reply(BL[L].langSet, menuKb(L));
     return;
   }
   const b = BL[L];
 
   if (data === 'menu') {
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.menu, reply_markup: menuKb(L) });
+    await reply(b.menu, menuKb(L));
   } else if (data === 'status') {
     const today = new Date().toISOString().slice(0, 10);
     const credits = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
@@ -751,14 +764,14 @@ async function handleCallback(env, cq) {
     if (unlim > Date.now()) t += b.statusUnlim(fmtDate(unlim, L));
     t += b.statusCredits(credits);
     t += sub ? b.statusSub(Math.max(0, FREE_PER_DAY - freeUsed)) : b.statusNoSub;
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: t, reply_markup: menuKb(L) });
+    await reply(t, menuKb(L));
   } else if (data === 'shop') {
     // Шаг 1: выбор способа оплаты.
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: methodKb(L, env) });
+    await reply(b.payPick, methodKb(L, env));
   } else if (data.startsWith('mth:')) {
     // Шаг 2: тарифы под выбранный способ.
     const method = data.slice(4);
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.shopTitle, reply_markup: packsKb(method, L) });
+    await reply(b.shopTitle, packsKb(method, L));
   } else if (data.startsWith('pay:')) {
     // Шаг 2: выставление счёта выбранным способом.
     const [, packId, method] = data.split(':');
@@ -768,16 +781,16 @@ async function handleCallback(env, cq) {
     await env.RATE_LIMIT.delete(`pendingDiscount:${tgid}`); // промо-скидка одноразовая; реф-скидка не тут, а в самом ref-объекте
     if (method === 'crypto') {
       const d = await createCryptoInvoice(env, tgid, packId, L, discPct);
-      if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.cryptoBtn, url: d.link }]] } });
-      else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
+      if (d.ok) await reply(b.payPick, { inline_keyboard: [[{ text: b.cryptoBtn, url: d.link }]] });
+      else await reply(b.invoiceFail(d.error || ''), menuKb(L));
     } else if (method === 'rub' && lavaConfigured(env)) {
       const d = await createLavaInvoice(env, tgid, packId, L, discPct, false);
-      if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.payCard, url: d.link }]] } });
-      else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
+      if (d.ok) await reply(b.payPick, { inline_keyboard: [[{ text: b.payCard, url: d.link }]] });
+      else await reply(b.invoiceFail(d.error || ''), menuKb(L));
     } else if (method === 'sbp' && lavaConfigured(env)) {
       const d = await createLavaInvoice(env, tgid, packId, L, discPct, true);
-      if (d.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: { inline_keyboard: [[{ text: b.paySbpBtn, url: d.link }]] } });
-      else await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(d.error || '') });
+      if (d.ok) await reply(b.payPick, { inline_keyboard: [[{ text: b.paySbpBtn, url: d.link }]] });
+      else await reply(b.invoiceFail(d.error || ''), menuKb(L));
     } else {
       const inv = {
         chat_id: chat,
@@ -794,12 +807,17 @@ async function handleCallback(env, cq) {
       } else if (pack.type === 'sub') {
         inv.subscription_period = pack.period;
       }
+      // sendInvoice — отдельное системное сообщение Telegram, его нельзя "починить в то же" — но
+      // старое сообщение с тарифами больше не нужно, поэтому просто убираем с него кнопки.
+      await tgApi(env, 'editMessageReplyMarkup', { chat_id: chat, message_id: mid, reply_markup: { inline_keyboard: [] } });
       const r = await tgApi(env, 'sendInvoice', inv);
-      if (!r.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(r.description || '') });
+      if (!r.ok) await tgApi(env, 'sendMessage', { chat_id: chat, text: b.invoiceFail(r.description || ''), reply_markup: menuKb(L) });
     }
+  } else if (data === 'orders') {
+    await reply(await ordersText(env, tgid, L), { inline_keyboard: [[{ text: b.kbBack, callback_data: 'menu' }]] }, { parse_mode: 'HTML' });
   } else if (data === 'promo') {
     await env.RATE_LIMIT.put(`pmstate:${tgid}`, '1', { expirationTtl: 300 });
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.promoAsk });
+    await reply(b.promoAsk, { inline_keyboard: [[{ text: b.kbBack, callback_data: 'menu' }]] });
   } else if (data === 'mysub') {
     const unlim = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
     const isRec = await env.RATE_LIMIT.get(`subrec:${tgid}`);
@@ -813,26 +831,25 @@ async function handleCallback(env, cq) {
     const kb = { inline_keyboard: [] };
     if (isRec === '1') kb.inline_keyboard.push([{ text: b.kbUnsub, callback_data: 'unsub' }]);
     kb.inline_keyboard.push([{ text: b.kbBack, callback_data: 'menu' }]);
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: t, reply_markup: kb });
+    await reply(t, kb);
   } else if (data === 'unsub') {
     const chg = await env.RATE_LIMIT.get(`subchg:${tgid}`);
     if (chg) {
       const r = await tgApi(env, 'editUserStarSubscription', { user_id: tgid, telegram_payment_charge_id: chg, is_canceled: true });
       if (r.ok) {
         await env.RATE_LIMIT.put(`subrec:${tgid}`, '0');
-        await tgApi(env, 'sendMessage', { chat_id: chat, text: b.unsubOk, reply_markup: menuKb(L) });
+        await reply(b.unsubOk, menuKb(L));
       } else {
-        await tgApi(env, 'sendMessage', { chat_id: chat, text: b.unsubFail(r.description || ''), reply_markup: menuKb(L) });
+        await reply(b.unsubFail(r.description || ''), menuKb(L));
       }
     } else {
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: b.unsubNone, reply_markup: menuKb(L) });
+      await reply(b.unsubNone, menuKb(L));
     }
   } else if (data === 'gw') {
-    await tgApi(env, 'sendMessage', {
-      chat_id: chat,
-      text: b.gw,
-      reply_markup: { inline_keyboard: [[{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbBack, callback_data: 'menu' }]] },
-    });
+    await reply(
+      b.gw,
+      { inline_keyboard: [[{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbBack, callback_data: 'menu' }]] },
+    );
   }
 }
 
@@ -902,13 +919,13 @@ async function handlePayment(env, msg, L) {
     } else {
       note = await grantPack(env, tgid, pack, L, sp);
     }
-    await logTx(env, {
+    const orderId = await recordOrder(env, {
       tgid, pack: payload.pack || '', method: sp.currency === 'XTR' ? 'stars' : 'rub',
       amount: sp.currency === 'XTR' ? sp.total_amount : sp.total_amount / 100, currency: sp.currency,
       username: msg.from.username || '', name: msg.from.first_name || '',
     });
     await trackReferralPurchase(env, tgid, pack, sp.currency === 'XTR' ? 'stars' : 'rub');
-    await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note), reply_markup: menuKb(L || 'en') });
+    await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note, orderId), reply_markup: menuKb(L || 'en'), parse_mode: 'HTML' });
   } catch { /* payload сломан — молча игнор */ }
 }
 
@@ -1055,14 +1072,38 @@ async function showTicketsKb(env) {
 async function txSummaryText(env) {
   const list = await getList(env, 'translog');
   if (!list.length) return '💳 Транзакций пока нет.';
+  const top = list.slice(0, 20);
+  // Lava.top/CryptoBot вебхуки не несут имя/юзернейм покупателя (только tgid) — подтягиваем
+  // через getChat лениво, только для тех записей, где его нет.
+  await Promise.all(top.map(async (t) => {
+    if (t.name || t.username) return;
+    const r = await tgApi(env, 'getChat', { chat_id: t.tgid });
+    if (r.ok) { t.name = r.result.first_name || ''; t.username = r.result.username || ''; }
+  }));
   const line = (t) => {
     const d = new Date(t.ts);
     const dt = d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const who = t.name || t.username ? `${t.name || ''}${t.username ? ' @' + t.username : ''}` : `id${t.tgid}`;
     const price = t.method === 'stars' ? `${t.amount}⭐` : t.method === 'crypto' ? `${t.amount} ${t.currency}` : `${t.amount}₽`;
-    return `${dt} — ${who} — ${t.pack} — ${price} (${t.method})`;
+    const id = t.id ? ` — ID <code>${t.id}</code>` : '';
+    return `${dt} — ${who} — ${t.pack} — ${price} (${t.method})${id}`;
   };
-  return `💳 Последние транзакции (${list.length}):\n\n` + list.slice(0, 20).map(line).join('\n');
+  return `💳 Последние транзакции (${top.length}):\n\n` + top.map(line).join('\n');
+}
+// Ищет платёж по короткому ID среди последних 50 транзакций (translog) — не по всей истории,
+// это на случай "клиент написал в саппорт с ID, найди что купил".
+async function findOrderById(env, id) {
+  const list = await getList(env, 'translog');
+  const t = list.find((x) => x.id === id.toUpperCase());
+  if (!t) return `❌ Заказ с ID ${id.toUpperCase()} не найден (ищем только среди последних 50 транзакций).`;
+  if (!t.name && !t.username) {
+    const r = await tgApi(env, 'getChat', { chat_id: t.tgid });
+    if (r.ok) { t.name = r.result.first_name || ''; t.username = r.result.username || ''; }
+  }
+  const d = new Date(t.ts).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const who = t.name || t.username ? `${t.name || ''}${t.username ? ' @' + t.username : ''} (id ${t.tgid})` : `id ${t.tgid}`;
+  const price = t.method === 'stars' ? `${t.amount}⭐` : t.method === 'crypto' ? `${t.amount} ${t.currency}` : `${t.amount}₽`;
+  return `🔎 Заказ <code>${t.id}</code>\n\nПокупатель: ${who}\nТариф: ${t.pack}\nСумма: ${price} (${t.method})\nДата: ${d}`;
 }
 const SUP_FAQ = {
   ru: `Ты — вежливый саппорт сервиса FaceRate (facerate.ru) — это AI-оценка лица по канонам луксмаксинга (сайт + Telegram-бот).
@@ -1272,20 +1313,21 @@ async function mediaWebhook(request, env) {
     const cq = upd.callback_query;
     const chat = cq.message.chat.id, tgid = String(cq.from.id), data = cq.data || '';
     const isAdmin = isAdminId(env, tgid);
+    const reply = (text, kb, extra) => editOrSend((m, bd) => mediaApi(env, m, bd), chat, cq.message.message_id, text, kb, extra);
     await mediaApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
     if (data === 'claim') {
       await env.RATE_LIMIT.put(`medwait:${tgid}`, '1', { expirationTtl: 600 });
-      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '🔑 Отправь одним сообщением код, который тебе дали (например ANNA).' });
+      await reply('🔑 Отправь одним сообщением код, который тебе дали (например ANNA).');
     } else if (data === 'mystats') {
-      await mediaApi(env, 'sendMessage', { chat_id: chat, text: await myRefStatsText(env, tgid), reply_markup: mediaMenuKb(isAdmin) });
+      await reply(await myRefStatsText(env, tgid), mediaMenuKb(isAdmin));
     } else if (data === 'alladmin' && isAdmin) {
       const { text: rt, kb } = await refListKb(env, 'alladmin');
       kb.inline_keyboard[kb.inline_keyboard.length - 1] = [{ text: '← Меню', callback_data: 'menu' }];
-      await mediaApi(env, 'sendMessage', { chat_id: chat, text: rt, reply_markup: kb });
+      await reply(rt, kb);
     } else if (data.startsWith('refview:') && isAdmin) {
-      await mediaApi(env, 'sendMessage', { chat_id: chat, text: await refDetailText(env, data.slice(8)), parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '← Все рефералки', callback_data: 'alladmin' }]] } });
+      await reply(await refDetailText(env, data.slice(8)), { inline_keyboard: [[{ text: '← Все рефералки', callback_data: 'alladmin' }]] }, { parse_mode: 'HTML' });
     } else if (data === 'menu') {
-      await mediaApi(env, 'sendMessage', { chat_id: chat, text: '👋 Меню:', reply_markup: mediaMenuKb(isAdmin) });
+      await reply('👋 Меню:', mediaMenuKb(isAdmin));
     }
     return new Response('ok');
   }
@@ -1348,6 +1390,34 @@ async function logTx(env, entry) {
   list.unshift({ ...entry, ts: Date.now() });
   await putList(env, 'translog', list.slice(0, 50));
 }
+// Короткий ID заказа — даём покупателю в подтверждении, он же виден админу в транзакциях,
+// чтобы можно было сослаться на конкретный платёж в переписке с поддержкой.
+function genOrderId() { return crypto.randomUUID().slice(0, 8).toUpperCase(); }
+// Пишет и в общий лог транзакций (для админа), и в личную историю заказов покупателя.
+async function recordOrder(env, entry) {
+  const id = entry.id || genOrderId();
+  const full = { ...entry, id };
+  await logTx(env, full);
+  const key = `orders:${entry.tgid}`;
+  const list = await getList(env, key);
+  list.unshift({ ...full, ts: Date.now() });
+  await putList(env, key, list.slice(0, 20), 60 * 60 * 24 * 365);
+  return id;
+}
+async function ordersText(env, tgid, L) {
+  const list = await getList(env, `orders:${tgid}`);
+  if (!list.length) return L === 'ru' ? '📦 Заказов пока нет.' : '📦 No orders yet.';
+  const methodName = { stars: '⭐', rub: '💳', sbp: '📲', crypto: '🪙', card: '💳' };
+  const line = (o) => {
+    const d = new Date(o.ts).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const price = o.method === 'stars' ? `${o.amount}⭐` : `${o.amount} ${o.currency || 'RUB'}`;
+    return `${methodName[o.method] || ''} ${packLabelById(o.pack, L)} — ${price} — ${d}\nID: <code>${o.id}</code>`;
+  };
+  const head = L === 'ru' ? `📦 Твои заказы (${list.length}):\n\n` : `📦 Your orders (${list.length}):\n\n`;
+  const foot = L === 'ru' ? '\n\nЕсть вопрос по заказу? Напиши в поддержку и укажи ID.' : '\n\nQuestion about an order? Message support and quote the ID.';
+  return head + list.map(line).join('\n\n') + foot;
+}
+function packLabelById(packId, L) { const p = PACKS[packId]; return p ? packLabel(p, L) : (packId || '?'); }
 
 async function supportWebhook(request, env) {
   if (env.SUPPORT_WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.SUPPORT_WEBHOOK_SECRET) {
@@ -1359,20 +1429,21 @@ async function supportWebhook(request, env) {
   if (upd.callback_query) {
     const cq = upd.callback_query;
     const chat = cq.message.chat.id, fromId = String(cq.from.id), data = cq.data || '';
+    const reply = (text, kb, extra) => editOrSend((m, bd) => supportApi(env, m, bd), chat, cq.message.message_id, text, kb, extra);
     await supportApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
     const isAdmin = isAdminId(env, fromId);
     let L = await userLang(env, cq.from.id);
     if (data === 'lang:ru' || data === 'lang:en') {
       L = data.slice(5);
       await env.RATE_LIMIT.put(`lang:${fromId}`, L);
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].langSet, reply_markup: supMenuKb(L, isAdmin) });
+      await reply(SUP[L].langSet, supMenuKb(L, isAdmin));
     } else if (data === 'menu') {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].menu, reply_markup: supMenuKb(L, isAdmin) });
+      await reply(SUP[L].menu, supMenuKb(L, isAdmin));
     } else if (data === 'faq') {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].faq, reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] } });
+      await reply(SUP[L].faq, { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] });
     } else if (data === 'human') {
       await env.RATE_LIMIT.put(`suphuman:${fromId}`, '1', { expirationTtl: 60 * 60 * 24 });
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: SUP[L].humanOn });
+      await reply(SUP[L].humanOn);
       const ids = adminIds(env);
       if (ids.length) {
         const u = cq.from;
@@ -1382,75 +1453,78 @@ async function supportWebhook(request, env) {
         }
       }
     } else if (data === 'admin' && isAdmin) {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '⚙️ Панель модератора:', reply_markup: adminPanelKb() });
+      await reply('⚙️ Панель модератора:', adminPanelKb());
     } else if (data === 'admtickets' && isAdmin) {
       const { text: tt, kb } = await showTicketsKb(env);
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: tt, reply_markup: kb });
+      await reply(tt, kb);
     } else if (data === 'admtx' && isAdmin) {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: await txSummaryText(env), reply_markup: { inline_keyboard: [[{ text: '← Admin', callback_data: 'admin' }]] } });
+      await reply(await txSummaryText(env), { inline_keyboard: [[{ text: '🔎 Найти по ID', callback_data: 'admfindtx' }], [{ text: '← Admin', callback_data: 'admin' }]] }, { parse_mode: 'HTML' });
     } else if (data === 'admpromo' && isAdmin) {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: await promoListText(env), reply_markup: { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] } });
+      await reply(await promoListText(env), { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] });
     } else if (data === 'admpromoadd' && isAdmin) {
       await env.RATE_LIMIT.delete(`admpromowiz:${fromId}`);
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎁 Какой тип промокода?', reply_markup: promoTypeKb() });
+      await reply('🎁 Какой тип промокода?', promoTypeKb());
     } else if (data.startsWith('ptype:') && isAdmin) {
       const type = data.slice(6);
       await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify({ type }), { expirationTtl: 600 });
       if (type === 'refcode') {
-        await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔗 За какого партнёра засчитывать покупку по этому промокоду?', reply_markup: await refPickKb(env) });
+        await reply('🔗 За какого партнёра засчитывать покупку по этому промокоду?', await refPickKb(env));
       } else {
         const ask = type === 'credits' ? '🎁 Сколько анализов даёт код?' : type === 'hours' ? '⏳ На сколько часов безлимит?' : '🎟 Какой процент скидки?';
-        await supportApi(env, 'sendMessage', { chat_id: chat, text: ask, reply_markup: promoAmountKb(type) });
+        await reply(ask, promoAmountKb(type));
       }
     } else if (data.startsWith('pamt:') && isAdmin) {
       const wizRaw = await env.RATE_LIMIT.get(`admpromowiz:${fromId}`);
-      if (!wizRaw) { await supportApi(env, 'sendMessage', { chat_id: chat, text: '⚠️ Сессия истекла, начни заново.', reply_markup: { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }]] } }); return new Response('ok'); }
+      if (!wizRaw) { await reply('⚠️ Сессия истекла, начни заново.', { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }]] }); return new Response('ok'); }
       const wiz = JSON.parse(wizRaw);
       const val = data.slice(5);
       if (val === 'custom') {
         wiz.step = 'amount_custom';
         await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
-        await supportApi(env, 'sendMessage', { chat_id: chat, text: wiz.type === 'refcode' ? '✏️ Отправь код реф-ссылки одним словом (например SHIZOFASHION).' : '✏️ Отправь число одним сообщением.' });
+        await reply(wiz.type === 'refcode' ? '✏️ Отправь код реф-ссылки одним словом (например SHIZOFASHION).' : '✏️ Отправь число одним сообщением.');
       } else {
         wiz.amount = wiz.type === 'refcode' ? val : parseInt(val, 10);
         await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
-        await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔢 Сколько активаций у кода?', reply_markup: promoUsesKb() });
+        await reply('🔢 Сколько активаций у кода?', promoUsesKb());
       }
     } else if (data.startsWith('puses:') && isAdmin) {
       const wizRaw = await env.RATE_LIMIT.get(`admpromowiz:${fromId}`);
-      if (!wizRaw) { await supportApi(env, 'sendMessage', { chat_id: chat, text: '⚠️ Сессия истекла, начни заново.', reply_markup: { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }]] } }); return new Response('ok'); }
+      if (!wizRaw) { await reply('⚠️ Сессия истекла, начни заново.', { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }]] }); return new Response('ok'); }
       const wiz = JSON.parse(wizRaw);
       const val = data.slice(6);
       if (val === 'custom') {
         wiz.step = 'uses_custom';
         await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
-        await supportApi(env, 'sendMessage', { chat_id: chat, text: '✏️ Отправь число одним сообщением.' });
+        await reply('✏️ Отправь число одним сообщением.');
       } else {
         wiz.uses = parseInt(val, 10);
         wiz.step = 'code';
         await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
-        await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔤 Отправь код одним словом (например SALE20).' });
+        await reply('🔤 Отправь код одним словом (например SALE20).');
       }
     } else if (data === 'admref' && isAdmin) {
       const { text: rt, kb } = await refListKb(env, 'admin');
       kb.inline_keyboard.splice(-1, 0, [{ text: '✏️ Комиссия медийке', callback_data: 'admrefpct' }], [{ text: '🎟 Скидка покупателю', callback_data: 'admrefbuyerpct' }]);
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: rt, reply_markup: kb });
+      await reply(rt, kb);
     } else if (data.startsWith('refview:') && isAdmin) {
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: await refDetailText(env, data.slice(8)), parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '← Рефералы', callback_data: 'admref' }]] } });
+      await reply(await refDetailText(env, data.slice(8)), { inline_keyboard: [[{ text: '← Рефералы', callback_data: 'admref' }]] }, { parse_mode: 'HTML' });
     } else if (data === 'admrefadd' && isAdmin) {
       await env.RATE_LIMIT.put(`admrefwait:${fromId}`, '1', { expirationTtl: 600 });
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🔗 Отправь одним сообщением:\n\nКОД ПРОЦЕНТ Название\n\nНапример: ANNA 20 Анна Иванова (блогер)\n\nКод — латиницей/цифрами, без пробелов, станет частью ссылки. Процент — сколько % от выручки причитается медийке.' });
+      await reply('🔗 Отправь одним сообщением:\n\nКОД ПРОЦЕНТ Название\n\nНапример: ANNA 20 Анна Иванова (блогер)\n\nКод — латиницей/цифрами, без пробелов, станет частью ссылки. Процент — сколько % от выручки причитается медийке.');
     } else if (data === 'admrefpct' && isAdmin) {
       await env.RATE_LIMIT.put(`admrefpctwait:${fromId}`, '1', { expirationTtl: 600 });
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '✏️ Отправь одним сообщением:\n\nКОД ПРОЦЕНТ\n\nНапример: ANNA 25' });
+      await reply('✏️ Отправь одним сообщением:\n\nКОД ПРОЦЕНТ\n\nНапример: ANNA 25');
     } else if (data === 'admrefbuyerpct' && isAdmin) {
       await env.RATE_LIMIT.put(`admrefbuyerwait:${fromId}`, '1', { expirationTtl: 600 });
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '🎟 Отправь одним сообщением:\n\nКОД ПРОЦЕНТ\n\nНапример: ANNA 10 — покупатели по ссылке ANNA получат скидку 10%.\nРаботает для Stars/крипты и для карты только у тарифов с динамической ценой в Lava.top (сейчас это «1 анализ» и «Месяц»).' });
+      await reply('🎟 Отправь одним сообщением:\n\nКОД ПРОЦЕНТ\n\nНапример: ANNA 10 — покупатели по ссылке ANNA получат скидку 10%.\nРаботает для Stars/крипты и для карты только у тарифов с динамической ценой в Lava.top (сейчас это «1 анализ» и «Месяц»).');
+    } else if (data === 'admfindtx' && isAdmin) {
+      await env.RATE_LIMIT.put(`admfindtxwait:${fromId}`, '1', { expirationTtl: 600 });
+      await reply('🔎 Отправь ID заказа одним сообщением (клиент присылает его из своего подтверждения оплаты).');
     } else if (data.startsWith('admopen:') && isAdmin) {
       const uid = data.slice(8);
       await env.RATE_LIMIT.put(`admtarget:${fromId}`, uid, { expirationTtl: 60 * 30 });
       const uL = await userLang(env, uid);
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: `✏️ Теперь пишешь пользователю ${uid}. Просто отправляй текст (без реплая). Закрыть: «✖» в списке чатов.\nЕго язык: ${uL}.` });
+      await reply(`✏️ Теперь пишешь пользователю ${uid}. Просто отправляй текст (без реплая). Закрыть: «✖» в списке чатов.\nЕго язык: ${uL}.`);
     } else if (data.startsWith('admclose:') && isAdmin) {
       const uid = data.slice(9);
       await removeTicket(env, uid);
@@ -1458,7 +1532,7 @@ async function supportWebhook(request, env) {
       const cur = await env.RATE_LIMIT.get(`admtarget:${fromId}`);
       if (cur === uid) await env.RATE_LIMIT.delete(`admtarget:${fromId}`);
       const { text: tt, kb } = await showTicketsKb(env);
-      await supportApi(env, 'sendMessage', { chat_id: chat, text: '✅ Чат закрыт.\n\n' + tt, reply_markup: kb });
+      await reply('✅ Чат закрыт.\n\n' + tt, kb);
     }
     return new Response('ok');
   }
@@ -1600,6 +1674,17 @@ async function supportWebhook(request, env) {
       text: `✅ Скидка покупателю для ${code} обновлена.\n\n` + await refDetailText(env, code),
       parse_mode: 'HTML',
       reply_markup: { inline_keyboard: [[{ text: '🎟 Изменить ещё', callback_data: 'admrefbuyerpct' }], [{ text: '← Admin', callback_data: 'admin' }]] },
+    });
+    return new Response('ok');
+  }
+  // Оператор в процессе поиска заказа по ID (нажал «🔎 Найти по ID»).
+  if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admfindtxwait:${fromId}`)) {
+    await env.RATE_LIMIT.delete(`admfindtxwait:${fromId}`);
+    await supportApi(env, 'sendMessage', {
+      chat_id: adminId,
+      text: await findOrderById(env, text.trim()),
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '🔎 Искать ещё', callback_data: 'admfindtx' }], [{ text: '← Admin', callback_data: 'admin' }]] },
     });
     return new Response('ok');
   }
