@@ -597,7 +597,7 @@ function menuKb(L) {
 function methodKb(L, env) {
   const b = BL[L];
   const rows = [[{ text: b.payStars, callback_data: 'mth:stars' }]];
-  if (env.YUKASSA_PROVIDER_TOKEN) rows.push([{ text: b.payCard, callback_data: 'mth:rub' }]);
+  if (lavaConfigured(env) || env.YUKASSA_PROVIDER_TOKEN) rows.push([{ text: b.payCard, callback_data: 'mth:rub' }]);
   if (env.CRYPTOBOT_TOKEN) rows.push([{ text: b.payCrypto, callback_data: 'mth:crypto' }]);
   rows.push([{ text: b.kbBack, callback_data: 'menu' }]);
   return { inline_keyboard: rows };
