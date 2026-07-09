@@ -691,9 +691,13 @@ function methodKb(L, env) {
 function packsKb(method, L, discPct) {
   const raw = (p) => method === 'stars' ? p.stars : (method === 'rub' || method === 'sbp') ? (p.lavaRub || p.rub) : p.rub;
   const unit = (p) => method === 'stars' ? '⭐' : '₽';
+  const cardLike = method === 'rub' || method === 'sbp';
   const price = (p) => {
     const base = raw(p);
     if (!discPct) return `${base}${unit(p)}`;
+    // Lava.top (карта/СБП) не принимает инвойс дешевле LAVA_MIN_RUB ни при какой скидке —
+    // если тариф уже на этом полу (самый дешёвый — ровно 50₽), скидка технически неприменима.
+    if (cardLike && base <= LAVA_MIN_RUB) return `${base}${unit(p)} (без скидки — минимум платёжки)`;
     const disc = Math.max(1, Math.round(base * (100 - discPct) / 100));
     return `${disc}${unit(p)} (вместо ${base}${unit(p)})`;
   };
@@ -1178,6 +1182,38 @@ async function promoListText(env) {
   }
   if (!lines.length) return '🎁 Активных промокодов нет.';
   return `🎁 Активные промокоды (${lines.length}):\n\n` + lines.join('\n');
+}
+// Одноразовая миграция старых промокодов «для медийки» (promo.refcode → ref:<CODE> с общей
+// статистикой) в новый изолированный формат promo.mediaPct. Код и лимит активаций (uses/max)
+// сохраняются как есть; % и накопленные purchases/revenueRub переносятся из ref:-объекта, на
+// который ссылался промокод — ничего не обнуляется. Сам ref:-объект не трогаем (на случай если
+// у него ещё есть отдельные клики по прямой ссылке) — просто отвязываем от него промокод.
+async function migrateOldMediaPromos(env) {
+  const list = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+  const migrated = [];
+  const skipped = [];
+  for (const k of list.keys) {
+    const raw = await env.RATE_LIMIT.get(k.name);
+    if (!raw) continue;
+    let p; try { p = JSON.parse(raw); } catch { continue; }
+    if (!p.refcode) continue;
+    const code = k.name.slice('promo:'.length);
+    const ref = await getRef(env, p.refcode);
+    if (!ref) { skipped.push(`${code} (реф-код ${p.refcode} не найден)`); continue; }
+    const migratedPromo = {
+      uses: p.uses, max: p.max,
+      mediaPct: ref.pct || 0,
+      discount: ref.buyerPct || 0,
+      revenueRub: ref.revenueRub || 0,
+      purchases: ref.purchases || 0,
+    };
+    await env.RATE_LIMIT.put(k.name, JSON.stringify(migratedPromo), { expirationTtl: 60 * 60 * 24 * 90 });
+    migrated.push(`${code}: ${ref.pct || 0}% медийке, скидка ${ref.buyerPct || 0}%, сохранено ${ref.purchases || 0} покупок / ${ref.revenueRub || 0}₽ оборота`);
+  }
+  if (!migrated.length && !skipped.length) return '🔁 Старых медиа-промо (refcode) не найдено — переносить нечего.';
+  let out = migrated.length ? `✅ Перенесено (${migrated.length}):\n\n` + migrated.join('\n') : '✅ Переносить было нечего.';
+  if (skipped.length) out += `\n\n⚠️ Пропущено:\n\n` + skipped.join('\n');
+  return out;
 }
 // Список кодов кнопками — открыть детальную карточку с удалением/изменением количества.
 async function promoManageKb(env) {
@@ -1703,8 +1739,11 @@ async function supportWebhook(request, env) {
         [{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }],
         [{ text: '🗑 Управление кодами', callback_data: 'admpromomanage' }],
         [{ text: '📜 История вводов', callback_data: 'admpromolog' }],
+        [{ text: '🔁 Перенести старые медиа-промо', callback_data: 'admpromomigrate' }],
         [{ text: '← Admin', callback_data: 'admin' }],
       ] });
+    } else if (data === 'admpromomigrate' && isAdmin) {
+      await reply(await migrateOldMediaPromos(env), { inline_keyboard: [[{ text: '← Промокоды', callback_data: 'admpromo' }]] });
     } else if (data === 'admpromolog' && isAdmin) {
       await reply(await promoLogText(env), { inline_keyboard: [[{ text: '← Промокоды', callback_data: 'admpromo' }]] }, { parse_mode: 'HTML' });
     } else if (data === 'admpromomanage' && isAdmin) {
