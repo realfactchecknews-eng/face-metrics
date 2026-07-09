@@ -469,7 +469,8 @@ async function lavaWebhook(request, env) {
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
-    const orderId = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '' });
+    const promoUsed = await peekOrderPromoCode(env, tgid);
+    const orderId = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'card', upd.amount))) await trackReferralPurchase(env, tgid, pack, 'card', upd.amount);
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
@@ -529,7 +530,8 @@ async function cryptoWebhook(request, env) {
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
-    const orderId = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '' });
+    const promoUsed = await peekOrderPromoCode(env, tgid);
+    const orderId = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount)))) await trackReferralPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount));
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
@@ -990,6 +992,9 @@ async function redeemPromo(env, chat, tgid, code, L, u) {
   if (promo.discount) {
     // Скидка не начисляется сразу — применяется к следующей оплате в течение 24ч.
     await env.RATE_LIMIT.put(`pendingDiscount:${tgid}`, String(promo.discount), { expirationTtl: 60 * 60 * 24 });
+    // Отдельно от pendingDiscount (которая гасится сразу при создании счёта) — доживает до
+    // самой оплаты, чтобы в истории покупок было видно, каким именно промокодом воспользовались.
+    await env.RATE_LIMIT.put(`pendingPromoCodeForOrder:${tgid}`, code, { expirationTtl: 60 * 60 * 24 });
     grant = b.promoOkDiscount(promo.discount);
   } else if (promo.credits) {
     const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
@@ -1029,10 +1034,12 @@ async function handlePayment(env, msg, L) {
       note = await grantPack(env, tgid, pack, L, sp);
     }
     const paidAmount = sp.currency === 'XTR' ? sp.total_amount : sp.total_amount / 100;
+    const promoUsed = await peekOrderPromoCode(env, tgid);
     const orderId = await recordOrder(env, {
       tgid, pack: payload.pack || '', method: sp.currency === 'XTR' ? 'stars' : 'rub',
       amount: paidAmount, currency: sp.currency,
       username: msg.from.username || '', name: msg.from.first_name || '',
+      promo: promoUsed,
     });
     const payMethod = sp.currency === 'XTR' ? 'stars' : 'rub';
     if (!(await trackMediaPromoPurchase(env, tgid, pack, payMethod, paidAmount))) await trackReferralPurchase(env, tgid, pack, payMethod, paidAmount);
@@ -1271,7 +1278,8 @@ async function txSummaryText(env) {
     const who = t.name || t.username ? `${t.name || ''}${t.username ? ' @' + t.username : ''}` : `id${t.tgid}`;
     const price = t.method === 'stars' ? `${t.amount}⭐` : t.method === 'crypto' ? `${t.amount} ${t.currency}` : `${t.amount}₽`;
     const id = t.id ? ` — ID <code>${t.id}</code>` : '';
-    return `${dt} — ${who} — ${t.pack} — ${price} (${t.method})${id}`;
+    const promo = t.promo ? ` — 🎟 ${t.promo}` : '';
+    return `${dt} — ${who} — ${t.pack} — ${price} (${t.method})${id}${promo}`;
   };
   return `💳 Последние транзакции (${top.length}):\n\n` + top.map(line).join('\n');
 }
@@ -1442,6 +1450,16 @@ function packRevenueRub(pack, method, paidAmount) {
   if (method === 'card' || method === 'rub' || method === 'crypto') return paidAmount != null ? paidAmount : (pack.lavaRub || pack.rub || 0);
   if (method === 'stars' && pack.stars && paidAmount != null) return Math.round((pack.rub || 0) * paidAmount / pack.stars);
   return pack.rub || 0;
+}
+// Какой промокод (если был) привёл к этой покупке — только ДЛЯ ОТОБРАЖЕНИЯ в истории/статистике,
+// не влияет на начисления (те уже посчитаны выше по pendingDiscount/pendingMediaPromo). Читаем
+// pendingMediaPromo, НЕ удаляя его — это сделает trackMediaPromoPurchase сам чуть позже.
+async function peekOrderPromoCode(env, tgid) {
+  const media = await env.RATE_LIMIT.get(`pendingMediaPromo:${tgid}`);
+  if (media) return media;
+  const code = await env.RATE_LIMIT.get(`pendingPromoCodeForOrder:${tgid}`);
+  if (code) await env.RATE_LIMIT.delete(`pendingPromoCodeForOrder:${tgid}`);
+  return code || null;
 }
 // Медиа-промокод (тип «media», отдельный от ref:-системы) — если у покупателя есть отложенный
 // код, засчитываем всю выручку/комиссию ЕМУ и возвращаем true, чтобы вызывающий код НЕ дёргал
@@ -2494,9 +2512,9 @@ function render(d){
   });
   document.getElementById('payoutTable').innerHTML = payt;
 
-  var tt = '<tr><th>ID</th><th>Дата</th><th>Тариф</th><th>Сумма</th><th>Способ</th><th>Кто</th></tr>';
+  var tt = '<tr><th>ID</th><th>Дата</th><th>Тариф</th><th>Сумма</th><th>Способ</th><th>Промо</th><th>Кто</th></tr>';
   d.translog.forEach(function(t){
-    tt += '<tr><td>'+esc(t.id||'')+'</td><td>'+new Date(t.ts).toLocaleString('ru-RU')+'</td><td>'+esc(t.pack)+'</td><td>'+esc(t.amount)+' '+esc(t.currency||'')+'</td><td>'+esc(t.method)+'</td><td>'+esc(t.name||'')+' '+(t.username?'@'+esc(t.username):'')+' (id '+esc(t.tgid)+')</td></tr>';
+    tt += '<tr><td>'+esc(t.id||'')+'</td><td>'+new Date(t.ts).toLocaleString('ru-RU')+'</td><td>'+esc(t.pack)+'</td><td>'+esc(t.amount)+' '+esc(t.currency||'')+'</td><td>'+esc(t.method)+'</td><td>'+(t.promo ? '<span class="pos">'+esc(t.promo)+'</span>' : '—')+'</td><td>'+esc(t.name||'')+' '+(t.username?'@'+esc(t.username):'')+' (id '+esc(t.tgid)+')</td></tr>';
   });
   document.getElementById('txTable').innerHTML = tt;
 
