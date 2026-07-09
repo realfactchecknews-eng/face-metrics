@@ -1594,8 +1594,16 @@ async function myEarnedTotal(env, tgid) {
   }
   return total;
 }
+// Резервируем уже поданные, но ещё не одобренные заявки этого же медийщика — иначе можно
+// подать несколько заявок подряд, каждая по отдельности укладывается в баланс, а вместе
+// в сумме превышают заработанное (если админ одобрит все).
+async function myPendingPayoutTotal(env, tgid) {
+  const pending = await pendingPayouts(env);
+  return pending.filter((p) => String(p.tgid) === String(tgid)).reduce((s, p) => s + p.amount, 0);
+}
 async function myAvailableBalance(env, tgid) {
-  return Math.max(0, (await myEarnedTotal(env, tgid)) - (await myPaidOut(env, tgid)));
+  const reserved = await myPendingPayoutTotal(env, tgid);
+  return Math.max(0, (await myEarnedTotal(env, tgid)) - (await myPaidOut(env, tgid)) - reserved);
 }
 async function myEarningsText(env, tgid) {
   const refCodes = await ownedCodes(env, tgid);
@@ -1621,9 +1629,12 @@ async function myEarningsText(env, tgid) {
     lines.push(`🎟 ${code} — ${p.purchases || 0} покупок по промокоду\nЗаработано: ~${earned}₽ (${p.mediaPct || 0}% от ~${p.revenueRub || 0}₽)${p.discount ? `, скидка покупателю ${p.discount}%` : ''}`);
   }
   const paid = await myPaidOut(env, tgid);
-  const available = Math.max(0, total - paid);
+  const reserved = await myPendingPayoutTotal(env, tgid);
+  const available = Math.max(0, total - paid - reserved);
   return `📊 Твоя статистика:\n\n` + lines.join('\n\n') +
-    `\n\n💰 Всего заработано: ~${total}₽\n💸 Уже выведено: ${paid}₽\n✅ Доступно к выводу: ${available}₽`;
+    `\n\n💰 Всего заработано: ~${total}₽\n💸 Уже выведено: ${paid}₽` +
+    (reserved > 0 ? `\n⏳ В заявках на рассмотрении: ${reserved}₽` : '') +
+    `\n✅ Доступно к выводу: ${available}₽`;
 }
 // ─── Заявки на вывод ─── payout:<ID> — сама заявка; payoutqueue — JSON-массив ID
 // заявок в статусе pending (для панели админа). Списание с баланса медийщика
