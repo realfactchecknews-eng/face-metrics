@@ -1624,17 +1624,22 @@ function buildShareCard() {
     var ov = parsed.overall || 0;
     var potential = ov >= 7.5 ? "HIGH" : ov >= 6 ? "GOOD" : ov >= 4.5 ? "MODERATE" : "LOW";
     var summary = (parsed.overallDesc || "").replace(/\s+/g, " ").trim();
-    var s1 = summary.slice(0, 52), s2 = "";
-    if (summary.length > 52) {
-      var cut = summary.lastIndexOf(" ", 52); if (cut < 30) cut = 52;
-      s1 = summary.slice(0, cut);
-      s2 = summary.slice(cut + 1, cut + 54) + (summary.length > cut + 54 ? "…" : "");
-    }
-    g.font = "23px Georgia, serif"; g.fillStyle = "#b6ac9a";
-    g.fillText(s1, 205, sy + 80);
-    if (s2) g.fillText(s2, 205, sy + 108);
-    // бейдж POTENTIAL
+    // бейдж POTENTIAL — геометрия нужна заранее, чтобы текст summary не залезал под него
     var bwd = 185, bx2 = W - 90 - 24 - bwd, by2 = sy + 24;
+    var textMaxW = bx2 - 205 - 24;
+    g.font = "23px Georgia, serif"; g.fillStyle = "#b6ac9a";
+    var words = summary.split(" "), sLines = [], line = "";
+    for (var wi = 0; wi < words.length; wi++) {
+      var test = line ? line + " " + words[wi] : words[wi];
+      if (g.measureText(test).width > textMaxW && line) { sLines.push(line); line = words[wi]; } else line = test;
+    }
+    if (line) sLines.push(line);
+    if (sLines.length > 2) {
+      var last = sLines[1];
+      while (g.measureText(last + "…").width > textMaxW && last.length > 1) last = last.slice(0, -1);
+      sLines = [sLines[0], last + "…"];
+    }
+    sLines.forEach(function(l, i) { g.fillText(l, 205, sy + 80 + i * 28); });
     g.strokeStyle = "rgba(196,164,107,0.55)"; g.lineWidth = 1.5;
     roundRect(g, bx2, by2, bwd, sh - 48, 12); g.stroke();
     g.textAlign = "center";

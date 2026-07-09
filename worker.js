@@ -149,8 +149,8 @@ async function analyze(request, env) {
     const b = {
       model: 'x-ai/grok-4.3',
       max_tokens: 2200,
-      temperature: 0.7,
-      top_p: 0.95,
+      temperature: 0.35,
+      top_p: 0.85,
       reasoning: { effort: 'low' },
       messages,
     };
