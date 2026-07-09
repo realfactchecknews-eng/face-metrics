@@ -462,7 +462,7 @@ async function lavaWebhook(request, env) {
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     const orderId = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '' });
-    await trackReferralPurchase(env, tgid, pack, 'card', upd.amount);
+    if (!(await trackMediaPromoPurchase(env, tgid, pack, 'card', upd.amount))) await trackReferralPurchase(env, tgid, pack, 'card', upd.amount);
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -522,7 +522,7 @@ async function cryptoWebhook(request, env) {
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     const orderId = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '' });
-    await trackReferralPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount));
+    if (!(await trackMediaPromoPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount)))) await trackReferralPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount));
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -594,6 +594,7 @@ const BL = {
     promoOkUnlim: (h) => `unlimited for ${h}h`,
     promoOkDiscount: (p) => `${p}% off your next purchase (24h)`,
     promoOkRefcode: (c) => `🎉 Promo code activated! Your next purchase (within 24h) will count for partner ${c}.`,
+    promoOkMedia: (d) => `🎉 Promo code activated!${d > 0 ? ` ${d}% off your next purchase (24h).` : ''} Open facerate.ru and enjoy.`,
     promoOk: (g) => `🎉 Promo code activated: ${g}! Open facerate.ru and enjoy.`,
     payCredits: (n) => `credits added: ${n}`,
     payUnlim: (d) => `👑 unlimited until ${d}`,
@@ -645,6 +646,7 @@ const BL = {
     promoOkUnlim: (h) => `безлимит на ${h} ч`,
     promoOkDiscount: (p) => `скидка ${p}% на следующую покупку (24ч)`,
     promoOkRefcode: (c) => `🎉 Промокод активирован! Твоя следующая покупка (в течение 24ч) засчитается партнёру ${c}.`,
+    promoOkMedia: (d) => `🎉 Промокод активирован!${d > 0 ? ` Скидка ${d}% на следующую покупку (24ч).` : ''} Открывай facerate.ru и пользуйся.`,
     promoOk: (g) => `🎉 Промокод активирован: ${g}! Открывай facerate.ru и пользуйся.`,
     payCredits: (n) => `начислено анализов: ${n}`,
     payUnlim: (d) => `👑 безлимит до ${d}`,
@@ -801,7 +803,7 @@ async function tgWebhook(request, env) {
   const waiting = await env.RATE_LIMIT.get(`pmstate:${tgid}`);
   if (waiting) {
     await env.RATE_LIMIT.delete(`pmstate:${tgid}`);
-    await redeemPromo(env, chat, tgid, text.toUpperCase(), L);
+    await redeemPromo(env, chat, tgid, text.toUpperCase(), L, msg.from);
     return new Response('ok');
   }
 
@@ -929,7 +931,15 @@ async function handleCallback(env, cq) {
   }
 }
 
-async function redeemPromo(env, chat, tgid, code, L) {
+async function logPromoRedeem(env, code, u) {
+  try {
+    const list = await getList(env, 'promolog');
+    list.unshift({ code, tgid: u?.id, username: u?.username || '', name: u?.first_name || '', ts: Date.now() });
+    await putList(env, 'promolog', list.slice(0, 80));
+  } catch { /* лог не должен ронять активацию промокода */ }
+}
+
+async function redeemPromo(env, chat, tgid, code, L, u) {
   const b = BL[L || 'en'];
   if (!/^[A-Z0-9_-]{2,32}$/.test(code)) {
     await tgApi(env, 'sendMessage', { chat_id: chat, text: b.promoBad, reply_markup: menuKb(L) });
@@ -953,7 +963,19 @@ async function redeemPromo(env, chat, tgid, code, L) {
   promo.uses -= 1;
   await env.RATE_LIMIT.put(`promo:${code}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
   await env.RATE_LIMIT.put(`promoused:${code}:${tgid}`, '1', { expirationTtl: 60 * 60 * 24 * 90 });
+  await logPromoRedeem(env, code, u);
 
+  if (promo.mediaPct != null) {
+    // Медиа-промо: полностью отдельная сущность от ref:-системы (см. trackMediaPromoPurchase).
+    // НЕ трогает refby/pendingRefCode — если человек до этого пришёл по чьей-то реф-ссылке,
+    // она перебивается медиа-промокодом на эту одну покупку, а не суммируется с ней.
+    await env.RATE_LIMIT.put(`pendingMediaPromo:${tgid}`, code, { expirationTtl: 60 * 60 * 24 });
+    if (promo.discount > 0) {
+      await env.RATE_LIMIT.put(`pendingDiscount:${tgid}`, String(promo.discount), { expirationTtl: 60 * 60 * 24 });
+    }
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.promoOkMedia(promo.discount || 0), reply_markup: menuKb(L) });
+    return;
+  }
   if (promo.refcode) {
     // Не даёт бонус покупателю — просто переключает, кому засчитается его следующая покупка
     // (перебивает обычную привязку по реф-ссылке, если она была; действует 24ч, одноразово).
@@ -1009,7 +1031,8 @@ async function handlePayment(env, msg, L) {
       amount: paidAmount, currency: sp.currency,
       username: msg.from.username || '', name: msg.from.first_name || '',
     });
-    await trackReferralPurchase(env, tgid, pack, sp.currency === 'XTR' ? 'stars' : 'rub', paidAmount);
+    const payMethod = sp.currency === 'XTR' ? 'stars' : 'rub';
+    if (!(await trackMediaPromoPurchase(env, tgid, pack, payMethod, paidAmount))) await trackReferralPurchase(env, tgid, pack, payMethod, paidAmount);
     await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note, orderId), reply_markup: menuKb(L || 'en'), parse_mode: 'HTML' });
   } catch { /* payload сломан — молча игнор */ }
 }
@@ -1096,16 +1119,24 @@ function promoTypeKb() {
     [{ text: '🎁 Кредиты (анализы)', callback_data: 'ptype:credits' }],
     [{ text: '⏳ Безлимит (часы)', callback_data: 'ptype:hours' }],
     [{ text: '🎟 Скидка (%)', callback_data: 'ptype:discount' }],
-    [{ text: '🔗 Для медийки (промо на процент)', callback_data: 'ptype:refcode' }],
+    [{ text: '🔗 Для медийки (привязка к реф-ссылке)', callback_data: 'ptype:refcode' }],
+    [{ text: '📣 Медиа-промо (% + скидка, отдельно от рефок)', callback_data: 'ptype:media' }],
     [{ text: '← Промокоды', callback_data: 'admpromo' }],
   ]};
 }
-const PROMO_AMOUNT_PRESETS = { credits: [1, 3, 5, 10], hours: [24, 72, 168, 720], discount: [10, 15, 20, 25, 30, 50] };
+const PROMO_AMOUNT_PRESETS = { credits: [1, 3, 5, 10], hours: [24, 72, 168, 720], discount: [10, 15, 20, 25, 30, 50], media: [20, 25, 30, 40, 50] };
 function promoAmountKb(type) {
-  const fmt = (v) => type === 'discount' ? `${v}%` : type === 'hours' ? `${v}ч` : `${v}`;
+  const fmt = (v) => (type === 'discount' || type === 'media') ? `${v}%` : type === 'hours' ? `${v}ч` : `${v}`;
   const rows = PROMO_AMOUNT_PRESETS[type].map((v) => ([{ text: fmt(v), callback_data: `pamt:${v}` }]));
   rows.push([{ text: '✏️ Другое число', callback_data: 'pamt:custom' }]);
   rows.push([{ text: '← Назад', callback_data: 'admpromoadd' }]);
+  return { inline_keyboard: rows };
+}
+// Шаг 2 для медиа-промо: скидка покупателю (0 = без скидки).
+const MEDIA_DISCOUNT_PRESETS = [0, 5, 10, 15, 20];
+function mediaDiscountKb() {
+  const rows = MEDIA_DISCOUNT_PRESETS.map((v) => ([{ text: v === 0 ? 'Без скидки' : `${v}%`, callback_data: `pmdisc:${v}` }]));
+  rows.push([{ text: '✏️ Другое число', callback_data: 'pmdisc:custom' }]);
   return { inline_keyboard: rows };
 }
 // Выбор существующего реф-кода для промо типа "для медийки" (или ручной ввод, если код ещё не создан).
@@ -1122,6 +1153,18 @@ function promoUsesKb() {
   rows.push([{ text: '✏️ Другое число', callback_data: 'puses:custom' }]);
   return { inline_keyboard: rows };
 }
+// Текст описания начисления промокода — общий для списка и детальной карточки.
+function promoGiftLabel(p) {
+  if (p.mediaPct != null) {
+    const earned = Math.round((p.revenueRub || 0) * p.mediaPct / 100);
+    return `медиа-промо: ${p.mediaPct}% партнёру${p.discount ? `, скидка покупателю ${p.discount}%` : ''} — покупок: ${p.purchases || 0}, начислено ${earned}₽`;
+  }
+  if (p.credits) return `+${p.credits} анализ(ов)`;
+  if (p.hours) return `безлимит ${p.hours}ч`;
+  if (p.discount) return `скидка ${p.discount}%`;
+  if (p.refcode) return `засчитать партнёру ${p.refcode}`;
+  return '?';
+}
 async function promoListText(env) {
   const list = await env.RATE_LIMIT.list({ prefix: 'promo:' });
   const lines = [];
@@ -1130,12 +1173,44 @@ async function promoListText(env) {
     if (!raw) continue;
     let p; try { p = JSON.parse(raw); } catch { continue; }
     const code = k.name.slice('promo:'.length);
-    const gift = p.credits ? `+${p.credits} анализ(ов)` : p.hours ? `безлимит ${p.hours}ч` : p.discount ? `скидка ${p.discount}%` : p.refcode ? `засчитать партнёру ${p.refcode}` : '?';
     const used = p.max ? `${p.max - p.uses}/${p.max} использовано` : `осталось ${p.uses}`;
-    lines.push(`🎟 ${code} — ${gift} — ${used}`);
+    lines.push(`🎟 ${code} — ${promoGiftLabel(p)} — ${used}`);
   }
   if (!lines.length) return '🎁 Активных промокодов нет.';
   return `🎁 Активные промокоды (${lines.length}):\n\n` + lines.join('\n');
+}
+// Список кодов кнопками — открыть детальную карточку с удалением/изменением количества.
+async function promoManageKb(env) {
+  const list = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+  const codes = list.keys.map((k) => k.name.slice('promo:'.length)).sort();
+  const rows = codes.map((c) => ([{ text: `🎟 ${c}`, callback_data: `promoedit:${c}` }]));
+  if (!rows.length) rows.push([{ text: 'Промокодов нет', callback_data: 'admpromo' }]);
+  rows.push([{ text: '← Промокоды', callback_data: 'admpromo' }]);
+  return { inline_keyboard: rows };
+}
+async function promoDetailText(env, code) {
+  const raw = await env.RATE_LIMIT.get(`promo:${code}`);
+  if (!raw) return `❌ Код ${code} не найден (возможно, уже удалён или истёк).`;
+  let p; try { p = JSON.parse(raw); } catch { return `❌ Код ${code} повреждён.`; }
+  const used = p.max ? `${p.max - p.uses}/${p.max} использовано (осталось ${p.uses})` : `осталось ${p.uses}`;
+  return `🎟 <b>${code}</b>\n\n${promoGiftLabel(p)}\n${used}`;
+}
+function promoDetailKb(code) {
+  return { inline_keyboard: [
+    [{ text: '✏️ Изменить количество', callback_data: `promoqty:${code}` }],
+    [{ text: '🗑 Удалить код', callback_data: `promodelask:${code}` }],
+    [{ text: '← Все коды', callback_data: 'admpromomanage' }],
+  ]};
+}
+async function promoLogText(env) {
+  const list = await getList(env, 'promolog');
+  if (!list.length) return '📜 Пока никто не вводил промокоды.';
+  const line = (t) => {
+    const d = new Date(t.ts).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const who = t.name || t.username ? `${t.name || ''}${t.username ? ' @' + t.username : ''}` : `id${t.tgid}`;
+    return `${d} — <b>${t.code}</b> — ${who} (id ${t.tgid})`;
+  };
+  return `📜 Последние вводы промокодов (${list.length}):\n\n` + list.map(line).join('\n');
 }
 const ADMIN_BTN = '⚙️ Admin';
 // Постоянная клавиатура внизу экрана — не пропадает между сообщениями,
@@ -1341,6 +1416,24 @@ function packRevenueRub(pack, method, paidAmount) {
   if (method === 'card' || method === 'rub' || method === 'crypto') return paidAmount != null ? paidAmount : (pack.lavaRub || pack.rub || 0);
   if (method === 'stars' && pack.stars && paidAmount != null) return Math.round((pack.rub || 0) * paidAmount / pack.stars);
   return pack.rub || 0;
+}
+// Медиа-промокод (тип «media», отдельный от ref:-системы) — если у покупателя есть отложенный
+// код, засчитываем всю выручку/комиссию ЕМУ и возвращаем true, чтобы вызывающий код НЕ дёргал
+// ещё и trackReferralPurchase — так одна покупка не оплачивается дважды двум разным медийкам.
+async function trackMediaPromoPurchase(env, tgid, pack, method, paidAmount) {
+  try {
+    const code = await env.RATE_LIMIT.get(`pendingMediaPromo:${tgid}`);
+    if (!code) return false;
+    await env.RATE_LIMIT.delete(`pendingMediaPromo:${tgid}`);
+    const raw = await env.RATE_LIMIT.get(`promo:${code}`);
+    if (!raw) return true; // код удалили админом между активацией и оплатой — не начисляем никому
+    const promo = JSON.parse(raw);
+    if (promo.mediaPct == null) return true;
+    promo.purchases = (promo.purchases || 0) + 1;
+    promo.revenueRub = (promo.revenueRub || 0) + packRevenueRub(pack, method, paidAmount);
+    await env.RATE_LIMIT.put(`promo:${code}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
+    return true;
+  } catch { return false; }
 }
 // Вызывается после любой успешной оплаты (Stars/ЮKassa, Lava.top, CryptoBot).
 async function trackReferralPurchase(env, tgid, pack, method, paidAmount) {
@@ -1606,7 +1699,33 @@ async function supportWebhook(request, env) {
     } else if (data === 'admtx' && isAdmin) {
       await reply(await txSummaryText(env), { inline_keyboard: [[{ text: '🔎 Найти по ID', callback_data: 'admfindtx' }], [{ text: '← Admin', callback_data: 'admin' }]] }, { parse_mode: 'HTML' });
     } else if (data === 'admpromo' && isAdmin) {
-      await reply(await promoListText(env), { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }], [{ text: '← Admin', callback_data: 'admin' }]] });
+      await reply(await promoListText(env), { inline_keyboard: [
+        [{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }],
+        [{ text: '🗑 Управление кодами', callback_data: 'admpromomanage' }],
+        [{ text: '📜 История вводов', callback_data: 'admpromolog' }],
+        [{ text: '← Admin', callback_data: 'admin' }],
+      ] });
+    } else if (data === 'admpromolog' && isAdmin) {
+      await reply(await promoLogText(env), { inline_keyboard: [[{ text: '← Промокоды', callback_data: 'admpromo' }]] }, { parse_mode: 'HTML' });
+    } else if (data === 'admpromomanage' && isAdmin) {
+      await reply('🗑 Выбери код для управления:', await promoManageKb(env));
+    } else if (data.startsWith('promoedit:') && isAdmin) {
+      const code = data.slice(10);
+      await reply(await promoDetailText(env, code), promoDetailKb(code), { parse_mode: 'HTML' });
+    } else if (data.startsWith('promoqty:') && isAdmin) {
+      const code = data.slice(9);
+      await env.RATE_LIMIT.put(`admpromoqtywait:${fromId}`, code, { expirationTtl: 600 });
+      await reply(`✏️ Отправь новое количество активаций для ${code} одним числом (это станет и новым "осталось", и новым "всего").`);
+    } else if (data.startsWith('promodelask:') && isAdmin) {
+      const code = data.slice(12);
+      await reply(`⚠️ Точно удалить промокод ${code}? Действие необратимо.`, { inline_keyboard: [
+        [{ text: '✅ Да, удалить', callback_data: `promodel:${code}` }],
+        [{ text: '❌ Отмена', callback_data: `promoedit:${code}` }],
+      ] });
+    } else if (data.startsWith('promodel:') && isAdmin) {
+      const code = data.slice(9);
+      await env.RATE_LIMIT.delete(`promo:${code}`);
+      await reply(`✅ Код ${code} удалён.`, await promoManageKb(env));
     } else if (data === 'admpromoadd' && isAdmin) {
       await env.RATE_LIMIT.delete(`admpromowiz:${fromId}`);
       await reply('🎁 Какой тип промокода?', promoTypeKb());
@@ -1616,7 +1735,7 @@ async function supportWebhook(request, env) {
       if (type === 'refcode') {
         await reply('🔗 За какого партнёра засчитывать покупку по этому промокоду?', await refPickKb(env));
       } else {
-        const ask = type === 'credits' ? '🎁 Сколько анализов даёт код?' : type === 'hours' ? '⏳ На сколько часов безлимит?' : '🎟 Какой процент скидки?';
+        const ask = type === 'credits' ? '🎁 Сколько анализов даёт код?' : type === 'hours' ? '⏳ На сколько часов безлимит?' : type === 'media' ? '📣 Какой процент выручки медийке?' : '🎟 Какой процент скидки?';
         await reply(ask, promoAmountKb(type));
       }
     } else if (data.startsWith('pamt:') && isAdmin) {
@@ -1630,6 +1749,24 @@ async function supportWebhook(request, env) {
         await reply(wiz.type === 'refcode' ? '✏️ Отправь код реф-ссылки одним словом (например SHIZOFASHION).' : '✏️ Отправь число одним сообщением.');
       } else {
         wiz.amount = wiz.type === 'refcode' ? val : parseInt(val, 10);
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        if (wiz.type === 'media') {
+          await reply('🎟 Скидка покупателю по этому промокоду?', mediaDiscountKb());
+        } else {
+          await reply('🔢 Сколько активаций у кода?', promoUsesKb());
+        }
+      }
+    } else if (data.startsWith('pmdisc:') && isAdmin) {
+      const wizRaw = await env.RATE_LIMIT.get(`admpromowiz:${fromId}`);
+      if (!wizRaw) { await reply('⚠️ Сессия истекла, начни заново.', { inline_keyboard: [[{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }]] }); return new Response('ok'); }
+      const wiz = JSON.parse(wizRaw);
+      const val = data.slice(7);
+      if (val === 'custom') {
+        wiz.step = 'discount_custom';
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        await reply('✏️ Отправь число (0-90) одним сообщением.');
+      } else {
+        wiz.discount = parseInt(val, 10);
         await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
         await reply('🔢 Сколько активаций у кода?', promoUsesKb());
       }
@@ -1735,6 +1872,21 @@ async function supportWebhook(request, env) {
         }
         wiz.amount = n; delete wiz.step;
         await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
+        if (wiz.type === 'media') {
+          await supportApi(env, 'sendMessage', { chat_id: adminId, text: '🎟 Скидка покупателю по этому промокоду?', reply_markup: mediaDiscountKb() });
+        } else {
+          await supportApi(env, 'sendMessage', { chat_id: adminId, text: '🔢 Сколько активаций у кода?', reply_markup: promoUsesKb() });
+        }
+        return new Response('ok');
+      }
+      if (wiz.step === 'discount_custom') {
+        const n = parseInt(text, 10);
+        if (!Number.isFinite(n) || n < 0 || n > 90) {
+          await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Нужно число от 0 до 90.' });
+          return new Response('ok');
+        }
+        wiz.discount = n; delete wiz.step;
+        await env.RATE_LIMIT.put(`admpromowiz:${fromId}`, JSON.stringify(wiz), { expirationTtl: 600 });
         await supportApi(env, 'sendMessage', { chat_id: adminId, text: '🔢 Сколько активаций у кода?', reply_markup: promoUsesKb() });
         return new Response('ok');
       }
@@ -1756,7 +1908,14 @@ async function supportWebhook(request, env) {
           return new Response('ok');
         }
         const promo = { uses: wiz.uses, max: wiz.uses };
-        promo[wiz.type] = wiz.amount;
+        if (wiz.type === 'media') {
+          promo.mediaPct = wiz.amount;
+          promo.discount = wiz.discount || 0;
+          promo.revenueRub = 0;
+          promo.purchases = 0;
+        } else {
+          promo[wiz.type] = wiz.amount;
+        }
         await env.RATE_LIMIT.put(`promo:${code}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
         await env.RATE_LIMIT.delete(`admpromowiz:${fromId}`);
         await supportApi(env, 'sendMessage', {
@@ -1780,12 +1939,18 @@ async function supportWebhook(request, env) {
       await supportApi(env, 'sendMessage', { chat_id: adminId, text: `⚠️ Код ${code} уже занят.` });
       return new Response('ok');
     }
-    await createRef(env, code, m[3].trim(), Math.min(100, parseInt(m[2], 10)));
+    const pct = Math.min(100, parseInt(m[2], 10));
+    await createRef(env, code, m[3].trim(), pct);
     await env.RATE_LIMIT.delete(`admrefwait:${fromId}`);
     const link = `https://t.me/${env.BOT_USERNAME || 'faceratepay_bot'}?start=ref_${code}`;
+    // Готовый текст для отправки партнёру — копируй и кидай как есть.
     await supportApi(env, 'sendMessage', {
       chat_id: adminId,
-      text: `✅ Реферальная ссылка создана.\n\nОтдавай эту ссылку партнёру:\n${link}\n\n` + await refListText(env),
+      text: `Привет! Вот твоя реферальная ссылка на FaceRate:\n👉 ${link}\n\nЧто с ней делать:\n\nПросто кидай эту ссылку своей аудитории вместо обычной ссылки на бота — она ведёт в тот же бот оплаты, но "запоминает", что человек пришёл от тебя.\nУсловия: ${pct}% от выручки с каждой покупки тех, кто пришёл по твоей ссылке — тебе на счёт.\nКак самому смотреть статистику (сколько людей купило и сколько ты заработал):\n\nОткрой отдельного бота — @FaceRateMedia_bot\nНажми /start, потом кнопку "🔑 Привязать код"\nОтправь код: ${code}\nГотово — дальше в любой момент жми "📊 Моя статистика" и увидишь: сколько переходов по ссылке, сколько покупок, и сколько тебе причитается (уже посчитано с твоими ${pct}%).\nВыплаты — отдельно, по договорённости (уточняй у меня), бот только показывает цифры для прозрачности.`,
+    });
+    await supportApi(env, 'sendMessage', {
+      chat_id: adminId,
+      text: `✅ Реферальная ссылка создана (сообщение для партнёра — выше, готово к копированию).\n\n` + await refListText(env),
       reply_markup: { inline_keyboard: [[{ text: '+ Создать ещё', callback_data: 'admrefadd' }], [{ text: '← Admin', callback_data: 'admin' }]] },
     });
     return new Response('ok');
@@ -1822,6 +1987,34 @@ async function supportWebhook(request, env) {
       reply_markup: { inline_keyboard: [[{ text: '🎟 Изменить ещё', callback_data: 'admrefbuyerpct' }], [{ text: '← Admin', callback_data: 'admin' }]] },
     });
     return new Response('ok');
+  }
+  // Оператор в процессе изменения количества активаций промокода (нажал «✏️ Изменить количество»).
+  if (isAdmin && !msg.reply_to_message) {
+    const qtyCode = await env.RATE_LIMIT.get(`admpromoqtywait:${fromId}`);
+    if (qtyCode) {
+      const n = parseInt(text, 10);
+      if (!Number.isFinite(n) || n < 0) {
+        await supportApi(env, 'sendMessage', { chat_id: adminId, text: '⚠️ Нужно неотрицательное число.' });
+        return new Response('ok');
+      }
+      const raw = await env.RATE_LIMIT.get(`promo:${qtyCode}`);
+      if (!raw) {
+        await env.RATE_LIMIT.delete(`admpromoqtywait:${fromId}`);
+        await supportApi(env, 'sendMessage', { chat_id: adminId, text: `❌ Код ${qtyCode} не найден — возможно, уже удалён.` });
+        return new Response('ok');
+      }
+      const p = JSON.parse(raw);
+      p.uses = n; p.max = n;
+      await env.RATE_LIMIT.put(`promo:${qtyCode}`, JSON.stringify(p), { expirationTtl: 60 * 60 * 24 * 90 });
+      await env.RATE_LIMIT.delete(`admpromoqtywait:${fromId}`);
+      await supportApi(env, 'sendMessage', {
+        chat_id: adminId,
+        text: `✅ Количество активаций ${qtyCode} обновлено на ${n}.\n\n` + await promoDetailText(env, qtyCode),
+        parse_mode: 'HTML',
+        reply_markup: promoDetailKb(qtyCode),
+      });
+      return new Response('ok');
+    }
   }
   // Оператор в процессе поиска заказа по ID (нажал «🔎 Найти по ID»).
   if (isAdmin && !msg.reply_to_message && await env.RATE_LIMIT.get(`admfindtxwait:${fromId}`)) {
