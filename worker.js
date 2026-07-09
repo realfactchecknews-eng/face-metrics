@@ -683,14 +683,23 @@ function methodKb(L, env) {
   rows.push([{ text: b.kbBack, callback_data: 'menu' }]);
   return { inline_keyboard: rows };
 }
-// Шаг 2: тарифы с ценой в валюте выбранного способа.
-function packsKb(method, L) {
-  const price = (p) => method === 'stars' ? `${p.stars}⭐` : (method === 'rub' || method === 'sbp') ? `${p.lavaRub || p.rub}₽` : `${p.rub}₽`;
+// Шаг 2: тарифы с ценой в валюте выбранного способа. discPct>0 — показать зачёркнутую
+// старую цену и цену со скидкой, чтобы применённое промо было видно ДО оплаты, а не
+// сюрпризом в чеке (иначе выглядит как баг «сумма меньше ожидаемой»).
+function packsKb(method, L, discPct) {
+  const raw = (p) => method === 'stars' ? p.stars : (method === 'rub' || method === 'sbp') ? (p.lavaRub || p.rub) : p.rub;
+  const unit = (p) => method === 'stars' ? '⭐' : '₽';
+  const price = (p) => {
+    const base = raw(p);
+    if (!discPct) return `${base}${unit(p)}`;
+    const disc = Math.max(1, Math.round(base * (100 - discPct) / 100));
+    return `${disc}${unit(p)} (вместо ${base}${unit(p)})`;
+  };
   const row = (id, emoji) => [{ text: `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`, callback_data: `pay:${id}:${method}` }];
-  return { inline_keyboard: [
-    row('p1', ''), row('p5', ''), row('d1', '🔥 '), row('m1', '👑 '),
-    [{ text: BL[L].kbBack, callback_data: 'shop' }],
-  ]};
+  const rows = [row('p1', ''), row('p5', ''), row('d1', '🔥 '), row('m1', '👑 ')];
+  if (discPct) rows.unshift([{ text: `🎁 Промо-скидка ${discPct}% уже применена`, callback_data: 'noop' }]);
+  rows.push([{ text: BL[L].kbBack, callback_data: 'shop' }]);
+  return { inline_keyboard: rows };
 }
 
 async function tgWebhook(request, env) {
@@ -835,7 +844,8 @@ async function handleCallback(env, cq) {
   } else if (data.startsWith('mth:')) {
     // Шаг 2: тарифы под выбранный способ.
     const method = data.slice(4);
-    await reply(b.shopTitle, packsKb(method, L));
+    const listDiscPct = await buyerDiscountPct(env, tgid, null);
+    await reply(b.shopTitle, packsKb(method, L, listDiscPct));
   } else if (data.startsWith('pay:')) {
     // Шаг 2: выставление счёта выбранным способом.
     const [, packId, method] = data.split(':');
