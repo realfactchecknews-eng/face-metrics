@@ -1537,17 +1537,6 @@ async function claimRef(env, tgid, code) {
   if (!list.includes(code)) list.push(code);
   await env.RATE_LIMIT.put(`refowned:${tgid}`, JSON.stringify(list));
 }
-async function myRefStatsText(env, tgid) {
-  const codes = await ownedCodes(env, tgid);
-  if (!codes.length) return '📊 У тебя пока нет привязанных кодов. Нажми «🔑 Привязать код» и отправь код, который тебе выдали.';
-  const lines = [];
-  for (const code of codes) {
-    const r = await getRef(env, code);
-    if (!r) continue;
-    lines.push(`🔗 ${code} — ${r.clicks || 0} переходов, ${r.purchases || 0} покупок\nТвоя доля: ~${refPayout(r)}₽ (${r.pct || 0}% от ~${r.revenueRub || 0}₽)`);
-  }
-  return `📊 Твоя статистика:\n\n` + lines.join('\n\n');
-}
 // ─── Промокоды, которые медийщик создаёт СЕБЕ сам в @media-боте (без админа) ───
 // promoowned:tgid — JSON-массив кодов, созданных этим медийщиком. % медийке (mediaPct)
 // ВСЕГДА наследуется от его уже привязанного реф-кода (ref.pct) — сам медийщик процент
@@ -1561,27 +1550,124 @@ async function addOwnedPromo(env, tgid, code) {
   if (!list.includes(code)) list.push(code);
   await env.RATE_LIMIT.put(`promoowned:${tgid}`, JSON.stringify(list));
 }
-async function myPromoStatsText(env, tgid) {
-  const codes = await ownedPromoCodes(env, tgid);
-  if (!codes.length) return '';
+// ─── Заработок и выплаты медийщика — считаем ОБА источника (реф-ссылки + свои промокоды)
+// в одну сумму, чтобы «доступно к выводу» было честным итогом, а не двумя разрозненными числами. ───
+const PAYOUT_MIN_RUB = 100;
+async function myPaidOut(env, tgid) { return parseInt(await env.RATE_LIMIT.get(`mediaPaidOut:${tgid}`) || '0', 10); }
+async function myEarnedTotal(env, tgid) {
+  let total = 0;
+  for (const code of await ownedCodes(env, tgid)) {
+    const r = await getRef(env, code);
+    if (r) total += refPayout(r);
+  }
+  for (const code of await ownedPromoCodes(env, tgid)) {
+    const raw = await env.RATE_LIMIT.get(`promo:${code}`);
+    if (!raw) continue;
+    let p; try { p = JSON.parse(raw); } catch { continue; }
+    total += Math.round((p.revenueRub || 0) * (p.mediaPct || 0) / 100);
+  }
+  return total;
+}
+async function myAvailableBalance(env, tgid) {
+  return Math.max(0, (await myEarnedTotal(env, tgid)) - (await myPaidOut(env, tgid)));
+}
+async function myEarningsText(env, tgid) {
+  const refCodes = await ownedCodes(env, tgid);
+  const promoCodes = await ownedPromoCodes(env, tgid);
+  if (!refCodes.length && !promoCodes.length) {
+    return '📊 У тебя пока нет привязанных кодов. Нажми «🔑 Привязать код» и отправь код, который тебе выдали.';
+  }
   const lines = [];
-  for (const code of codes) {
+  let total = 0;
+  for (const code of refCodes) {
+    const r = await getRef(env, code);
+    if (!r) continue;
+    const payout = refPayout(r);
+    total += payout;
+    lines.push(`🔗 ${code} — ${r.clicks || 0} переходов, ${r.purchases || 0} покупок\nЗаработано: ~${payout}₽ (${r.pct || 0}% от ~${r.revenueRub || 0}₽)`);
+  }
+  for (const code of promoCodes) {
     const raw = await env.RATE_LIMIT.get(`promo:${code}`);
     if (!raw) continue;
     let p; try { p = JSON.parse(raw); } catch { continue; }
     const earned = Math.round((p.revenueRub || 0) * (p.mediaPct || 0) / 100);
-    lines.push(`🎟 ${code} — ${p.purchases || 0} активаций с покупкой, начислено ~${earned}₽ (${p.mediaPct || 0}% от ~${p.revenueRub || 0}₽)${p.discount ? `, скидка покупателю ${p.discount}%` : ''}`);
+    total += earned;
+    lines.push(`🎟 ${code} — ${p.purchases || 0} покупок по промокоду\nЗаработано: ~${earned}₽ (${p.mediaPct || 0}% от ~${p.revenueRub || 0}₽)${p.discount ? `, скидка покупателю ${p.discount}%` : ''}`);
   }
-  if (!lines.length) return '';
-  return `\n\n🎟 Твои промокоды:\n\n` + lines.join('\n\n');
+  const paid = await myPaidOut(env, tgid);
+  const available = Math.max(0, total - paid);
+  return `📊 Твоя статистика:\n\n` + lines.join('\n\n') +
+    `\n\n💰 Всего заработано: ~${total}₽\n💸 Уже выведено: ${paid}₽\n✅ Доступно к выводу: ${available}₽`;
+}
+// ─── Заявки на вывод ─── payout:<ID> — сама заявка; payoutqueue — JSON-массив ID
+// заявок в статусе pending (для панели админа). Списание с баланса медийщика
+// (mediaPaidOut:tgid) происходит ТОЛЬКО при одобрении — до этого заявка ни на что
+// не влияет и её можно отклонить без последствий.
+async function createPayoutRequest(env, tgid, amount, requisites) {
+  const id = genOrderId();
+  const req = { id, tgid: String(tgid), amount, requisites, ts: Date.now(), status: 'pending' };
+  await env.RATE_LIMIT.put(`payout:${id}`, JSON.stringify(req), { expirationTtl: 60 * 60 * 24 * 90 });
+  const queue = await getList(env, 'payoutqueue');
+  queue.unshift(id);
+  await putList(env, 'payoutqueue', queue.slice(0, 50));
+  return req;
+}
+async function pendingPayouts(env) {
+  const queue = await getList(env, 'payoutqueue');
+  const pending = [];
+  for (const id of queue) {
+    const raw = await env.RATE_LIMIT.get(`payout:${id}`);
+    if (!raw) continue;
+    const r = JSON.parse(raw);
+    if (r.status === 'pending') pending.push(r);
+  }
+  return pending;
+}
+async function payoutQueueKb(env) {
+  const pending = await pendingPayouts(env);
+  if (!pending.length) return { text: '💳 Заявок на вывод в ожидании нет.', kb: { inline_keyboard: [[{ text: '← Меню', callback_data: 'menu' }]] } };
+  const line = (r) => {
+    const d = new Date(r.ts).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `💳 <b>${r.id}</b> — ${r.amount}₽ — id ${r.tgid} — ${d}\nРеквизиты: ${r.requisites}`;
+  };
+  const rows = pending.map((r) => ([
+    { text: `✅ ${r.id} (${r.amount}₽)`, callback_data: `payoutapprove:${r.id}` },
+    { text: '❌', callback_data: `payoutreject:${r.id}` },
+  ]));
+  rows.push([{ text: '← Меню', callback_data: 'menu' }]);
+  return { text: `💳 Заявки на вывод в ожидании (${pending.length}):\n\n` + pending.map(line).join('\n\n'), kb: { inline_keyboard: rows } };
+}
+async function approvePayout(env, id) {
+  const raw = await env.RATE_LIMIT.get(`payout:${id}`);
+  if (!raw) return { ok: false, text: `❌ Заявка ${id} не найдена.` };
+  const r = JSON.parse(raw);
+  if (r.status !== 'pending') return { ok: false, text: `⚠️ Заявка ${id} уже обработана (${r.status}).` };
+  r.status = 'approved';
+  await env.RATE_LIMIT.put(`payout:${id}`, JSON.stringify(r), { expirationTtl: 60 * 60 * 24 * 90 });
+  const paid = await myPaidOut(env, r.tgid);
+  await env.RATE_LIMIT.put(`mediaPaidOut:${r.tgid}`, String(paid + r.amount));
+  return { ok: true, text: `✅ Заявка ${id} одобрена, ${r.amount}₽ списано с баланса id ${r.tgid}.`, tgid: r.tgid, amount: r.amount };
+}
+async function rejectPayout(env, id) {
+  const raw = await env.RATE_LIMIT.get(`payout:${id}`);
+  if (!raw) return { ok: false, text: `❌ Заявка ${id} не найдена.` };
+  const r = JSON.parse(raw);
+  if (r.status !== 'pending') return { ok: false, text: `⚠️ Заявка ${id} уже обработана (${r.status}).` };
+  r.status = 'rejected';
+  await env.RATE_LIMIT.put(`payout:${id}`, JSON.stringify(r), { expirationTtl: 60 * 60 * 24 * 90 });
+  return { ok: true, text: `❌ Заявка ${id} отклонена, баланс id ${r.tgid} не тронут.`, tgid: r.tgid, amount: r.amount };
 }
 function mediaMenuKb(isAdmin) {
   const rows = [
     [{ text: '🔑 Привязать код', callback_data: 'claim' }],
     [{ text: '➕ Создать промокод', callback_data: 'newpromo' }],
     [{ text: '📊 Моя статистика', callback_data: 'mystats' }],
+    [{ text: '💸 Запросить вывод', callback_data: 'withdraw' }],
   ];
-  if (isAdmin) rows.push([{ text: '📋 Все рефералки', callback_data: 'alladmin' }]);
+  if (isAdmin) {
+    rows.push([{ text: '📋 Все рефералки', callback_data: 'alladmin' }]);
+    rows.push([{ text: '💳 Заявки на вывод', callback_data: 'payoutqueue' }]);
+  }
   return { inline_keyboard: rows };
 }
 function mediaApi(env, method, body) {
@@ -1607,7 +1693,7 @@ async function mediaWebhook(request, env) {
       await env.RATE_LIMIT.put(`medwait:${tgid}`, '1', { expirationTtl: 600 });
       await reply('🔑 Отправь одним сообщением код, который тебе дали (например ANNA).');
     } else if (data === 'mystats') {
-      await reply(await myRefStatsText(env, tgid) + await myPromoStatsText(env, tgid), mediaMenuKb(isAdmin));
+      await reply(await myEarningsText(env, tgid), mediaMenuKb(isAdmin));
     } else if (data === 'newpromo') {
       const codes = await ownedCodes(env, tgid);
       if (!codes.length) {
@@ -1641,6 +1727,29 @@ async function mediaWebhook(request, env) {
         await env.RATE_LIMIT.put(`medpromocodewait:${tgid}`, '1', { expirationTtl: 600 });
         await reply('🔤 Отправь код одним словом (например ANNA10).');
       }
+    } else if (data === 'withdraw') {
+      const available = await myAvailableBalance(env, tgid);
+      if (available < PAYOUT_MIN_RUB) {
+        await reply(`⚠️ Доступно к выводу: ${available}₽. Минимальная сумма вывода — ${PAYOUT_MIN_RUB}₽.`, mediaMenuKb(isAdmin));
+        return new Response('ok');
+      }
+      await env.RATE_LIMIT.put(`medwithdrawamtwait:${tgid}`, '1', { expirationTtl: 600 });
+      await reply(`💸 Доступно к выводу: ${available}₽.\n\nСколько рублей вывести? (минимум ${PAYOUT_MIN_RUB}₽)`);
+    } else if (data === 'payoutqueue' && isAdmin) {
+      const { text: pt, kb } = await payoutQueueKb(env);
+      await reply(pt, kb, { parse_mode: 'HTML' });
+    } else if (data.startsWith('payoutapprove:') && isAdmin) {
+      const id = data.slice(14);
+      const res = await approvePayout(env, id);
+      const { text: pt, kb } = await payoutQueueKb(env);
+      await reply(res.text + '\n\n' + pt, kb, { parse_mode: 'HTML' });
+      if (res.ok) await mediaApi(env, 'sendMessage', { chat_id: res.tgid, text: `✅ Твоя заявка на вывод ${res.amount}₽ одобрена и будет отправлена по указанным реквизитам.` });
+    } else if (data.startsWith('payoutreject:') && isAdmin) {
+      const id = data.slice(13);
+      const res = await rejectPayout(env, id);
+      const { text: pt, kb } = await payoutQueueKb(env);
+      await reply(res.text + '\n\n' + pt, kb, { parse_mode: 'HTML' });
+      if (res.ok) await mediaApi(env, 'sendMessage', { chat_id: res.tgid, text: `❌ Твоя заявка на вывод ${res.amount}₽ отклонена. Напиши мне, если это ошибка.` });
     } else if (data === 'alladmin' && isAdmin) {
       const { text: rt, kb } = await refListKb(env, 'alladmin');
       kb.inline_keyboard[kb.inline_keyboard.length - 1] = [{ text: '← Меню', callback_data: 'menu' }];
@@ -1681,7 +1790,7 @@ async function mediaWebhook(request, env) {
       return new Response('ok');
     }
     await claimRef(env, tgid, code);
-    await mediaApi(env, 'sendMessage', { chat_id: chat, text: `✅ Код ${code} привязан к тебе!\n\n` + await myRefStatsText(env, tgid) + await myPromoStatsText(env, tgid), reply_markup: mediaMenuKb(isAdmin) });
+    await mediaApi(env, 'sendMessage', { chat_id: chat, text: `✅ Код ${code} привязан к тебе!\n\n` + await myEarningsText(env, tgid), reply_markup: mediaMenuKb(isAdmin) });
     return new Response('ok');
   }
 
@@ -1724,9 +1833,50 @@ async function mediaWebhook(request, env) {
     await addOwnedPromo(env, tgid, code);
     await mediaApi(env, 'sendMessage', {
       chat_id: chat,
-      text: `✅ Промокод ${code} создан!\n\nОтдавай его своей аудитории — при вводе в главном боте (@faceratepay_bot → «🎁 Ввести промокод») он даст${wiz.discount ? ` скидку ${wiz.discount}%` : ''} покупателю, а тебе — ${pct}% с этой покупки.\n\n` + await myPromoStatsText(env, tgid),
+      text: `✅ Промокод ${code} создан!\n\nОтдавай его своей аудитории — при вводе в главном боте (@faceratepay_bot → «🎁 Ввести промокод») он даст${wiz.discount ? ` скидку ${wiz.discount}%` : ''} покупателю, а тебе — ${pct}% с этой покупки.\n\n` + await myEarningsText(env, tgid),
       reply_markup: mediaMenuKb(isAdmin),
     });
+    return new Response('ok');
+  }
+
+  if (await env.RATE_LIMIT.get(`medwithdrawamtwait:${tgid}`)) {
+    await env.RATE_LIMIT.delete(`medwithdrawamtwait:${tgid}`);
+    const available = await myAvailableBalance(env, tgid);
+    const amount = parseInt(text.replace(/[^\d]/g, ''), 10);
+    if (!Number.isFinite(amount) || amount < PAYOUT_MIN_RUB) {
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: `⚠️ Минимальная сумма вывода — ${PAYOUT_MIN_RUB}₽. Попробуй ещё раз через «💸 Запросить вывод».`, reply_markup: mediaMenuKb(isAdmin) });
+      return new Response('ok');
+    }
+    if (amount > available) {
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: `⚠️ Доступно только ${available}₽ — ты запросил больше. Попробуй ещё раз через «💸 Запросить вывод».`, reply_markup: mediaMenuKb(isAdmin) });
+      return new Response('ok');
+    }
+    await env.RATE_LIMIT.put(`medwithdrawreqwait:${tgid}`, String(amount), { expirationTtl: 600 });
+    await mediaApi(env, 'sendMessage', { chat_id: chat, text: '💳 Отправь реквизиты для перевода одним сообщением (карта/телефон/что угодно).' });
+    return new Response('ok');
+  }
+
+  if (await env.RATE_LIMIT.get(`medwithdrawreqwait:${tgid}`)) {
+    const amountRaw = await env.RATE_LIMIT.get(`medwithdrawreqwait:${tgid}`);
+    await env.RATE_LIMIT.delete(`medwithdrawreqwait:${tgid}`);
+    const amount = parseInt(amountRaw, 10);
+    // Пересчитываем баланс на момент подтверждения — вдруг он успел измениться (например
+    // уже запросил вывод параллельно) или уйти в минус из-за одобренной другой заявки.
+    const available = await myAvailableBalance(env, tgid);
+    if (!text.trim() || amount > available) {
+      await mediaApi(env, 'sendMessage', { chat_id: chat, text: `⚠️ Что-то пошло не так (доступно ${available}₽). Начни заново через «💸 Запросить вывод».`, reply_markup: mediaMenuKb(isAdmin) });
+      return new Response('ok');
+    }
+    const req = await createPayoutRequest(env, tgid, amount, text.trim().slice(0, 300));
+    await mediaApi(env, 'sendMessage', { chat_id: chat, text: `✅ Заявка ${req.id} на вывод ${amount}₽ отправлена, жди одобрения.`, reply_markup: mediaMenuKb(isAdmin) });
+    for (const adminId of adminIds(env)) {
+      await mediaApi(env, 'sendMessage', {
+        chat_id: adminId,
+        text: `💳 Новая заявка на вывод\n\n<b>${req.id}</b> — ${amount}₽ — id ${tgid}\nРеквизиты: ${req.requisites}`,
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [[{ text: '✅ Одобрить', callback_data: `payoutapprove:${req.id}` }, { text: '❌ Отклонить', callback_data: `payoutreject:${req.id}` }]] },
+      });
+    }
     return new Response('ok');
   }
 
