@@ -2228,7 +2228,7 @@ function pwRecheck(silent) {
       ? "Пиши TRAITS_A, TRAITS_B и VERDICT на русском. ВАЖНО: глагол «моггать» в этом контексте пишется «моггает» (наст. время) или «могнул» (прош. время) — форма «моггит» ГРАММАТИЧЕСКИ НЕВЕРНА и запрещена, никогда её не используй. Используй англоязычные луксмаксерские термины ПРЯМО ВНУТРИ русского текста (canthal tilt, gonial angle, zygomatic arch, maxilla, philtrum, malar fat pad, hunter eyes/prey eyes и т.п.) — не переводи их на русский, это профессиональный жаргон."
       : "Write TRAITS_A, TRAITS_B and VERDICT in English.";
     var catLines = CMP_CATS.map(function(c){ return "CAT_" + c.key + ": A=0.0 B=0.0"; }).join("\n");
-    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. Rate each on the PSL 1-10 scale (one decimal, be discriminating, real spread). For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine +
+    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. IMPORTANT: if A and B are clearly the same person (same face, possibly different angle/lighting/crop), give them IDENTICAL or near-identical SCORE_A/SCORE_B and identical CAT_ scores (within 0.1), and say so explicitly as the first sentence of VERDICT (e.g. \"Same face\" / «Это одно и то же лицо»). Rate each on the PSL 1-10 scale (one decimal, be discriminating, real spread). For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine +
       "\n\nAlso rate BOTH A and B on these 8 categories: Symmetry, Canthal Tilt/Eyes, Midface/Maxilla, Jawline/Mandible, Nose, Lips/Cheekbones, Skin, Grooming/Style. One decimal each (never .0), real spread between categories per person (do not give every category the same score) — this must be consistent with the overall SCORE_A/SCORE_B.\n\nReply STRICTLY in this plain format, nothing else:\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).\n" + catLines;
   }
 
@@ -2266,7 +2266,7 @@ function pwRecheck(silent) {
     var traitsA = traits(/TRAITS_A:\s*([^\n]+)/i);
     var traitsB = traits(/TRAITS_B:\s*([^\n]+)/i);
     var wm = txt.match(/WINNER:\s*([AB])/i);
-    var vm = txt.match(/VERDICT:\s*([\s\S]+?)(?:\n\s*\n|$)/i);
+    var vm = txt.match(/VERDICT:\s*([\s\S]+?)(?:\n\s*CAT_|\n\s*\n|$)/i);
     var winner = wm ? wm[1].toUpperCase() : (a!==null&&b!==null ? (a>=b?"A":"B") : "A");
     var cats = CMP_CATS.map(function(c){
       var m = txt.match(new RegExp("CAT_" + c.key + ":\\s*A=(\\d+(?:\\.\\d+)?)\\s*B=(\\d+(?:\\.\\d+)?)", "i"));
