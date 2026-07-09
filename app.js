@@ -732,12 +732,12 @@ function stopAIHUD() {
 // IMAGE mode is purpose-built for still photos (no video tracking), so the
 // 468/478-point mesh lands accurately on the face. Same canonical topology
 // as legacy FaceMesh, so all landmark indices below stay valid.
-const TASKS_VISION = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+const TASKS_VISION = "./vendor/mediapipe/vision_bundle.mjs";
 async function initFaceLandmarker() {
   if (faceLandmarker) return faceLandmarker;
   const vision = await import(TASKS_VISION);
   const fileset = await vision.FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+    "./vendor/mediapipe/wasm"
   );
   faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
     baseOptions: {
