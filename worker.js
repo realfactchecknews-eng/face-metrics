@@ -52,9 +52,17 @@ const GLOBAL_DAILY_CAP = 3000;           // потолок БЕСПЛАТНЫХ 
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return cors(null, 204);
-    if (request.method !== 'POST') return cors('Method not allowed', 405);
     const path = new URL(request.url).pathname;
+    // Единственный GET-роут во всём воркере — статичная HTML-страница статистики.
+    // Сама она не содержит данных, только форму токена и JS, который дальше стучится
+    // в /admin-stats/data (POST) — там уже настоящая проверка секрета.
+    if (request.method === 'GET') {
+      if (path === '/admin-stats') return adminStatsPage();
+      return new Response('Not found', { status: 404 });
+    }
+    if (request.method !== 'POST') return cors('Method not allowed', 405);
     try {
+      if (path === '/admin-stats/data') return await adminStatsData(request, env);
       if (path === '/setup-webhook') return await setupWebhook(request, env);
       if (path === '/tg-webhook') return await tgWebhook(request, env);
       if (path === '/crypto-webhook') return await cryptoWebhook(request, env);
@@ -2332,6 +2340,185 @@ async function supportWebhook(request, env) {
     reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] },
   });
   return new Response('ok');
+}
+
+// ─────────────────────────── Приватная страница статистики ───────────────────────────
+// Данные не встроены в HTML — сама страница просит токен (хранит в localStorage браузера)
+// и отдельным POST-запросом с этим токеном тянет JSON из /admin-stats/data. Так статику
+// можно смело отдавать по GET без риска — без верного ADMIN_STATS_TOKEN там пусто.
+async function adminStatsData(request, env) {
+  let body; try { body = await request.json(); } catch { return json({ error: 'bad request' }); }
+  if (!env.ADMIN_STATS_TOKEN || body.token !== env.ADMIN_STATS_TOKEN) {
+    return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  }
+  const translog = await getList(env, 'translog');
+  const refList = await env.RATE_LIMIT.list({ prefix: 'ref:' });
+  const refs = [];
+  for (const k of refList.keys) {
+    const raw = await env.RATE_LIMIT.get(k.name);
+    if (!raw) continue;
+    let r; try { r = JSON.parse(raw); } catch { continue; }
+    refs.push({ code: k.name.slice(4), ...r, payout: refPayout(r) });
+  }
+  const promoList = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+  const promos = [];
+  for (const k of promoList.keys) {
+    const raw = await env.RATE_LIMIT.get(k.name);
+    if (!raw) continue;
+    let p; try { p = JSON.parse(raw); } catch { continue; }
+    if (p.mediaPct == null) continue; // только медиа-промо — остальные типы (кредиты/скидки) сюда не относятся
+    promos.push({ code: k.name.slice(6), ...p, earned: Math.round((p.revenueRub || 0) * (p.mediaPct || 0) / 100) });
+  }
+  const payoutIds = await getList(env, 'payoutqueue');
+  const payouts = [];
+  for (const id of payoutIds) {
+    const raw = await env.RATE_LIMIT.get(`payout:${id}`);
+    if (raw) { try { payouts.push(JSON.parse(raw)); } catch {} }
+  }
+  return json({ translog, refs, promos, payouts, generatedAt: Date.now() });
+}
+function adminStatsPage() {
+  const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>FaceRate — статистика</title>
+<style>
+  :root{--gold:#c4a46b;--gold-hi:#e8cf96;--bg:#050505;--card:#12100c;--txt:#e8e2d6;--dim:#8a7f6a;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,Segoe UI,Arial,sans-serif;padding:20px}
+  h1{font-weight:600;letter-spacing:1px;color:var(--gold-hi);font-size:22px}
+  h2{color:var(--gold);font-size:16px;margin-top:36px;border-bottom:1px solid #2a251c;padding-bottom:8px}
+  .card{background:var(--card);border:1px solid #2a251c;border-radius:10px;padding:16px;margin-bottom:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid #221f18;white-space:nowrap}
+  th{color:var(--dim);font-weight:500;position:sticky;top:0;background:var(--card)}
+  tr:hover td{background:#1a1710}
+  .tablewrap{overflow-x:auto;max-height:60vh}
+  .stat{display:inline-block;margin-right:28px}
+  .stat b{display:block;font-size:22px;color:var(--gold-hi)}
+  .stat span{color:var(--dim);font-size:12px}
+  input,button{font-size:14px;padding:8px 12px;border-radius:8px;border:1px solid #2a251c;background:#1a1710;color:var(--txt)}
+  button{background:var(--gold);color:#1a1710;border:none;cursor:pointer;font-weight:600}
+  #gate{max-width:360px;margin:120px auto;text-align:center}
+  #gate input{width:100%;margin-bottom:10px}
+  .hidden{display:none}
+  .pos{color:#8fce8f}.neg{color:#e07a7a}
+  a{color:var(--gold-hi)}
+</style></head><body>
+
+<div id="gate">
+  <h1>FACERATE STATS</h1>
+  <p style="color:var(--dim)">Введи токен доступа</p>
+  <input id="tokenInput" type="password" placeholder="Токен">
+  <button onclick="login()">Войти</button>
+  <p id="gateErr" style="color:#e07a7a"></p>
+</div>
+
+<div id="app" class="hidden">
+  <h1>FACERATE STATS <button style="float:right" onclick="logout()">Выйти</button></h1>
+  <div class="card" id="summary"></div>
+
+  <h2>Медиа-промокоды</h2>
+  <div class="card tablewrap"><table id="promoTable"></table></div>
+
+  <h2>Реферальные ссылки</h2>
+  <div class="card tablewrap"><table id="refTable"></table></div>
+
+  <h2>Заявки на вывод</h2>
+  <div class="card tablewrap"><table id="payoutTable"></table></div>
+
+  <h2>Последние покупки</h2>
+  <div class="card tablewrap"><table id="txTable"></table></div>
+
+  <div id="detail" class="card hidden"></div>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function login(){
+  var t = document.getElementById('tokenInput').value.trim();
+  if (!t) return;
+  localStorage.setItem('fm_stats_token', t);
+  load();
+}
+function logout(){ localStorage.removeItem('fm_stats_token'); location.reload(); }
+function load(){
+  var token = localStorage.getItem('fm_stats_token');
+  if (!token) return;
+  fetch('/admin-stats/data', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: token }) })
+    .then(function(r){ if (r.status === 403) throw new Error('forbidden'); return r.json(); })
+    .then(render)
+    .catch(function(){
+      document.getElementById('gateErr').textContent = 'Неверный токен.';
+      localStorage.removeItem('fm_stats_token');
+      document.getElementById('gate').classList.remove('hidden');
+      document.getElementById('app').classList.add('hidden');
+    });
+}
+function render(d){
+  document.getElementById('gate').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  var totalRevenue = d.refs.reduce(function(s,r){return s+(r.revenueRub||0);},0) + d.promos.reduce(function(s,p){return s+(p.revenueRub||0);},0);
+  var totalCommission = d.refs.reduce(function(s,r){return s+(r.payout||0);},0) + d.promos.reduce(function(s,p){return s+(p.earned||0);},0);
+  var pendingPayouts = d.payouts.filter(function(p){return p.status==='pending';});
+  document.getElementById('summary').innerHTML =
+    '<div class="stat"><b>'+d.translog.length+'</b><span>покупок (последние)</span></div>' +
+    '<div class="stat"><b>'+d.refs.length+'</b><span>реф-ссылок</span></div>' +
+    '<div class="stat"><b>'+d.promos.length+'</b><span>медиа-промокодов</span></div>' +
+    '<div class="stat"><b>'+Math.round(totalCommission)+'₽</b><span>начислено партнёрам</span></div>' +
+    '<div class="stat"><b>'+pendingPayouts.length+'</b><span>заявок на вывод в ожидании</span></div>';
+
+  var pt = '<tr><th>Код</th><th>Владелец</th><th>%</th><th>Скидка</th><th>Покупок</th><th>Оборот</th><th>Начислено</th></tr>';
+  d.promos.sort(function(a,b){return (b.earned||0)-(a.earned||0);}).forEach(function(p){
+    pt += '<tr style="cursor:pointer" data-code="'+esc(p.code)+'"><td>'+esc(p.code)+'</td><td>'+esc(p.ownerTgid||'—')+'</td><td>'+(p.mediaPct||0)+'%</td><td>'+(p.discount||0)+'%</td><td>'+(p.purchases||0)+'</td><td>'+(p.revenueRub||0)+'₽</td><td class="pos">'+(p.earned||0)+'₽</td></tr>';
+  });
+  document.getElementById('promoTable').innerHTML = pt;
+
+  var rt = '<tr><th>Код</th><th>Название</th><th>%</th><th>Скидка</th><th>Переходов</th><th>Покупок</th><th>Оборот</th><th>Начислено</th></tr>';
+  d.refs.sort(function(a,b){return (b.payout||0)-(a.payout||0);}).forEach(function(r){
+    rt += '<tr style="cursor:pointer" data-code="'+esc(r.code)+'"><td>'+esc(r.code)+'</td><td>'+esc(r.label||(r.personal?'(личная)':''))+'</td><td>'+(r.pct||0)+'%</td><td>'+(r.buyerPct||0)+'%</td><td>'+(r.clicks||0)+'</td><td>'+(r.purchases||0)+'</td><td>'+(r.revenueRub||0)+'₽</td><td class="pos">'+(r.payout||0)+'₽</td></tr>';
+  });
+  document.getElementById('refTable').innerHTML = rt;
+  [document.getElementById('promoTable'), document.getElementById('refTable')].forEach(function(tbl){
+    tbl.onclick = function(e){
+      var tr = e.target.closest('tr[data-code]');
+      if (tr) location.hash = tr.getAttribute('data-code');
+    };
+  });
+
+  var payt = '<tr><th>ID</th><th>Сумма</th><th>Кому (tgid)</th><th>Реквизиты</th><th>Статус</th><th>Дата</th></tr>';
+  d.payouts.forEach(function(p){
+    var cls = p.status==='approved' ? 'pos' : p.status==='rejected' ? 'neg' : '';
+    payt += '<tr><td>'+esc(p.id)+'</td><td>'+p.amount+'₽</td><td>'+esc(p.tgid)+'</td><td>'+esc(p.requisites)+'</td><td class="'+cls+'">'+esc(p.status)+'</td><td>'+new Date(p.ts).toLocaleString('ru-RU')+'</td></tr>';
+  });
+  document.getElementById('payoutTable').innerHTML = payt;
+
+  var tt = '<tr><th>ID</th><th>Дата</th><th>Тариф</th><th>Сумма</th><th>Способ</th><th>Кто</th></tr>';
+  d.translog.forEach(function(t){
+    tt += '<tr><td>'+esc(t.id||'')+'</td><td>'+new Date(t.ts).toLocaleString('ru-RU')+'</td><td>'+esc(t.pack)+'</td><td>'+esc(t.amount)+' '+esc(t.currency||'')+'</td><td>'+esc(t.method)+'</td><td>'+esc(t.name||'')+' '+(t.username?'@'+esc(t.username):'')+' (id '+esc(t.tgid)+')</td></tr>';
+  });
+  document.getElementById('txTable').innerHTML = tt;
+
+  // "Отдельная страница" на промокод/код через #hash — не требует отдельного роута на сервере.
+  var hash = decodeURIComponent(location.hash.slice(1));
+  if (hash) {
+    var found = d.promos.find(function(p){return p.code===hash;}) || d.refs.find(function(r){return r.code===hash;});
+    var det = document.getElementById('detail');
+    if (found) {
+      det.classList.remove('hidden');
+      det.innerHTML = '<h2 style="margin-top:0">'+esc(hash)+'</h2><pre style="white-space:pre-wrap;color:var(--txt)">'+esc(JSON.stringify(found,null,2))+'</pre>';
+    }
+  }
+}
+window.addEventListener('hashchange', load);
+(function(){
+  var saved = localStorage.getItem('fm_stats_token');
+  if (saved) load();
+})();
+</script>
+</body></html>`;
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 // ─────────────────────────── Утилиты ───────────────────────────
