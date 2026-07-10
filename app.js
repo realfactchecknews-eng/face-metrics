@@ -587,15 +587,17 @@ function runAnalysis() {
   if (toMenu) toMenu.addEventListener("click", backToMenu);
 })();
 
-// «Магнитная» кнопка: слегка тянется к курсору при наведении, возвращается на место при уходе.
-function magnetize(el, strength) {
+// Кнопка «покачивается» в сторону курсора, но остаётся на месте (без сдвига).
+function magnetize(el, maxTilt) {
   if (!el) return;
-  strength = strength || 0.25;
+  maxTilt = maxTilt || 3;
   el.addEventListener("mousemove", function(e) {
     var r = el.getBoundingClientRect();
-    var mx = e.clientX - (r.left + r.width / 2);
-    var my = e.clientY - (r.top + r.height / 2);
-    el.style.transform = "translate(" + (mx * strength) + "px," + (my * strength) + "px)";
+    var mx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);   // -1..1
+    var my = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);  // -1..1
+    var rotate = Math.max(-maxTilt, Math.min(maxTilt, mx * maxTilt));
+    var scale = 1 + Math.min(Math.abs(my), 1) * 0.015;
+    el.style.transform = "rotate(" + rotate + "deg) scale(" + scale + ")";
   });
   el.addEventListener("mouseleave", function() {
     el.style.transform = "";
@@ -1818,7 +1820,7 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
       "<input class='fb-input' name='email' type='email' placeholder='" + t("fbEmail") + "' />" +
       "<textarea class='fb-input fb-textarea' name='message' placeholder='" + t("fbMsg") + "' required></textarea>" +
       "<div class='fb-status' id='fbStatus'></div>" +
-      "<button class='btn-primary' type='submit' style='width:100%'>" + t("fbSend") + "</button>" +
+      "<button class='fb-send-btn' type='submit'>" + t("fbSend") + "</button>" +
       "</form>";
     var form = box.querySelector("#fbForm"), status = box.querySelector("#fbStatus");
     form.addEventListener("submit", function(e){

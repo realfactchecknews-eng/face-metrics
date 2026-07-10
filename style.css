@@ -1630,6 +1630,14 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 .fb-input:focus { border-color: var(--accent); }
 .fb-textarea { min-height: 120px; resize: vertical; }
 .fb-status { font-size: 0.85rem; color: var(--text-dim); min-height: 18px; }
+.fb-send-btn {
+  width: 100%; background: var(--accent); color: #0a0a0a; border: none;
+  border-radius: 100px; padding: 16px 28px; font-family: inherit;
+  font-size: 1.05rem; letter-spacing: 0.02em; cursor: pointer;
+  transition: opacity .15s, transform .15s;
+}
+.fb-send-btn:hover { opacity: 0.9; transform: translateY(-2px); }
+.fb-send-btn:active { transform: scale(0.97); }
 
 /* ───── Кнопка меню (top-right, после лендинга) ───── */
 .menu-btn {
@@ -1751,7 +1759,7 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
   width: 100%; background: none; color: var(--accent); border: 1px solid var(--accent);
   border-radius: 100px; padding: 18px 28px; font-family: inherit;
   font-size: 1.15rem; letter-spacing: 0.02em; cursor: pointer;
-  transition: opacity .15s, transform .15s, background .15s;
+  transition: opacity .15s, transform .12s ease-out, background .15s;
   will-change: transform;
 }
 .menu-go:hover { opacity: 0.9; background: rgba(196,164,107,0.12); }
