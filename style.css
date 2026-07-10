@@ -1972,6 +1972,10 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 .btn-share-tg { background: none; border: 1px solid var(--accent); color: var(--accent); margin-top: 10px; }
 .btn-share-tg:hover { background: rgba(196,164,107,0.12); }
 
+/* Кнопка перехода в Who Moggs? из результатов анализа */
+.btn-share-compare { background: none; border: 1px solid #333; color: #ddd; margin-top: 10px; }
+.btn-share-compare:hover { background: rgba(255,255,255,0.06); border-color: var(--accent); color: var(--accent); }
+
 /* ═══════════ WHO MOGS: сравнение ═══════════ */
 #compareSection { max-width: 900px; margin: 0 auto; }
 .cmp-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin-bottom: 6px; }
