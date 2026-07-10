@@ -950,6 +950,8 @@ canvas {
   border-color: var(--accent);
 }
 
+#uploadToMenuBtn { width: auto; padding: 10px 18px; margin-bottom: 16px; }
+
 /* == LOADING SPINNER == */
 .loading-card {
   background: var(--bg-card);

@@ -244,7 +244,7 @@ function applyLang() {
     [".tone-label", "tone"],
     ["#accLoggedOut .acc-lo-text b", "accLoTitle"],
     [".lrb-label", "lastLabel"], [".lrb-cta", "lastCta"],
-    ["#toMenuBtn", "toMenu"], ["#resetBtn", "reset"],
+    ["#toMenuBtn", "toMenu"], ["#uploadToMenuBtn", "toMenu"], ["#resetBtn", "reset"],
     ["#loading p", "scanning"],
     [".score-hero .eyebrow", "scoreEyebrow"],
     ["#aiRecs .eyebrow", "recsEyebrow"],
@@ -585,6 +585,8 @@ function runAnalysis() {
   if (go) go.addEventListener("click", goToAnalysis);
   var toMenu = document.getElementById("toMenuBtn");
   if (toMenu) toMenu.addEventListener("click", backToMenu);
+  var uploadToMenu = document.getElementById("uploadToMenuBtn");
+  if (uploadToMenu) uploadToMenu.addEventListener("click", backToMenu);
 })();
 
 // Кнопка «покачивается» в сторону курсора, но остаётся на месте (без сдвига).
