@@ -454,6 +454,13 @@ window.addEventListener("DOMContentLoaded", function() {
   }
   var beginBtn = document.getElementById("beginBtn");
   if (beginBtn) beginBtn.addEventListener("click", enterMenu);
+  var landCompareBtn = document.getElementById("landCompareBtn");
+  if (landCompareBtn) landCompareBtn.addEventListener("click", function(){
+    var landing = document.getElementById("landingSection");
+    document.body.classList.add("entered");
+    if (landing) { landing.classList.add("landing-exit"); setTimeout(function(){ if (landing.parentNode) landing.remove(); }, 700); }
+    if (window.fmOpenCompare) window.fmOpenCompare();
+  });
 });
 
 // Лендинг → полноэкранное меню.
@@ -1952,6 +1959,7 @@ function startTgLogin(btn) {
         saveAccount(st);
         renderAccount(st);
         onLoginSuccess(st);
+        window.location.reload();
       }
     }).catch(function(){});
   }, 2500);

@@ -240,6 +240,16 @@ html, body {
   color: var(--text-bright);
   animation: landItemIn 0.6s ease 0.35s backwards;
 }
+.land-compare-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 1px solid var(--accent); color: var(--accent);
+  font-family: inherit; font-size: 0.75rem; letter-spacing: 1px;
+  padding: 7px 16px; border-radius: 999px; cursor: pointer;
+  margin-bottom: 16px;
+  animation: landItemIn 0.6s ease 0.28s backwards;
+}
+.land-compare-link::before { content: "\2694"; }
+.land-compare-link:hover { background: rgba(196,164,107,0.12); }
 
 @keyframes landItemIn {
   from { opacity: 0; transform: translateY(10px); }
