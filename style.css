@@ -1709,7 +1709,7 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
   position: fixed; inset: 0; z-index: 1500;
   background: radial-gradient(ellipse at 50% 30%, #14110c 0%, #0a0a0a 60%, #050505 100%);
   display: flex; align-items: center; justify-content: center;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
   opacity: 0; transform: scale(1.04);
   transition: opacity .55s ease, transform .55s cubic-bezier(0.16,1,0.3,1);
 }
