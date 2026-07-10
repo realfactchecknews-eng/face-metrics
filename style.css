@@ -1578,7 +1578,8 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
   overflow: hidden; pointer-events: none;
 }
 .pill-field + .upload-grid, #uploadSection > .upload-grid,
-#uploadSection > #analyzeBtn, #uploadSection > .last-result-banner { position: relative; z-index: 1; }
+#uploadSection > #analyzeBtn, #uploadSection > .last-result-banner,
+#uploadSection > #uploadToMenuBtn { position: relative; z-index: 1; }
 .fp-pill {
   position: absolute; border-radius: 500px;
   filter: blur(7px); opacity: 0.10;
