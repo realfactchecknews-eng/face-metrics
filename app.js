@@ -587,6 +587,23 @@ function runAnalysis() {
   if (toMenu) toMenu.addEventListener("click", backToMenu);
 })();
 
+// «Магнитная» кнопка: слегка тянется к курсору при наведении, возвращается на место при уходе.
+function magnetize(el, strength) {
+  if (!el) return;
+  strength = strength || 0.25;
+  el.addEventListener("mousemove", function(e) {
+    var r = el.getBoundingClientRect();
+    var mx = e.clientX - (r.left + r.width / 2);
+    var my = e.clientY - (r.top + r.height / 2);
+    el.style.transform = "translate(" + (mx * strength) + "px," + (my * strength) + "px)";
+  });
+  el.addEventListener("mouseleave", function() {
+    el.style.transform = "";
+  });
+}
+magnetize(document.getElementById("menuGoBtn"));
+magnetize(document.getElementById("menuCompareBtn"));
+
 function showConsent() {
   var m = document.getElementById("consentModal");
   if (m) m.classList.remove("hidden");

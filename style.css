@@ -1748,17 +1748,17 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 .mt-tx i { font-style: normal; font-size: 0.82rem; color: var(--text-dim); }
 .menu-go {
   display: inline-flex; align-items: center; gap: 12px; justify-content: center;
-  width: 100%; background: var(--accent); color: #0a0a0a; border: none;
+  width: 100%; background: none; color: var(--accent); border: 1px solid var(--accent);
   border-radius: 100px; padding: 18px 28px; font-family: inherit;
   font-size: 1.15rem; letter-spacing: 0.02em; cursor: pointer;
-  transition: opacity .15s, transform .15s;
+  transition: opacity .15s, transform .15s, background .15s;
+  will-change: transform;
 }
-.menu-go:hover { opacity: 0.9; transform: translateY(-2px); }
+.menu-go:hover { opacity: 0.9; background: rgba(196,164,107,0.12); }
+.menu-go:active { transform: scale(0.96) !important; }
 .menu-go-arr { font-size: 1.3rem; }
 .menu-go-row { display: flex; gap: 12px; }
 .menu-go-row .menu-go { width: auto; flex: 1; }
-.menu-go-compare { background: none; border: 1px solid var(--accent); color: var(--accent); }
-.menu-go-compare:hover { background: rgba(196,164,107,0.12); }
 @media (max-width: 480px) {
   .menu-go-row { flex-direction: column; }
 }
