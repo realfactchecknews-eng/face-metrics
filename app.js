@@ -741,7 +741,7 @@ async function initFaceLandmarker() {
   );
   faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
     baseOptions: {
-      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+      modelAssetPath: "./vendor/mediapipe/face_landmarker.task",
     },
     runningMode: "IMAGE",
     numFaces: 1,
