@@ -1701,7 +1701,7 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
   position: fixed; inset: 0; z-index: 1500;
   background: radial-gradient(ellipse at 50% 30%, #14110c 0%, #0a0a0a 60%, #050505 100%);
   display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
   opacity: 0; transform: scale(1.04);
   transition: opacity .55s ease, transform .55s cubic-bezier(0.16,1,0.3,1);
 }
@@ -1709,8 +1709,8 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 .menu-bg-pills { position: absolute; inset: -40px; overflow: hidden; pointer-events: none; }
 .menu-inner {
   position: relative; z-index: 1; width: 100%; max-width: 560px;
-  padding: 32px 28px; text-align: center;
-  max-height: 100vh; overflow-y: auto;
+  padding: 32px 28px calc(32px + env(safe-area-inset-bottom, 0px)); text-align: center;
+  margin: auto;
 }
 .menu-pill-stage {
   perspective: 800px; margin: 0 auto 22px;
