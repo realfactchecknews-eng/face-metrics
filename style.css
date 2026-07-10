@@ -240,16 +240,6 @@ html, body {
   color: var(--text-bright);
   animation: landItemIn 0.6s ease 0.35s backwards;
 }
-.land-compare-link {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: none; border: 1px solid var(--accent); color: var(--accent);
-  font-family: inherit; font-size: 0.75rem; letter-spacing: 1px;
-  padding: 7px 16px; border-radius: 999px; cursor: pointer;
-  margin-bottom: 16px;
-  animation: landItemIn 0.6s ease 0.28s backwards;
-}
-.land-compare-link::before { content: "\2694"; }
-.land-compare-link:hover { background: rgba(196,164,107,0.12); }
 
 @keyframes landItemIn {
   from { opacity: 0; transform: translateY(10px); }
@@ -1765,6 +1755,13 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 }
 .menu-go:hover { opacity: 0.9; transform: translateY(-2px); }
 .menu-go-arr { font-size: 1.3rem; }
+.menu-go-row { display: flex; gap: 12px; }
+.menu-go-row .menu-go { width: auto; flex: 1; }
+.menu-go-compare { background: none; border: 1px solid var(--accent); color: var(--accent); }
+.menu-go-compare:hover { background: rgba(196,164,107,0.12); }
+@media (max-width: 480px) {
+  .menu-go-row { flex-direction: column; }
+}
 /* stagger появление содержимого */
 .menu-screen .menu-pill-stage, .menu-screen .menu-eyebrow, .menu-screen .menu-title,
 .menu-screen .menu-tile, .menu-screen .menu-go {

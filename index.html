@@ -19,7 +19,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=18" />
+<link rel="stylesheet" href="style.css?v=19" />
 
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
@@ -89,7 +89,6 @@
 
     <div class="land-top">
       <p class="land-brand">ASCEND &amp; FORGET</p>
-      <button id="landCompareBtn" class="land-compare-link" type="button" data-i18n="tCompare">Who Moggs?</button>
       <p class="land-quote" id="landQuote"></p>
     </div>
 
@@ -153,13 +152,15 @@
     <p class="menu-eyebrow">ASCEND &amp; FORGET</p>
     <h2 class="menu-title">Меню</h2>
     <div class="menu-tiles">
-      <button class="menu-tile menu-tile-hot" id="compareTile"><span class="mt-ic">⚔</span><span class="mt-tx"><b data-i18n="tCompare">Who Moggs?</b><i data-i18n="tCompareSub">Face-off: compare two faces</i></span></button>
       <button class="menu-tile" data-view="history"><span class="mt-ic">✦</span><span class="mt-tx"><b>История оценок</b><i>Прошлые результаты</i></span></button>
       <button class="menu-tile" data-view="glossary"><span class="mt-ic">❡</span><span class="mt-tx"><b>Луксмакс-словарь</b><i>Термины простыми словами</i></span></button>
       <button class="menu-tile" data-view="how"><span class="mt-ic">◎</span><span class="mt-tx"><b>Как это работает</b><i>Геометрия + AI</i></span></button>
       <button class="menu-tile" data-view="feedback"><span class="mt-ic">✎</span><span class="mt-tx"><b>Обратная связь</b><i>Пожелания и идеи</i></span></button>
     </div>
-    <button id="menuGoBtn" class="menu-go"><span>Перейти к анализу</span><span class="menu-go-arr">&rarr;</span></button>
+    <div class="menu-go-row">
+      <button id="menuGoBtn" class="menu-go"><span>Перейти к анализу</span><span class="menu-go-arr">&rarr;</span></button>
+      <button id="menuCompareBtn" class="menu-go menu-go-compare" type="button"><span>Who Moggs?</span><span class="menu-go-arr">⚔</span></button>
+    </div>
   </div>
 </div>
 

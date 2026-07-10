@@ -232,6 +232,7 @@ function applyLang() {
     [".menu-tile[data-view='how'] .mt-tx b", "tHow"], [".menu-tile[data-view='how'] .mt-tx i", "tHowSub"],
     [".menu-tile[data-view='feedback'] .mt-tx b", "tFeedback"], [".menu-tile[data-view='feedback'] .mt-tx i", "tFeedbackSub"],
     ["#menuGoBtn span:first-child", "goAnalysis"],
+    ["#menuCompareBtn span:first-child", "tCompare"],
     ["#fsBack", "back"],
     [".upload-slot:nth-child(1) .slot-eyebrow", "front"], [".upload-slot:nth-child(2) .slot-eyebrow", "profile"],
     [".slot-required", "required"], [".slot-optional", "optional"],
@@ -454,13 +455,6 @@ window.addEventListener("DOMContentLoaded", function() {
   }
   var beginBtn = document.getElementById("beginBtn");
   if (beginBtn) beginBtn.addEventListener("click", enterMenu);
-  var landCompareBtn = document.getElementById("landCompareBtn");
-  if (landCompareBtn) landCompareBtn.addEventListener("click", function(){
-    var landing = document.getElementById("landingSection");
-    document.body.classList.add("entered");
-    if (landing) { landing.classList.add("landing-exit"); setTimeout(function(){ if (landing.parentNode) landing.remove(); }, 700); }
-    if (window.fmOpenCompare) window.fmOpenCompare();
-  });
 });
 
 // Лендинг → полноэкранное меню.
@@ -2482,7 +2476,7 @@ function pwRecheck(silent) {
 
   // ── wiring ──
   document.addEventListener("DOMContentLoaded", function(){
-    var tile=$("compareTile"); if(tile) tile.addEventListener("click", function(){ window.fmOpenCompare(); });
+    var tile=$("menuCompareBtn"); if(tile) tile.addEventListener("click", function(){ window.fmOpenCompare(); });
     $("cmpBackBtn").addEventListener("click", backToMenuFromCompare);
     $("cmpAgainBtn").addEventListener("click", function(){ A=null;B=null; $("cmpImgA").src=""; $("cmpImgB").src="";
       $("cmpThumbA").classList.add("hidden"); $("cmpPhA").classList.remove("hidden");
