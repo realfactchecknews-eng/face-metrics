@@ -1969,6 +1969,7 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   font-style: normal; font-size: 0.68rem; background: #0a0a0a; color: var(--accent);
   border-radius: 100px; padding: 2px 9px; letter-spacing: 0.06em;
 }
+.pw-was { opacity: 0.55; font-size: 0.85em; font-weight: 400; }
 .pw-close {
   position: absolute; top: 14px; right: 16px; background: none; border: none;
   color: var(--text-dim); font-size: 1.5rem; cursor: pointer; line-height: 1;

@@ -102,7 +102,7 @@ var I18N = {
     pwPaySub: "Pay with Telegram Stars in two taps. Or come back next week for a free one.",
     pwPaid: "I paid — show my result",
     pwChecking: "Checking…",
-    packP1: "1 analysis", packP5: "5 analyses", packD1: "Day unlimited", packM1: "Month unlimited",
+    packP1: "1 analysis", packP5: "5 analyses", packH1: "Hour unlimited", packD1: "Day unlimited", packM1: "Month unlimited",
     waitTg: "Waiting for Telegram…",
     waitTgHint: "Usually 10–30 sec, sometimes up to a minute — don't close this page",
     loginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
@@ -190,7 +190,7 @@ var I18N = {
     pwPaySub: "Оплата звёздами Telegram в два тапа. Или возвращайся на следующей неделе за бесплатным.",
     pwPaid: "Я оплатил — показать результат",
     pwChecking: "Проверяю…",
-    packP1: "1 анализ", packP5: "5 анализов", packD1: "Безлимит на день", packM1: "Безлимит на месяц",
+    packP1: "1 анализ", packP5: "5 анализов", packH1: "Безлимит на час", packD1: "Безлимит на день", packM1: "Безлимит на месяц",
     waitTg: "Жду подтверждения в Telegram…",
     waitTgHint: "Обычно 10–30 сек, иногда до минуты — не закрывайте страницу",
     loginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
@@ -2206,23 +2206,34 @@ function showPaywall(state, st) {
     title.textContent = t("pwPayTitle");
     sub.textContent = t("pwPaySub");
     var packs = (st && st.packs) || {
-      p1: { stars: 29, rub: 50 }, p5: { stars: 99, rub: 149 },
-      d1: { stars: 300, rub: 450, lavaRub: 450 }, m1: { stars: 499, rub: 999, lavaRub: 999 },
+      p1: { stars: 49, rub: 79, lavaRub: 79 }, p5: { stars: 100, rub: 149, lavaRub: 149 },
+      h1: { stars: 199, rub: 299, lavaRub: 299 },
+      d1: { stars: 349, rub: 499, lavaRub: 499 }, m1: { stars: 999, rub: 1999, lavaRub: 1999 },
     };
     var methods = (st && st.methods) || ["stars"];
-    var packNames = { p1: t("packP1"), p5: t("packP5"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1") };
+    var packNames = { p1: t("packP1"), p5: t("packP5"), h1: "⏱ " + t("packH1"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1") };
     var methodNames = { stars: t("payStars"), rub: t("payCard"), sbp: t("paySbp"), crypto: t("payCrypto") };
     // Шаг 2: тарифы под выбранный способ (цена в его валюте).
     function showPacks(method) {
       actions.innerHTML = "";
       title.textContent = t("pwPickPack"); sub.textContent = methodNames[method] || "";
+      function rawPrice(p) {
+        return method === "stars" ? p.stars : (((method === "rub" || method === "sbp") && p.lavaRub) ? p.lavaRub : p.rub);
+      }
       function packBtn(id) {
         var p = packs[id]; if (!p) return;
-        var price = method === "stars" ? (p.stars + "⭐") : (((method === "rub" || method === "sbp") && p.lavaRub ? p.lavaRub : p.rub) + "₽");
+        var unit = method === "stars" ? "⭐" : "₽";
+        var price = rawPrice(p) + unit;
         var top = id === "m1" ? " <i class='pw-hit'>top</i>" : "";
-        btn(packNames[id] + " — " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
+        var was = "";
+        // 5 анализов дешевле, чем 5 раз купить по одному — показываем зачёркнутую "старую" цену.
+        if (id === "p5" && packs.p1) {
+          var singleTotal = rawPrice(packs.p1) * 5;
+          if (singleTotal > rawPrice(p)) was = " <s class='pw-was'>" + singleTotal + unit + "</s>";
+        }
+        btn(packNames[id] + " — " + was + " " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
       }
-      packBtn("p1"); packBtn("p5"); packBtn("d1"); packBtn("m1");
+      packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1");
       btn(t("pwBack"), "pw-btn pw-btn-ghost", function(){ showPaywall("pay", st); });
     }
     // Шаг 1: выбор способа оплаты (только доступные).

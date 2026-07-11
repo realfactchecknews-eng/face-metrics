@@ -26,17 +26,18 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 function weekBucket() { return Math.floor(Date.now() / WEEK_MS); } // сброс раз в 7 дней от эпохи
 const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
 const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
-  p1: { type: 'credits', credits: 1, stars: 29,  rub: 50,  label: '1 анализ', labelEn: '1 analysis' }, // 50₽ — минималка Lava.top
-  p5: { type: 'credits', credits: 5, stars: 99,  rub: 149, label: '5 анализов', labelEn: '5 analyses' },
-  // lavaRub — цена, которую нужно ЗЕРКАЛЬНО выставить в личном кабинете Lava.top для этого
-  // оффера (реальная сумма списания по карте/СБП определяется ИХ дашбордом, не этим кодом —
-  // см. lavaProductPrice()). rub — цена для крипты (CryptoBot) и запасного ЮKassa-инвойса,
-  // ей код управляет напрямую. Держим rub === lavaRub, иначе кнопка в боте будет врать.
-  d1: { type: 'unlim',  hours: 24,   stars: 300, rub: 450, lavaRub: 450, label: 'Безлимит на день', labelEn: 'Day unlimited' },
+  // lavaRub — целевая цена по карте/СБП. Для офферов с isDynamicPrice:true в Lava.top мы сами
+  // передаём эту сумму в /invoice (см. createLavaInvoice) — их дашборд НЕ нужно трогать вручную,
+  // цена всегда совпадает с тем, что показано на сайте/в боте. rub — цена для крипты (CryptoBot)
+  // и запасного ЮKassa-инвойса, ей код тоже управляет напрямую.
+  p1: { type: 'credits', credits: 1, stars: 49,  rub: 79,   lavaRub: 79,   label: '1 анализ', labelEn: '1 analysis' },
+  p5: { type: 'credits', credits: 5, stars: 100, rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses' },
+  h1: { type: 'unlim',  hours: 1,    stars: 199, rub: 299,  lavaRub: 299,  label: 'Безлимит на час', labelEn: 'Hour unlimited' },
+  d1: { type: 'unlim',  hours: 24,   stars: 349, rub: 499,  lavaRub: 499,  label: 'Безлимит на день', labelEn: 'Day unlimited' },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 499, rub: 999, lavaRub: 999, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
+  m1: { type: 'unlim',  hours: 720,  stars: 999, rub: 1999, lavaRub: 1999, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
 };
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
 function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }
@@ -371,8 +372,8 @@ async function submitFeedback(request, env) {
 // Создание инвойса-ссылки через Telegram. method: 'stars' (XTR) | 'rub' (карта РФ, ЮKassa).
 async function createInvoice(env, tgid, packId, L, method = 'stars', discPct = 0) {
   const pack = PACKS[packId];
-  const unlimRu = pack.hours >= 720 ? 'на месяц' : pack.hours >= 168 ? 'на неделю' : 'на 24 часа';
-  const unlimEn = pack.hours >= 720 ? 'for a month' : pack.hours >= 168 ? 'for a week' : 'for 24 hours';
+  const unlimRu = pack.hours >= 720 ? 'на месяц' : pack.hours >= 168 ? 'на неделю' : pack.hours >= 24 ? 'на 24 часа' : `на ${pack.hours} час`;
+  const unlimEn = pack.hours >= 720 ? 'for a month' : pack.hours >= 168 ? 'for a week' : pack.hours >= 24 ? 'for 24 hours' : `for ${pack.hours} hour`;
   const descRu = pack.type === 'credits'
     ? `${pack.credits} AI-анализ(а) лица на facerate.ru`
     : pack.type === 'unlim'
@@ -432,25 +433,20 @@ async function lavaPackIdByProductId(env, productId) {
   }
   return null;
 }
-// Товары с "ценой по запросу через API" (isDynamicPrice:true) требуют явный amount
-// в запросе на инвойс, иначе Lava.top отвечает "invoice cannot be created". Тянем
-// актуальную цену прямо из их каталога — так правки цены в личном кабинете Lava.top
-// подхватываются сами, без правки кода/деплоя.
-async function lavaProductPrice(env, offerId) {
+// Офферы с "ценой по запросу через API" (isDynamicPrice:true) требуют явный amount
+// в запросе на инвойс — но зато мы сами решаем, сколько это будет стоить, без правки
+// цены в личном кабинете Lava.top. На фикс-цену offer'ах amount передавать нельзя —
+// Lava.top отвечает "is not dynamic price".
+async function lavaOfferIsDynamic(env, offerId) {
   const r = await fetch('https://gate.lava.top/api/v2/products?feedVisibility=ALL', {
     headers: { 'X-Api-Key': env.LAVA_API_KEY },
   }).then(x => x.json()).catch(() => null);
   for (const item of r?.items || []) {
     for (const offer of item.offers || []) {
-      if (offer.id === offerId) {
-        const p = (offer.prices || []).find(p => p.currency === 'RUB');
-        // amount разрешён в /invoice ТОЛЬКО для offer'ов с isDynamicPrice:true —
-        // на фикс-цену Lava.top отвечает "is not dynamic price", если его передать.
-        return item.isDynamicPrice && p ? p.amount : null;
-      }
+      if (offer.id === offerId) return !!item.isDynamicPrice;
     }
   }
-  return null;
+  return false;
 }
 // sbp:true → провайдер PAY2ME/способ SBP (прямой QR-код СБП, найдено в их openapi-спеке
 // gate.lava.top/docs/documentation.yaml — не описано в обычной документации).
@@ -458,7 +454,8 @@ async function lavaProductPrice(env, offerId) {
 async function createLavaInvoice(env, tgid, packId, L, discPct = 0, sbp = false) {
   const offerId = lavaOfferIds(env)[packId];
   if (!offerId) return { ok: false, error: 'оффер для этого тарифа не настроен в Lava.top' };
-  const amount = await lavaProductPrice(env, offerId);
+  const pack = PACKS[packId];
+  const dynamic = await lavaOfferIsDynamic(env, offerId);
   const body = {
     email: `tg${tgid}@facerate.ru`,
     offerId,
@@ -467,10 +464,9 @@ async function createLavaInvoice(env, tgid, packId, L, discPct = 0, sbp = false)
     buyerLanguage: L === 'ru' ? 'RU' : 'EN',
   };
   if (sbp) { body.paymentProvider = 'PAY2ME'; body.paymentMethod = 'SBP'; }
-  // Скидку можно применить только у офферов с динамической ценой (amount != null) —
-  // у фикс-цены Lava.top не даёт передавать amount вообще. LAVA_MIN_RUB — их минималка
-  // по цене инвойса; ниже нельзя, иначе Lava.top отклонит запрос целиком.
-  if (amount != null) body.amount = Math.max(LAVA_MIN_RUB, applyDiscount(amount, discPct));
+  // Цену задаём сами (pack.lavaRub) — так она всегда совпадает с тем, что показано
+  // на сайте/в боте. LAVA_MIN_RUB — их минималка по цене инвойса, ниже нельзя.
+  if (dynamic) body.amount = Math.max(LAVA_MIN_RUB, applyDiscount(pack.lavaRub, discPct));
   const r = await fetch('https://gate.lava.top/api/v3/invoice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': env.LAVA_API_KEY },
@@ -517,9 +513,9 @@ async function lavaWebhook(request, env) {
 async function createCryptoInvoice(env, tgid, packId, L, discPct = 0) {
   const pack = PACKS[packId];
   const descRu = pack.type === 'credits' ? `${pack.credits} AI-анализ(а) на facerate.ru`
-    : pack.hours >= 720 ? 'Безлимит на месяц на facerate.ru' : 'Безлимит на день на facerate.ru';
+    : pack.hours >= 720 ? 'Безлимит на месяц на facerate.ru' : pack.hours >= 24 ? 'Безлимит на день на facerate.ru' : `Безлимит на ${pack.hours} час на facerate.ru`;
   const descEn = pack.type === 'credits' ? `${pack.credits} AI analyses on facerate.ru`
-    : pack.hours >= 720 ? 'Month unlimited on facerate.ru' : 'Day unlimited on facerate.ru';
+    : pack.hours >= 720 ? 'Month unlimited on facerate.ru' : pack.hours >= 24 ? 'Day unlimited on facerate.ru' : `${pack.hours}-hour unlimited on facerate.ru`;
   const r = await cryptoApi(env, 'createInvoice', {
     currency_type: 'fiat',
     fiat: 'RUB',
@@ -749,8 +745,18 @@ function packsKb(method, L, discPct) {
     const disc = Math.max(1, Math.round(base * (100 - discPct) / 100));
     return `${disc}${unit(p)} (вместо ${base}${unit(p)})`;
   };
-  const row = (id, emoji) => [{ text: `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`, callback_data: `pay:${id}:${method}` }];
-  const rows = [row('p1', ''), row('p5', ''), row('d1', '🔥 '), row('m1', '👑 ')];
+  // Для p5 показываем зачёркнутую цену «как если бы» покупать по одному (5×p1) —
+  // наглядная выгода объёма прямо в тексте кнопки (юникод-зачёркивание, works в Telegram).
+  const strike = (s) => String(s).split('').map((ch) => ch + '̶').join('');
+  const row = (id, emoji) => {
+    let label = `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`;
+    if (id === 'p5') {
+      const singleRaw = raw(PACKS.p1) * 5;
+      if (singleRaw > raw(PACKS.p5)) label += ` (было бы ${strike(singleRaw + unit(PACKS.p5))})`;
+    }
+    return [{ text: label, callback_data: `pay:${id}:${method}` }];
+  };
+  const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ')];
   if (discPct) rows.unshift([{ text: `🎁 Промо-скидка ${discPct}% уже применена`, callback_data: 'noop' }]);
   rows.push([{ text: BL[L].kbBack, callback_data: 'shop' }]);
   return { inline_keyboard: rows };
