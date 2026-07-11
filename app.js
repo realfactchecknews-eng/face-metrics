@@ -1224,15 +1224,10 @@ function showGate(data) {
     hint.className = "gate-hint"; hint.textContent = t("gateHint");
     box.appendChild(hint);
   } else if (data.error === "pay") {
-    var pkLabels = { p1: t("packP1"), p5: t("packP5"), d1: t("packD1"), m1: t("packM1") };
-    ["p1","d1","m1"].forEach(function(p){
-      var pk = (data.packs || {})[p]; if (!pk) return;
-      var b = document.createElement("button");
-      b.className = "btn-primary"; b.type = "button";
-      b.textContent = pkLabels[p] + " — " + pk.stars + "⭐";
-      b.addEventListener("click", function(){ buyPack(p, b); });
-      box.appendChild(b);
-    });
+    // Полный выбор способа оплаты (не только Stars) и всегда свежие цены — берём прямо
+    // из ответа сервера (data.packs/data.methods), а не из захардкоженных чисел.
+    showPaywall("pay", data);
+    return;
   }
   aiError.appendChild(box);
   aiError.classList.remove("hidden");
@@ -2191,8 +2186,8 @@ function showPaywall(state, st) {
     title.textContent = t("pwPayTitle");
     sub.textContent = t("pwPaySub");
     var packs = (st && st.packs) || {
-      p1: { stars: 29, rub: 49 }, p5: { stars: 99, rub: 149 },
-      d1: { stars: 99, rub: 149 }, m1: { stars: 499, rub: 749 },
+      p1: { stars: 29, rub: 50 }, p5: { stars: 99, rub: 149 },
+      d1: { stars: 300, rub: 450, lavaRub: 450 }, m1: { stars: 499, rub: 999, lavaRub: 999 },
     };
     var methods = (st && st.methods) || ["stars"];
     var packNames = { p1: t("packP1"), p5: t("packP5"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1") };

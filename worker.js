@@ -28,14 +28,15 @@ const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать
 const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
   p1: { type: 'credits', credits: 1, stars: 29,  rub: 50,  label: '1 анализ', labelEn: '1 analysis' }, // 50₽ — минималка Lava.top
   p5: { type: 'credits', credits: 5, stars: 99,  rub: 149, label: '5 анализов', labelEn: '5 analyses' },
-  // lavaRub — реальная цена, настроенная в личном кабинете Lava.top (специально выше rub,
-  // чтобы карта/СБП стоили дороже Stars/крипты); без него кнопка в боте показывала бы
-  // устаревшую сумму, а по факту с человека спишут другую.
-  d1: { type: 'unlim',  hours: 24,   stars: 99,  rub: 149, lavaRub: 300, label: 'Безлимит на день', labelEn: 'Day unlimited' },
+  // lavaRub — цена, которую нужно ЗЕРКАЛЬНО выставить в личном кабинете Lava.top для этого
+  // оффера (реальная сумма списания по карте/СБП определяется ИХ дашбордом, не этим кодом —
+  // см. lavaProductPrice()). rub — цена для крипты (CryptoBot) и запасного ЮKassa-инвойса,
+  // ей код управляет напрямую. Держим rub === lavaRub, иначе кнопка в боте будет врать.
+  d1: { type: 'unlim',  hours: 24,   stars: 300, rub: 450, lavaRub: 450, label: 'Безлимит на день', labelEn: 'Day unlimited' },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 499, rub: 749, lavaRub: 999, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
+  m1: { type: 'unlim',  hours: 720,  stars: 499, rub: 999, lavaRub: 999, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
 };
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
 function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }
@@ -133,7 +134,7 @@ async function analyze(request, env) {
   else if (!subscribed) {
     return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в неделю.', channel: CHANNEL });
   } else {
-    return json({ error: 'pay', text: 'Бесплатный анализ на этой неделе уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS });
+    return json({ error: 'pay', text: 'Бесплатный анализ на этой неделе уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env) });
   }
 
   // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
