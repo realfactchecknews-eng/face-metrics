@@ -1705,7 +1705,15 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 /* how */
 .how p { font-size: 0.95rem; color: var(--text-dim); line-height: 1.7; margin-bottom: 16px; }
 .how b { color: var(--text-bright); font-weight: 400; }
-.how-note { border-left: 2px solid var(--accent); padding-left: 14px; color: var(--text-mid, #888) !important; }
+.how-note { border-left: 2px solid var(--accent); padding-left: 14px; color: var(--text-mid, #888) !important; margin-top: 28px; }
+.how-intro { font-size: 1.02rem; color: var(--text-bright); line-height: 1.6; margin-bottom: 28px; }
+.how-steps { display: flex; flex-direction: column; gap: 22px; margin-bottom: 28px; }
+.how-step { display: flex; gap: 16px; align-items: flex-start; }
+.how-step-num { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+.how-step-body h4 { margin: 0 0 4px; font-size: 1.05rem; font-weight: 400; color: var(--text-bright); }
+.how-step-body p { margin: 0; font-size: 0.92rem; color: var(--text-dim); line-height: 1.65; }
+.how-tech { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 4px 0 26px; }
+.how-tech span { font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-mid, #888); border: 1px solid var(--border, #1c1c1c); border-radius: 100px; padding: 5px 12px; }
 
 /* ═════════  ПОЛНОЭКРАННОЕ МЕНЮ  ═════════ */
 .menu-screen {

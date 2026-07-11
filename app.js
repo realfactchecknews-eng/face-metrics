@@ -113,9 +113,14 @@ var I18N = {
     histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
     histAvg: "Average score: ", histCount: " · analyses: ",
     howHtml: "<div class='how'>" +
-      "<p><b>1. Geometry — no mercy, no upload.</b> 468 points, mapped on your face in your browser in under a second. Cheekbones, jaw, fWHR, symmetry — cold numbers, zero flattery. Nothing leaves your device at this step.</p>" +
-      "<p><b>2. The verdict.</b> Your photo and metrics get sent off to a vision model that doesn't care about your feelings. It comes back with a PSL score, an 8-category breakdown, and recommendations — earned, not given.</p>" +
-      "<p><b>3. Take it or leave it.</b> Save the score, flex the card, track it against every past attempt. Progress is a number going up. Nothing else counts.</p>" +
+      "<p class='how-intro'>FaceRate turns one photo into a structured, numbers-first breakdown of your facial geometry — the same landmark math used in anthropometry and clinical photogrammetry, just automated and instant.</p>" +
+      "<div class='how-steps'>" +
+      "<div class='how-step'><div class='how-step-num'>1</div><div class='how-step-body'><h4>On-device face mapping</h4><p>468 facial landmarks are detected right in your browser via MediaPipe — cheekbone width, jaw width, fWHR, canthal tilt, symmetry score, face shape. Nothing leaves your device at this step.</p></div></div>" +
+      "<div class='how-step'><div class='how-step-num'>2</div><div class='how-step-body'><h4>AI interpretation</h4><p>Your photo and the measured geometry are sent to a vision model, which reads the numbers in context — proportion, harmony, gender-typical markers — the way a trained eye would, not just raw math.</p></div></div>" +
+      "<div class='how-step'><div class='how-step-num'>3</div><div class='how-step-body'><h4>Full report</h4><p>An overall PSL-style score, an 8-category breakdown (symmetry, eyes/canthal tilt, midface, jawline, nose, lips/cheekbones, skin, grooming), and 8-9 concrete, actionable recommendations.</p></div></div>" +
+      "<div class='how-step'><div class='how-step-num'>4</div><div class='how-step-body'><h4>Track & compare</h4><p>Every score is saved to your history so you can track progress over time, share a result card, or run a head-to-head \"Who Moggs\" comparison against a friend.</p></div></div>" +
+      "</div>" +
+      "<div class='how-tech'><span>468 landmarks</span><span>On-device geometry</span><span>MediaPipe</span><span>Vision AI</span><span>8 score categories</span></div>" +
       "<p class='how-note'>Entertainment only. The score is a subjective AI heuristic, not objective truth — treat it accordingly. Mild asymmetry is normal for every human face.</p></div>",
     fbSub: "What should we improve? What's missing? Found a bug? Tell us — it really helps.",
     fbName: "Name or nick (optional)", fbEmail: "Email for reply (optional)", fbMsg: "Your message…",
@@ -195,9 +200,14 @@ var I18N = {
     histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
     histAvg: "Средний балл: ", histCount: " · оценок: ",
     howHtml: "<div class='how'>" +
-      "<p><b>1. Геометрия — без пощады и без загрузки.</b> 468 точек лица считаются прямо в твоём браузере меньше чем за секунду. Скулы, челюсть, fWHR, симметрия — холодные цифры без лести. Фото на этом шаге никуда не уходит.</p>" +
-      "<p><b>2. Приговор.</b> Фото и метрики уходят к vision-модели, которой плевать на твои чувства. В ответ — PSL-балл, разбор по 8 категориям и рекомендации. Без поблажек.</p>" +
-      "<p><b>3. Забирай или проваливай.</b> Сохраняй балл, флексуй карточкой, сверяй с прошлыми попытками. Прогресс — это цифра, которая растёт. Остальное неважно.</p>" +
+      "<p class='how-intro'>FaceRate превращает одну фотографию в структурированный, основанный на цифрах разбор геометрии лица — те же принципы, что в антропометрии и клинической фотограмметрии, только автоматизированные и мгновенные.</p>" +
+      "<div class='how-steps'>" +
+      "<div class='how-step'><div class='how-step-num'>1</div><div class='how-step-body'><h4>Разметка лица на устройстве</h4><p>468 точек лица определяются прямо в браузере через MediaPipe — ширина скул, ширина челюсти, fWHR, кантальный наклон, симметрия, форма лица. Фото на этом шаге никуда не отправляется.</p></div></div>" +
+      "<div class='how-step'><div class='how-step-num'>2</div><div class='how-step-body'><h4>Интерпретация ИИ</h4><p>Фото и измеренная геометрия отправляются vision-модели, которая читает цифры в контексте — пропорции, гармонию, гендерно-типичные маркеры — так, как это сделал бы натренированный взгляд, а не просто голая математика.</p></div></div>" +
+      "<div class='how-step'><div class='how-step-num'>3</div><div class='how-step-body'><h4>Полный отчёт</h4><p>Общий PSL-балл, разбор по 8 категориям (симметрия, глаза/кантальный наклон, мидфейс, джоулайн, нос, губы/скулы, кожа, груминг) и 8-9 конкретных, применимых рекомендаций.</p></div></div>" +
+      "<div class='how-step'><div class='how-step-num'>4</div><div class='how-step-body'><h4>Прогресс и сравнение</h4><p>Каждый результат сохраняется в историю, чтобы отслеживать прогресс, делиться карточкой результата или устроить дуэль «Who Moggs» с другом.</p></div></div>" +
+      "</div>" +
+      "<div class='how-tech'><span>468 точек лица</span><span>Геометрия на устройстве</span><span>MediaPipe</span><span>Vision AI</span><span>8 категорий оценки</span></div>" +
       "<p class='how-note'>Только развлечение. Балл — субъективная эвристика ИИ, а не объективная истина. Лёгкая асимметрия — норма для любого лица.</p></div>",
     fbSub: "Что улучшить? Чего не хватает? Нашли ошибку? Напишите — это реально помогает.",
     fbName: "Имя или ник (необязательно)", fbEmail: "Email для ответа (необязательно)", fbMsg: "Ваше сообщение…",
