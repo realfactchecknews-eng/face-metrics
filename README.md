@@ -458,7 +458,10 @@ python3 -m http.server 8000   # http(s), не file:// (иначе не груз�
   Используется как зона для `api.facerate.online` (Worker Custom Domain, см. выше) и
   для **Cloudflare Email Routing** (бесплатная пересылка почты на реальный Gmail, без
   отдельного почтового ящика/интерфейса — только приём и форвардинг, не отправка).
-  Настроенные адреса: `ascend@facerate.online` → `realfactchecknews@gmail.com`.
+  Настроенные адреса (все → `realfactchecknews@gmail.com`): `ascend@facerate.online`
+  (общий), `team@facerate.online` (общий/официальный вид), `partners@facerate.online`
+  (для аутрича/сотрудничества с каналами и сайтами — использовать в контактах для
+  партнёрских писем).
   Основной сайт (`index.html` и т.д.) на нём не размещён и размещать не планировалось.
 - ⚠️ Все новые статические файлы в корне (иконки, `robots.txt`, файлы верификации и
   т.п.) нужно дописывать в список файлов в `.github/workflows/deploy.yml` (шаг
