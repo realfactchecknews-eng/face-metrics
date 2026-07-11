@@ -316,18 +316,19 @@ let _hudPhaseTimer   = null;
 function startLanding() {
   var el = document.getElementById("landingSection");
   if (!el) return;
+  var f = FM_FAST_LOAD ? 0.35 : 1; // короче при повторном заходе за последние ~12 минут
   el.classList.add("landing-visible");
-  setTimeout(countUpStats, 200);
+  setTimeout(countUpStats, 200 * f);
   setTimeout(function() {
-    typeWriter(document.getElementById("landQuote"), "“Every measurement tells a story.”", 38);
-  }, 500);
+    typeWriter(document.getElementById("landQuote"), "“Every measurement tells a story.”", FM_FAST_LOAD ? 14 : 38);
+  }, 500 * f);
   setTimeout(function() {
     showFact(0);
     factTimer = setInterval(function() {
       factIdx = (factIdx + 1) % FACTS.length;
       showFact(factIdx);
     }, 4200);
-  }, 1400);
+  }, 1400 * f);
 }
 
 function countUpStats() {
@@ -414,18 +415,42 @@ function transitionToAnalysis() {
 }
 
 // -- Bootstrap ----------------------------------------------------------
+// Если юзер уже был на сайте в последние ~12 минут — интро/лендинг короче,
+// чтобы не заставлять смотреть одну и ту же анимацию заново при обновлении
+// страницы. Через 12+ минут снова показываем полную версию.
+var FM_RECENT_VISIT_MS = 12 * 60 * 1000;
+var FM_FAST_LOAD = (function() {
+  var last = parseInt(localStorage.getItem("fm-last-visit") || "0", 10);
+  var recent = (Date.now() - last) < FM_RECENT_VISIT_MS;
+  localStorage.setItem("fm-last-visit", String(Date.now()));
+  return recent;
+})();
+
+// Ссылки со статей (fwhr.html и т.п.) ведут на index.html#analyze —
+// сразу показываем экран загрузки фото, без интро/лендинга/меню.
+function jumpToAnalysis() {
+  var landing = document.getElementById("landingSection");
+  if (landing && landing.parentNode) landing.remove();
+  var menu = document.getElementById("menuScreen");
+  if (menu) menu.classList.add("hidden");
+  document.body.classList.add("entered", "post-landing");
+  if (history.replaceState) history.replaceState(null, "", location.pathname + location.search);
+}
+
 function runIntro() {
   var overlay = document.getElementById("introOverlay");
+  var skipToAnalysis = location.hash === "#analyze";
+  var delay = skipToAnalysis ? 0 : (FM_FAST_LOAD ? 500 : 2800);
   if (overlay) {
     setTimeout(function() {
       overlay.classList.add("intro-exit");
       overlay.addEventListener("transitionend", function() {
         overlay.remove();
-        startLanding();
+        if (skipToAnalysis) jumpToAnalysis(); else startLanding();
       }, { once: true });
-    }, 2800);
+    }, delay);
   } else {
-    startLanding();
+    if (skipToAnalysis) jumpToAnalysis(); else startLanding();
   }
 }
 
