@@ -1860,6 +1860,7 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   cursor: pointer; transition: background .15s, color .15s;
 }
 .acc-buy:hover { background: var(--accent); color: #0a0a0a; }
+.acc-wallet { padding: 7px 11px; font-size: 0.95rem; line-height: 1; }
 .acc-logout {
   background: none; border: 1px solid var(--border, #222); color: var(--text-dim);
   border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 0.8rem;

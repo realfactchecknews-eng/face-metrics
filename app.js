@@ -1943,15 +1943,18 @@ function updateQuotaChip(freeLeft, credits, subscribed, unlimUntil) {
   q.textContent = parts.join(" · ");
 }
 
+var _lastAccountStatus = null;
 function renderAccount(status) {
   var out = document.getElementById("accLoggedOut");
   var inn = document.getElementById("accLoggedIn");
   if (!out || !inn) return;
   if (!status || !status.user) {
+    _lastAccountStatus = null;
     out.classList.remove("hidden"); inn.classList.add("hidden");
     mountTgWidget();
     return;
   }
+  _lastAccountStatus = status;
   out.classList.add("hidden"); inn.classList.remove("hidden");
   var av = document.getElementById("accAvatar");
   if (status.user.photo_url) { av.src = status.user.photo_url; av.style.display = ""; }
@@ -1959,6 +1962,12 @@ function renderAccount(status) {
   document.getElementById("accName").textContent =
     status.user.username ? "@" + status.user.username : (status.user.first_name || "Пользователь");
   updateQuotaChip(status.freeLeft, status.credits, status.subscribed, status.unlimUntil);
+  // Числа на быстрых кнопках покупки — всегда из живого ответа сервера, не хардкод.
+  if (status.packs) {
+    var b1 = document.getElementById("buyP1"), b5 = document.getElementById("buyP5");
+    if (b1 && status.packs.p1) b1.textContent = "+1 · " + status.packs.p1.stars + "⭐";
+    if (b5 && status.packs.p5) b5.textContent = "+5 · " + status.packs.p5.stars + "⭐";
+  }
 }
 
 // Виджет входа Telegram (скрипт вставляется динамически в контейнер).
@@ -2101,8 +2110,19 @@ function buyPack(pack, btn, payMethod) {
 (function initAccount() {
   var b1 = document.getElementById("buyP1");
   var b5 = document.getElementById("buyP5");
+  var bw = document.getElementById("buyWallet");
   if (b1) b1.addEventListener("click", function(){ buyPack("p1"); });
   if (b5) b5.addEventListener("click", function(){ buyPack("p5"); });
+  if (bw) bw.addEventListener("click", function(){
+    if (_lastAccountStatus) { showPaywall("pay", _lastAccountStatus); return; }
+    var acc = getAccount(); if (!acc) return;
+    fetch(WORKER_URL + "/me", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: acc.token }),
+    }).then(function(r){ return r.json(); }).then(function(st){
+      if (!st.error) showPaywall("pay", st);
+    }).catch(function(){});
+  });
   var lo = document.getElementById("accLogout");
   if (lo) lo.addEventListener("click", function(){ clearAccount(); renderAccount(null); });
   // Дерзкий режим — запоминаем выбор.
