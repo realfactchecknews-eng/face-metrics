@@ -37,7 +37,8 @@
   .status.ok { color:#8fd19e; }
   .status.err { color:#e08a8a; }
   #loginBox { text-align:center; padding:40px 0; }
-  #loginBox a.tglogin { display:inline-block; margin-top:16px; padding:14px 28px; background:var(--accent); color:#0a0a0a; text-decoration:none; border-radius:10px; font-size:1.1rem; font-weight:600; }
+  #loginBox .tglogin { display:inline-block; margin-top:16px; padding:14px 28px; background:var(--accent); color:#0a0a0a; text-decoration:none; border-radius:10px; font-size:1.1rem; font-weight:600; }
+  #loginBox .tglogin:disabled { opacity:0.6; cursor:not-allowed; }
 </style>
 </head>
 <body>
@@ -49,7 +50,8 @@
 
   <div id="loginBox" style="display:none">
     <p>Чтобы получить бесплатный анализ за отзыв, войдите через Telegram.</p>
-    <a href="index.html" class="tglogin">Войти через Telegram</a>
+    <button type="button" id="tgLoginBtn" class="tglogin" style="border:none;cursor:pointer;font-family:inherit;font-size:1.1rem">Войти через Telegram</button>
+    <p class="status" id="loginStatus"></p>
   </div>
 
   <form id="fbForm">
@@ -94,10 +96,82 @@
     try { return JSON.parse(localStorage.getItem("fm-tg") || "null"); } catch (e) { return null; }
   }
   var WORKER_URL = "https://api.facerate.online";
+  var TG_BOT_USERNAME = "faceratepay_bot";
+  var TG_LOGIN_PENDING_KEY = "fm-login-pending";
+  var TG_LOGIN_PENDING_MAX_MS = 5 * 60 * 1000;
   var acc = getAccount();
+
+  function isTgInAppBrowser() {
+    return /Telegram/i.test(navigator.userAgent) || !!window.TelegramWebviewProxy;
+  }
+
+  function saveAccount(st) {
+    localStorage.setItem("fm-tg", JSON.stringify({ token: st.token, user: st.user }));
+  }
+
+  var _pollTimer = null;
+  function pollLogin(code) {
+    var statusEl = document.getElementById("loginStatus");
+    var btn = document.getElementById("tgLoginBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "Жду подтверждения в Telegram…"; }
+    if (statusEl) { statusEl.className = "status"; statusEl.textContent = ""; }
+    if (_pollTimer) clearInterval(_pollTimer);
+    var tries = 0;
+    function tick() {
+      tries++;
+      if (tries > 80) {
+        clearInterval(_pollTimer); _pollTimer = null;
+        localStorage.removeItem(TG_LOGIN_PENDING_KEY);
+        if (btn) { btn.disabled = false; btn.textContent = "Войти через Telegram"; }
+        return;
+      }
+      fetch(WORKER_URL + "/authpoll", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code }),
+      }).then(function(r) { return r.json(); }).then(function(st) {
+        if (st && st.token) {
+          clearInterval(_pollTimer); _pollTimer = null;
+          localStorage.removeItem(TG_LOGIN_PENDING_KEY);
+          saveAccount(st);
+          location.reload();
+        }
+      }).catch(function() {});
+    }
+    tick();
+    _pollTimer = setInterval(tick, 2500);
+  }
+
+  function startLogin() {
+    var code = crypto.randomUUID();
+    localStorage.setItem(TG_LOGIN_PENDING_KEY, JSON.stringify({ code: code, ts: Date.now() }));
+    if (isTgInAppBrowser()) {
+      location.href = "https://t.me/" + TG_BOT_USERNAME + "?start=" + code;
+    } else {
+      window.open("https://t.me/" + TG_BOT_USERNAME + "?start=" + code, "_blank");
+    }
+    pollLogin(code);
+  }
+
+  function resumePendingLogin() {
+    var raw = localStorage.getItem(TG_LOGIN_PENDING_KEY);
+    if (!raw) return;
+    var pending; try { pending = JSON.parse(raw); } catch (e) { return; }
+    if (!pending || !pending.code || Date.now() - pending.ts > TG_LOGIN_PENDING_MAX_MS) {
+      localStorage.removeItem(TG_LOGIN_PENDING_KEY);
+      return;
+    }
+    pollLogin(pending.code);
+  }
+
   if (!acc) {
     document.getElementById("loginBox").style.display = "block";
     document.getElementById("fbForm").style.display = "none";
+    var loginBtn = document.getElementById("tgLoginBtn");
+    if (loginBtn) loginBtn.addEventListener("click", startLogin);
+    document.addEventListener("visibilitychange", function() {
+      if (document.visibilityState === "visible" && !getAccount() && !_pollTimer) resumePendingLogin();
+    });
+    resumePendingLogin();
     return;
   }
 

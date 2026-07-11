@@ -1979,17 +1979,38 @@ function mountTgWidget() {
   wrap.appendChild(b);
 }
 
+// Внутри встроенного браузера Telegram window.open("_blank") часто просто
+// закрывает мини-браузер (переход перехватывается самим Telegram) и убивает
+// JS-контекст вместе с поллингом. Поэтому там переходим через location.href
+// в текущей вкладке и переживаем возможную перезагрузку через localStorage.
+function isTgInAppBrowser() {
+  return /Telegram/i.test(navigator.userAgent) || !!window.TelegramWebviewProxy;
+}
+
+var TG_LOGIN_PENDING_KEY = "fm-login-pending";
+var TG_LOGIN_PENDING_MAX_MS = 5 * 60 * 1000; // 5 минут — окно на возврат из Telegram
+
 function startTgLogin(btn) {
   var code = crypto.randomUUID();
-  // window.open СИНХРОННО в клике — иначе мобильные браузеры режут попап.
-  window.open("https://t.me/" + TG_BOT_USERNAME + "?start=" + code, "_blank");
+  localStorage.setItem(TG_LOGIN_PENDING_KEY, JSON.stringify({ code: code, ts: Date.now() }));
+  if (isTgInAppBrowser()) {
+    location.href = "https://t.me/" + TG_BOT_USERNAME + "?start=" + code;
+  } else {
+    // window.open СИНХРОННО в клике — иначе мобильные браузеры режут попап.
+    window.open("https://t.me/" + TG_BOT_USERNAME + "?start=" + code, "_blank");
+  }
+  pollTgLogin(code, btn);
+}
+
+function pollTgLogin(code, btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = "<span class='tg-spin'></span> " + t("waitTg"); }
   if (_authPollTimer) clearInterval(_authPollTimer);
   var tries = 0;
-  _authPollTimer = setInterval(function() {
+  function tick() {
     tries++;
-    if (tries > 60) { // ~2.5 мин
+    if (tries > 80) { // ~5 мин — покрывает возврат из встроенного браузера ТГ
       clearInterval(_authPollTimer); _authPollTimer = null;
+      localStorage.removeItem(TG_LOGIN_PENDING_KEY);
       if (btn) { btn.disabled = false; btn.innerHTML = t("loginBtn"); }
       return;
     }
@@ -1999,14 +2020,36 @@ function startTgLogin(btn) {
     }).then(function(r){ return r.json(); }).then(function(st){
       if (st && st.token) {
         clearInterval(_authPollTimer); _authPollTimer = null;
+        localStorage.removeItem(TG_LOGIN_PENDING_KEY);
         saveAccount(st);
         renderAccount(st);
         onLoginSuccess(st);
         window.location.reload();
       }
     }).catch(function(){});
-  }, 2500);
+  }
+  tick();
+  _authPollTimer = setInterval(tick, 2500);
 }
+
+// Если страницу пересобрало (вернулись из встроенного браузера ТГ) — докручиваем
+// незавершённый логин автоматически, без повторного нажатия кнопки.
+function resumeTgLoginIfPending() {
+  if (getAccount() || _authPollTimer) return;
+  var raw = localStorage.getItem(TG_LOGIN_PENDING_KEY);
+  if (!raw) return;
+  var pending; try { pending = JSON.parse(raw); } catch (e) { return; }
+  if (!pending || !pending.code || Date.now() - pending.ts > TG_LOGIN_PENDING_MAX_MS) {
+    localStorage.removeItem(TG_LOGIN_PENDING_KEY);
+    return;
+  }
+  var wrap = document.getElementById("tgLoginWrap");
+  var btn = wrap ? wrap.querySelector(".tg-login-btn") : null;
+  pollTgLogin(pending.code, btn);
+}
+document.addEventListener("visibilitychange", function() {
+  if (document.visibilityState === "visible") resumeTgLoginIfPending();
+});
 
 // Если логин случился, пока открыт пейволл — сразу перепроверяем доступ.
 function onLoginSuccess(st) {
@@ -2066,6 +2109,7 @@ function buyPack(pack, btn, payMethod) {
     cb.addEventListener("change", function(){ localStorage.setItem("fm-tone", cb.checked ? "edgy" : "soft"); });
   }
   refreshAccount();
+  resumeTgLoginIfPending();
 })();
 
 /* ───────────────────  Гейт перед генерацией: пейволл  ─────────────────── */
