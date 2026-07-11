@@ -613,6 +613,7 @@ const BL = {
     payRec: ', auto-renewal is on',
     payOk: (n, id, bonus) => `✅ Payment received! ${n}.\nGo back to facerate.ru — everything is updated.${id ? `\n\nOrder ID: <code>${id}</code> (quote it if you write to support)` : ''}${bonus ? `\n\n${bonus}` : ''}`,
     firstBuyBonus: (p) => `🎁 Thanks for your first purchase! Here's ${p}% off your next one — it's already applied automatically, just buy within 30 days.`,
+    pastBuyerBonus: (p) => `🎁 A little thank-you for being a customer! We've added ${p}% off your next purchase — it's already applied automatically, just buy within 30 days.`,
     langSet: '🌍 Language set: English.',
     pickLang: '🌍 Choose language / Выбери язык:',
   },
@@ -665,6 +666,7 @@ const BL = {
     payRec: ', автопродление включено',
     payOk: (n, id, bonus) => `✅ Оплата получена! ${n}.\nВозвращайся на facerate.ru — всё уже обновлено.${id ? `\n\nID заказа: <code>${id}</code> (укажи его, если напишешь в поддержку)` : ''}${bonus ? `\n\n${bonus}` : ''}`,
     firstBuyBonus: (p) => `🎁 Спасибо за первую покупку! Дарим скидку ${p}% на следующую — она уже применена автоматически, просто купи в течение 30 дней.`,
+    pastBuyerBonus: (p) => `🎁 Небольшой подарок за то, что ты с нами! Начислили скидку ${p}% на следующую покупку — она уже применена автоматически, просто купи в течение 30 дней.`,
     langSet: '🌍 Язык переключён: русский.',
     pickLang: '🌍 Choose language / Выбери язык:',
   },
@@ -815,21 +817,33 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
-  // ── Админ: /grantpastbuyers — разовая раздача скидки 20% всем, кто хоть раз покупал.
-  // Не трогает тех, у кого уже есть pendingDiscount (промокод/рефералка) — не плюсуется.
+  // ── Админ: /grantpastbuyers — разовая раздача скидки 20% всем, кто хоть раз покупал,
+  // + уведомление им в личку. Не плюсуется поверх уже висящей скидки (промокод/рефералка).
+  // Идемпотентно по courtesyNotified — безопасно запускать повторно, каждый покупатель
+  // получает уведомление только один раз, даже если команду до этого уже вызывали.
   if (text.startsWith('/grantpastbuyers') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: '⏳ Раздаю скидку прошлым покупателям...' });
-    let granted = 0, skipped = 0, cursor;
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '⏳ Раздаю скидку прошлым покупателям и рассылаю уведомления...' });
+    let granted = 0, notified = 0, skipped = 0, cursor;
     do {
       const page = await env.RATE_LIMIT.list({ prefix: 'orders:', cursor });
       for (const k of page.keys) {
         const buyerId = k.name.slice('orders:'.length);
-        const ok = await grantFirstPurchaseBonus(env, buyerId);
-        if (ok) granted++; else skipped++;
+        if (await env.RATE_LIMIT.get(`courtesyNotified:${buyerId}`)) continue; // уже обработан в прошлый запуск
+        await env.RATE_LIMIT.put(`courtesyNotified:${buyerId}`, '1', { expirationTtl: 60 * 60 * 24 * 365 });
+        const justGranted = await grantFirstPurchaseBonus(env, buyerId);
+        if (justGranted) granted++;
+        const curDisc = justGranted ? String(FIRST_BUY_DISCOUNT_PCT) : await env.RATE_LIMIT.get(`pendingDiscount:${buyerId}`);
+        if (curDisc === String(FIRST_BUY_DISCOUNT_PCT)) {
+          const bl = BL[await userLang(env, buyerId)];
+          await tgApi(env, 'sendMessage', { chat_id: buyerId, text: bl.pastBuyerBonus(FIRST_BUY_DISCOUNT_PCT), parse_mode: 'HTML' });
+          notified++;
+        } else {
+          skipped++; // уже есть своя скидка другого размера — не трогаем и не пишем про несуществующий бонус
+        }
       }
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Готово: скидка 20% выдана ${granted} покупателям, пропущено ${skipped} (у них уже была своя скидка).` });
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Готово: скидка выдана ${granted} покупателям, уведомлено ${notified}, пропущено ${skipped} (у них уже была своя скидка другого размера).` });
     return new Response('ok');
   }
 
