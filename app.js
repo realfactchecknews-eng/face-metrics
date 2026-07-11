@@ -104,6 +104,7 @@ var I18N = {
     pwChecking: "Checking…",
     packP1: "1 analysis", packP5: "5 analyses", packD1: "Day unlimited", packM1: "Month unlimited",
     waitTg: "Waiting for Telegram…",
+    waitTgHint: "Usually 10–30 sec, sometimes up to a minute — don't close this page",
     loginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
     chipSub: "subscribe to channel → 1 free/day", chipFree: "free today: ", chipCredits: "credits: ",
     chipUnlim: "👑 Unlimited until ",
@@ -191,6 +192,7 @@ var I18N = {
     pwChecking: "Проверяю…",
     packP1: "1 анализ", packP5: "5 анализов", packD1: "Безлимит на день", packM1: "Безлимит на месяц",
     waitTg: "Жду подтверждения в Telegram…",
+    waitTgHint: "Обычно 10–30 сек, иногда до минуты — не закрывайте страницу",
     loginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
     chipSub: "подпишись на канал → 1 free/день", chipFree: "бесплатных сегодня: ", chipCredits: "кредиты: ",
     chipUnlim: "👑 Безлимит до ",
@@ -2003,7 +2005,13 @@ function startTgLogin(btn) {
 }
 
 function pollTgLogin(code, btn) {
-  if (btn) { btn.disabled = true; btn.innerHTML = "<span class='tg-spin'></span> " + t("waitTg"); }
+  if (btn) {
+    btn.disabled = true;
+    btn.style.flexDirection = "column";
+    btn.style.gap = "2px";
+    btn.innerHTML = "<span><span class='tg-spin'></span> " + t("waitTg") + "</span>" +
+      "<small style='display:block;font-weight:400;font-size:0.72em;opacity:0.8;letter-spacing:normal'>" + t("waitTgHint") + "</small>";
+  }
   if (_authPollTimer) clearInterval(_authPollTimer);
   var tries = 0;
   function tick() {
@@ -2011,7 +2019,7 @@ function pollTgLogin(code, btn) {
     if (tries > 80) { // ~5 мин — покрывает возврат из встроенного браузера ТГ
       clearInterval(_authPollTimer); _authPollTimer = null;
       localStorage.removeItem(TG_LOGIN_PENDING_KEY);
-      if (btn) { btn.disabled = false; btn.innerHTML = t("loginBtn"); }
+      if (btn) { btn.disabled = false; btn.style.flexDirection = ""; btn.style.gap = ""; btn.innerHTML = t("loginBtn"); }
       return;
     }
     fetch(WORKER_URL + "/authpoll", {

@@ -114,7 +114,11 @@
     var statusEl = document.getElementById("loginStatus");
     var btn = document.getElementById("tgLoginBtn");
     if (btn) { btn.disabled = true; btn.textContent = "Жду подтверждения в Telegram…"; }
-    if (statusEl) { statusEl.className = "status"; statusEl.textContent = ""; }
+    if (statusEl) {
+      statusEl.className = "status";
+      statusEl.style.color = "#888";
+      statusEl.textContent = "Обычно 10–30 сек, иногда до минуты — не закрывайте страницу";
+    }
     if (_pollTimer) clearInterval(_pollTimer);
     var tries = 0;
     function tick() {
@@ -123,6 +127,7 @@
         clearInterval(_pollTimer); _pollTimer = null;
         localStorage.removeItem(TG_LOGIN_PENDING_KEY);
         if (btn) { btn.disabled = false; btn.textContent = "Войти через Telegram"; }
+        if (statusEl) statusEl.textContent = "";
         return;
       }
       fetch(WORKER_URL + "/authpoll", {
