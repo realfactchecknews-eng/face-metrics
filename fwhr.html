@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Что такое fWHR — как измерить соотношение ширины и высоты лица | FaceRate</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="canonical" href="https://facerate.ru/fwhr.html" />
+<meta name="description" content="fWHR (facial width-to-height ratio) — отношение ширины лица к высоте, связанное с воспринимаемой маскулинностью и доминантностью. Как его измеряют, какой диапазон считается идеальным и как узнать свой fWHR по фото." />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
+<style>
+  :root { --accent:#c4a46b; }
+  body { background:#0a0a0a; color:#cfcac4; font-family:'Cormorant Garamond',serif; line-height:1.75; margin:0; }
+  .wrap { max-width:740px; margin:0 auto; padding:56px 24px 100px; }
+  a { color:var(--accent); }
+  h1 { color:#f0ece6; font-weight:400; font-size:2.2rem; letter-spacing:-0.02em; margin-bottom:4px; text-wrap:balance; }
+  .eye { font-size:0.7rem; letter-spacing:0.25em; color:#888; text-transform:uppercase; }
+  .sub { color:#888; margin:6px 0 30px; font-size:1.1rem; }
+  h2 { color:#f0ece6; font-weight:400; font-size:1.4rem; margin:36px 0 10px; }
+  p { font-size:1.08rem; margin:12px 0; }
+  .back { display:inline-block; margin-bottom:26px; font-size:0.95rem; }
+  .note { border-left:2px solid var(--accent); padding:12px 18px; margin:24px 0; color:#aaa; background:rgba(196,164,107,0.05); font-size:1rem; }
+  .stat-row { display:flex; gap:18px; flex-wrap:wrap; margin:20px 0; }
+  .stat { border:1px solid #1c1c1c; border-radius:6px; padding:14px 18px; flex:1; min-width:140px; }
+  .stat .n { color:var(--accent); font-size:1.5rem; }
+  .stat .l { color:#888; font-size:0.85rem; }
+  .cta { display:block; text-align:center; margin:44px 0 10px; padding:20px; border:1px solid var(--accent); border-radius:8px; text-decoration:none; }
+  .cta .m { color:#f0ece6; font-size:1.25rem; }
+  .cta .s { color:#888; font-size:0.95rem; margin-top:4px; }
+  .related { margin-top:40px; padding-top:20px; border-top:1px solid #1c1c1c; font-size:0.98rem; }
+  .related a { display:inline-block; margin-right:18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="index.html" class="back">&larr; На главную</a>
+  <p class="eye">FaceRate &middot; словарь луксмаксинга</p>
+  <h1>Что такое fWHR и как его измерить</h1>
+  <p class="sub">Разбираем один из самых обсуждаемых показателей в PSL-культуре — facial width-to-height ratio.</p>
+
+  <h2>Определение</h2>
+  <p><b>fWHR</b> (facial width-to-height ratio) — это отношение ширины лица к высоте средней трети лица. Ширина измеряется между скуловыми дугами (самая широкая точка лица), высота — от верхнего века (или брови) до верхней губы.</p>
+  <p>Формула простая: <b>fWHR = ширина лица ÷ высота средней зоны</b>. Чем шире лицо относительно этой высоты — тем выше значение.</p>
+
+  <h2>Почему про него все говорят</h2>
+  <p>Ряд исследований в эволюционной психологии связывает высокий fWHR с восприятием доминантности, уверенности и — в некоторых работах — агрессии. Именно это сделало показатель популярным в PSL-сообществах: широкое, «сбитое» лицо читается как более маскулинное и волевое, узкое и вытянутое — как более мягкое.</p>
+  <p>Стоит понимать: это статистическая корреляция по выборкам, а не жёсткий закон для каждого конкретного лица. fWHR — один из многих факторов восприятия, а не единственный решающий.</p>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">1.9–2.1</div><div class="l">типичный «маскулинный» диапазон</div></div>
+    <div class="stat"><div class="n">~1.8</div><div class="l">средние значения у женщин</div></div>
+    <div class="stat"><div class="n">2.2+</div><div class="l">выраженно широкое лицо</div></div>
+  </div>
+
+  <h2>Как измерить fWHR по фото</h2>
+  <p>Нужно фото строго анфас, без наклона головы, при равномерном освещении. Вручную это делается так:</p>
+  <p>1. Отмечаешь две точки на скуловых дугах — самые широкие точки лица по горизонтали.<br/>
+  2. Отмечаешь верхнюю границу — верхнее веко или линию бровей.<br/>
+  3. Отмечаешь нижнюю границу — верхний край верхней губы.<br/>
+  4. Делишь расстояние между скулами на расстояние между верхней и нижней границей.</p>
+  <p>Вручную легко ошибиться на несколько градусов угла камеры или пикселей разметки — а это заметно сдвигает результат. Точнее это делает автоматическое распознавание лицевых точек (face landmarks) по фото, которое не зависит от руки и глазомера.</p>
+
+  <div class="note">На FaceRate fWHR считается автоматически по 468 точкам лица (MediaPipe FaceLandmarker), без ручной разметки — координаты скул и границ средней зоны берутся из модели, а не на глаз.</div>
+
+  <h2>Можно ли изменить fWHR</h2>
+  <p>Сама костная структура (ширина скул, высота средней зоны) с возрастом почти не меняется без хирургии. Но на восприятие ширины лица сильно влияет мягкая ткань — процент жира на лице визуально «сжимает» или «растягивает» пропорции, поэтому снижение отёчности/жира на лице может немного менять то, как fWHR считывается визуально, даже если костная база та же.</p>
+
+  <a href="index.html" class="cta">
+    <div class="m">Узнать свой fWHR и полный разбор лица →</div>
+    <div class="s">Бесплатный AI-анализ по фото за минуту</div>
+  </a>
+
+  <div class="related">
+    Смотри также:
+    <a href="glossary.html">Полный словарь терминов луксмаксинга</a>
+    <a href="canthal-tilt.html">Как измерить canthal tilt</a>
+    <a href="psl-shkala.html">Что такое PSL-шкала</a>
+  </div>
+</div>
+</body>
+</html>
