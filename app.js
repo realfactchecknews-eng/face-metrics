@@ -1335,7 +1335,26 @@ function renderAIReport(text) {
     if (tb) tb.classList.remove("hidden");
     var cb = document.getElementById("toCompareBtn");
     if (cb) cb.classList.remove("hidden");
+    autoSendTgCard();
   }
+}
+
+// Молча шлёт карточку отчёта в Telegram сразу после анализа, если юзер залогинен через ТГ —
+// без клика по кнопке. Кнопка #tgCardBtn остаётся как ручной повтор (напр. если авто-отправка не прошла).
+function autoSendTgCard() {
+  var acc = getAccount();
+  if (!acc) return;
+  buildShareCard().then(function(blob) {
+    var fr = new FileReader();
+    fr.onload = function() {
+      var b64 = String(fr.result).split(",")[1];
+      fetch(WORKER_URL + "/sendcard", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: acc.token, image: b64 }),
+      }).catch(function() {});
+    };
+    fr.readAsDataURL(blob);
+  });
 }
 
 function animateCount(el, target, duration) {
