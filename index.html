@@ -392,7 +392,7 @@
             <div class="upload-icon">◎</div>
             <p class="upload-title">Face A</p>
           </div>
-          <div class="cmp-thumb hidden" id="cmpThumbA"><img id="cmpImgA" alt="" /></div>
+          <div class="cmp-thumb hidden" id="cmpThumbA"><img id="cmpImgA" alt="" /><div class="cmp-scan hidden" id="cmpScanA"><span class="cmp-scan-label">SCANNING</span></div></div>
           <span class="cmp-badge">A</span>
         </div>
         <div class="cmp-vs">VS</div>
@@ -402,7 +402,7 @@
             <div class="upload-icon">◎</div>
             <p class="upload-title">Face B</p>
           </div>
-          <div class="cmp-thumb hidden" id="cmpThumbB"><img id="cmpImgB" alt="" /></div>
+          <div class="cmp-thumb hidden" id="cmpThumbB"><img id="cmpImgB" alt="" /><div class="cmp-scan hidden" id="cmpScanB"><span class="cmp-scan-label">SCANNING</span></div></div>
           <span class="cmp-badge">B</span>
         </div>
       </div>
@@ -416,8 +416,25 @@
       <p id="cmpErr" class="cmp-err hidden"></p>
     </div>
 
-    <div id="cmpLoading" class="ai-hud-card hidden" style="justify-content:center">
-      <div class="hud-header"><span class="hud-dot"></span><span class="hud-label" data-i18n="cmpLoading">DECIDING WHO MOGS…</span></div>
+    <div id="cmpLoading" class="ai-hud-card hidden">
+      <div class="hud-corners">
+        <span class="hc hc-tl"></span><span class="hc hc-tr"></span>
+        <span class="hc hc-bl"></span><span class="hc hc-br"></span>
+      </div>
+      <div class="hud-header">
+        <span class="hud-dot"></span>
+        <span class="hud-label" data-i18n="cmpLoading">DECIDING WHO MOGS…</span>
+        <span class="hud-label-side"></span>
+      </div>
+      <div class="hud-phase-row">
+        <span class="hud-caret">&#8250;</span>
+        <span class="hud-phase">INITIALIZING</span>
+      </div>
+      <div class="hud-bar-row">
+        <div class="hud-bar-track"><div class="hud-bar-fill"></div></div>
+        <span class="hud-bar-pct">0%</span>
+      </div>
+      <div class="hud-stream"></div>
     </div>
 
     <div id="cmpResult" class="hidden">
@@ -527,6 +544,6 @@
 <button id="langBtn" class="mute-btn lang-btn" title="Language">RU</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=30"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>

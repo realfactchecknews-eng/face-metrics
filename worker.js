@@ -857,6 +857,29 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
+  // ── Админ: /lavaproducts — список офферов Lava.top (id + название + динамическая цена?)
+  // и текущий LAVA_OFFER_IDS, чтобы найти offerId под новый тариф без похода в их API руками.
+  if (text.startsWith('/lavaproducts') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    if (!env.LAVA_API_KEY) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'LAVA_API_KEY не настроен.' });
+      return new Response('ok');
+    }
+    const r = await fetch('https://gate.lava.top/api/v2/products?feedVisibility=ALL', {
+      headers: { 'X-Api-Key': env.LAVA_API_KEY },
+    }).then(x => x.json()).catch(e => ({ error: e.message }));
+    let t = `🔑 Текущий LAVA_OFFER_IDS:\n<code>${env.LAVA_OFFER_IDS || '(пусто)'}</code>\n\n📦 Каталог Lava.top:\n`;
+    for (const item of r?.items || []) {
+      t += `\n<b>${item.title || item.name || '(без названия)'}</b> (product: <code>${item.id}</code>, dynamic: ${item.isDynamicPrice ? 'да' : 'нет'})\n`;
+      for (const offer of item.offers || []) {
+        const price = (offer.prices || []).find(p => p.currency === 'RUB');
+        t += `  • offer: <code>${offer.id}</code>${offer.name ? ' — ' + offer.name : ''}${price ? ` (${price.amount}₽)` : ''}\n`;
+      }
+    }
+    if (!r?.items?.length) t += r?.error ? `Ошибка: ${r.error}` : '(пусто)';
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: t.slice(0, 4000), parse_mode: 'HTML' });
+    return new Response('ok');
+  }
+
   // ── Админ: /grantpastbuyers — разовая раздача скидки 20% всем, кто хоть раз покупал,
   // + уведомление им в личку. Не плюсуется поверх уже висящей скидки (промокод/рефералка).
   // Идемпотентно по courtesyNotified — безопасно запускать повторно, каждый покупатель

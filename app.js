@@ -725,13 +725,16 @@ function showError(msg) {
 }
 
 // -- AI HUD animation --------------------------------------------------
-function startAIHUD(hasSide) {
-  var card      = document.getElementById("aiLoading");
-  var phaseEl   = document.getElementById("hudPhase");
-  var fillEl    = document.getElementById("hudBarFill");
-  var pctEl     = document.getElementById("hudBarPct");
-  var streamEl  = document.getElementById("hudStream");
-  var sideLabel = document.getElementById("hudSideLabel");
+// cardId по умолчанию — основной анализ (#aiLoading); передаётся "cmpLoading" для Who Moggs —
+// та же анимация, другой контейнер (подэлементы находятся по классу, а не id, т.к. на странице
+// одновременно есть обе HUD-карточки и id должны быть уникальны).
+function startAIHUD(hasSide, cardId) {
+  var card      = document.getElementById(cardId || "aiLoading");
+  var phaseEl   = card.querySelector(".hud-phase");
+  var fillEl    = card.querySelector(".hud-bar-fill");
+  var pctEl     = card.querySelector(".hud-bar-pct");
+  var streamEl  = card.querySelector(".hud-stream");
+  var sideLabel = card.querySelector(".hud-label-side");
 
   card.classList.remove("hidden");
   streamEl.innerHTML = "";
@@ -776,15 +779,15 @@ function startAIHUD(hasSide) {
   _hudPhaseTimer = setTimeout(nextPhase, 2100);
 }
 
-function stopAIHUD() {
+function stopAIHUD(cardId) {
   if (_hudRAF)        { cancelAnimationFrame(_hudRAF); _hudRAF = null; }
   if (_hudPhaseTimer) { clearTimeout(_hudPhaseTimer); _hudPhaseTimer = null; }
-  var fillEl = document.getElementById("hudBarFill");
-  var pctEl  = document.getElementById("hudBarPct");
+  var card   = document.getElementById(cardId || "aiLoading");
+  var fillEl = card ? card.querySelector(".hud-bar-fill") : null;
+  var pctEl  = card ? card.querySelector(".hud-bar-pct") : null;
   if (fillEl) { fillEl.style.transition = "width .3s ease"; fillEl.style.width = "100%"; }
   if (pctEl)  pctEl.textContent = "100%";
   setTimeout(function() {
-    var card = document.getElementById("aiLoading");
     if (card) card.classList.add("hidden");
   }, 380);
 }
@@ -2329,9 +2332,12 @@ function pwRecheck(silent) {
         var slot = which === "A" ? "cmpThumbA" : "cmpThumbB";
         var ph   = which === "A" ? "cmpPhA" : "cmpPhB";
         var imgEl= which === "A" ? "cmpImgA" : "cmpImgB";
+        var scan = which === "A" ? "cmpScanA" : "cmpScanB";
         $(imgEl).src = e.target.result;
         $(ph).classList.add("hidden"); $(slot).classList.remove("hidden");
+        $(scan).classList.remove("hidden"); // MediaPipe init + detect может занять время на первом фото — виден прогресс
         var res = await detectFace(img);
+        $(scan).classList.add("hidden");
         if (which === "A") A = res; else B = res;
         cmpErr("");
         if (A && B) $("cmpRunBtn").classList.remove("hidden");
@@ -2383,24 +2389,24 @@ function pwRecheck(silent) {
 
   function doCompare(){
     $("cmpSetup").classList.add("hidden");
-    $("cmpLoading").classList.remove("hidden");
+    startAIHUD(false, "cmpLoading");
     var acc = getAccount();
     var images = [oneToBase64(A.canvas), oneToBase64(B.canvas)];
     fetch(WORKER_URL, {
       method:"POST", headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ prompt: comparePrompt(), images: images, token: acc ? acc.token : null })
     }).then(function(r){ return r.json(); }).then(function(d){
-      if (d.error){ $("cmpLoading").classList.add("hidden"); showGate(d); $("compareSection").scrollIntoView({behavior:"smooth"}); return; }
+      if (d.error){ stopAIHUD("cmpLoading"); showGate(d); $("compareSection").scrollIntoView({behavior:"smooth"}); return; }
       var parsed = parseCompare(d.text || "");
-      if (parsed.a === null || parsed.b === null){ $("cmpLoading").classList.add("hidden"); showSetup(); cmpErr(t("cmpErrGen")); return; }
+      if (parsed.a === null || parsed.b === null){ stopAIHUD("cmpLoading"); showSetup(); cmpErr(t("cmpErrGen")); return; }
       if (typeof d.creditsLeft !== "undefined") updateQuotaChip(d.freeLeft, d.creditsLeft, d.subscribed, d.unlimUntil);
       lastResult = parsed;
       renderCmpCats(parsed);
       buildCompareCard(parsed).then(function(){
-        $("cmpLoading").classList.add("hidden");
+        stopAIHUD("cmpLoading");
         $("cmpResult").classList.remove("hidden");
       });
-    }).catch(function(){ $("cmpLoading").classList.add("hidden"); showSetup(); cmpErr(t("cmpErrGen")); });
+    }).catch(function(){ stopAIHUD("cmpLoading"); showSetup(); cmpErr(t("cmpErrGen")); });
   }
 
   function parseCompare(txt){
