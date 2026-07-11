@@ -1803,10 +1803,6 @@ function roundRect(c2, x, y, w, h, r) {
 })();
 
 /* ───────────────────  Боковая шторка: меню / история / словарь / how / фидбек  ─────────────────── */
-// Куда приходят сообщения обратной связи. Можно заменить email на «секретный»
-// алиас FormSubmit (выдаётся после активации), чтобы не светить почту в коде.
-var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com";
-
 (function initViews() {
   var view  = document.getElementById("fsView");
   if (!view) return;
@@ -1828,7 +1824,6 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
     history: { titleKey: "tHistory", render: renderHistory },
     glossary: { titleKey: "tGlossary", render: renderGlossary },
     how: { titleKey: "tHow", render: renderHow },
-    feedback: { titleKey: "tFeedback", render: renderFeedback },
   };
 
   function renderHistory(box) {
@@ -1858,32 +1853,6 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
     box.innerHTML = t("howHtml");
   }
 
-  function renderFeedback(box) {
-    box.innerHTML =
-      "<p class='dm-sub'>" + t("fbSub") + "</p>" +
-      "<form id='fbForm' class='fb-form'>" +
-      "<input class='fb-input' name='name' type='text' placeholder='" + t("fbName") + "' />" +
-      "<input class='fb-input' name='email' type='email' placeholder='" + t("fbEmail") + "' />" +
-      "<textarea class='fb-input fb-textarea' name='message' placeholder='" + t("fbMsg") + "' required></textarea>" +
-      "<div class='fb-status' id='fbStatus'></div>" +
-      "<button class='fb-send-btn' type='submit'>" + t("fbSend") + "</button>" +
-      "</form>";
-    var form = box.querySelector("#fbForm"), status = box.querySelector("#fbStatus");
-    form.addEventListener("submit", function(e){
-      e.preventDefault();
-      status.style.color = "var(--text-dim)"; status.textContent = t("fbSending");
-      fetch(FEEDBACK_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ name: form.name.value || "—", email: form.email.value || "—", message: form.message.value, _subject: "FaceRate: обратная связь" }),
-      }).then(function(r){ return r.json(); }).then(function(d){
-        if (d && (d.success === "true" || d.success === true)) {
-          status.style.color = "#c4a46b"; status.textContent = t("fbOk"); form.reset();
-        } else { throw new Error("fail"); }
-      }).catch(function(){ status.style.color = "#ff5555"; status.textContent = t("fbErr"); });
-    });
-  }
-
   // глобальный доступ (например из iframe словаря)
   window.fmOpenView = function(name){ openView(name); };
   window.fmOpenDrawer = window.fmOpenView; // обратная совместимость
@@ -1892,7 +1861,12 @@ var FEEDBACK_ENDPOINT = "https://formsubmit.co/ajax/realfactchecknews@gmail.com"
   back.addEventListener("click", closeView);
   // плитки меню + ссылки футера с data-view
   document.querySelectorAll("[data-view]").forEach(function(el){
-    el.addEventListener("click", function(e){ e.preventDefault(); openView(el.getAttribute("data-view")); });
+    el.addEventListener("click", function(e){
+      e.preventDefault();
+      var name = el.getAttribute("data-view");
+      if (name === "feedback") { location.href = "feedback.html"; return; }
+      openView(name);
+    });
   });
 
   // Большая 3D-пилюля в меню: левитация + наклон за курсором.
