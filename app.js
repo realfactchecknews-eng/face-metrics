@@ -120,7 +120,6 @@ var I18N = {
       "<div class='how-step'><div class='how-step-num'>3</div><div class='how-step-body'><h4>Full report</h4><p>An overall PSL-style score, an 8-category breakdown (symmetry, eyes/canthal tilt, midface, jawline, nose, lips/cheekbones, skin, grooming), and 8-9 concrete, actionable recommendations.</p></div></div>" +
       "<div class='how-step'><div class='how-step-num'>4</div><div class='how-step-body'><h4>Track & compare</h4><p>Every score is saved to your history so you can track progress over time, share a result card, or run a head-to-head \"Who Moggs\" comparison against a friend.</p></div></div>" +
       "</div>" +
-      "<div class='how-tech'><span>468 landmarks</span><span>On-device geometry</span><span>MediaPipe</span><span>Vision AI</span><span>8 score categories</span></div>" +
       "<p class='how-note'>Entertainment only. The score is a subjective AI heuristic, not objective truth — treat it accordingly. Mild asymmetry is normal for every human face.</p></div>",
     fbSub: "What should we improve? What's missing? Found a bug? Tell us — it really helps.",
     fbName: "Name or nick (optional)", fbEmail: "Email for reply (optional)", fbMsg: "Your message…",
@@ -207,7 +206,6 @@ var I18N = {
       "<div class='how-step'><div class='how-step-num'>3</div><div class='how-step-body'><h4>Полный отчёт</h4><p>Общий PSL-балл, разбор по 8 категориям (симметрия, глаза/кантальный наклон, мидфейс, джоулайн, нос, губы/скулы, кожа, груминг) и 8-9 конкретных, применимых рекомендаций.</p></div></div>" +
       "<div class='how-step'><div class='how-step-num'>4</div><div class='how-step-body'><h4>Прогресс и сравнение</h4><p>Каждый результат сохраняется в историю, чтобы отслеживать прогресс, делиться карточкой результата или устроить дуэль «Who Moggs» с другом.</p></div></div>" +
       "</div>" +
-      "<div class='how-tech'><span>468 точек лица</span><span>Геометрия на устройстве</span><span>MediaPipe</span><span>Vision AI</span><span>8 категорий оценки</span></div>" +
       "<p class='how-note'>Только развлечение. Балл — субъективная эвристика ИИ, а не объективная истина. Лёгкая асимметрия — норма для любого лица.</p></div>",
     fbSub: "Что улучшить? Чего не хватает? Нашли ошибку? Напишите — это реально помогает.",
     fbName: "Имя или ник (необязательно)", fbEmail: "Email для ответа (необязательно)", fbMsg: "Ваше сообщение…",
