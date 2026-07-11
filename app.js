@@ -113,6 +113,7 @@ var I18N = {
     histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
     histAvg: "Average score: ", histCount: " · analyses: ",
     howHtml: "<div class='how'>" +
+      "<div class='how-hero'><img src='how-scan.jpg' alt='AI face landmark scanning' loading='lazy' /></div>" +
       "<p class='how-intro'>FaceRate turns one photo into a structured, numbers-first breakdown of your facial geometry — the same landmark math used in anthropometry and clinical photogrammetry, just automated and instant.</p>" +
       "<div class='how-steps'>" +
       "<div class='how-step'><div class='how-step-num'>1</div><div class='how-step-body'><h4>On-device face mapping</h4><p>468 facial landmarks are detected right in your browser via MediaPipe — cheekbone width, jaw width, fWHR, canthal tilt, symmetry score, face shape. Nothing leaves your device at this step.</p></div></div>" +
@@ -199,6 +200,7 @@ var I18N = {
     histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
     histAvg: "Средний балл: ", histCount: " · оценок: ",
     howHtml: "<div class='how'>" +
+      "<div class='how-hero'><img src='how-scan.jpg' alt='Сканирование лица нейросетью' loading='lazy' /></div>" +
       "<p class='how-intro'>FaceRate превращает одну фотографию в структурированный, основанный на цифрах разбор геометрии лица — те же принципы, что в антропометрии и клинической фотограмметрии, только автоматизированные и мгновенные.</p>" +
       "<div class='how-steps'>" +
       "<div class='how-step'><div class='how-step-num'>1</div><div class='how-step-body'><h4>Разметка лица на устройстве</h4><p>468 точек лица определяются прямо в браузере через MediaPipe — ширина скул, ширина челюсти, fWHR, кантальный наклон, симметрия, форма лица. Фото на этом шаге никуда не отправляется.</p></div></div>" +

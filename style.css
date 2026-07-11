@@ -1712,6 +1712,8 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 .how-step-num { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
 .how-step-body h4 { margin: 0 0 6px; font-size: 1.2rem; font-weight: 400; color: var(--text-bright); }
 .how-step-body p { margin: 0; font-size: 1.02rem; color: var(--text-dim); line-height: 1.7; }
+.how-hero { width: 100%; border-radius: 14px; overflow: hidden; margin-bottom: 30px; border: 1px solid var(--border, #1c1c1c); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+.how-hero img { display: block; width: 100%; height: auto; }
 
 /* ═════════  ПОЛНОЭКРАННОЕ МЕНЮ  ═════════ */
 .menu-screen {
