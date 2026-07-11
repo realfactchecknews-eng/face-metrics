@@ -37,7 +37,7 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 999, rub: 1999, lavaRub: 1999, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
+  m1: { type: 'unlim',  hours: 720,  stars: 1499, rub: 1999, lavaRub: 1999, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
 };
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
 function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }

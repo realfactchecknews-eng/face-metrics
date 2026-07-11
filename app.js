@@ -2211,7 +2211,7 @@ function showPaywall(state, st) {
     var packs = (st && st.packs) || {
       p1: { stars: 49, rub: 79, lavaRub: 79 }, p5: { stars: 100, rub: 149, lavaRub: 149 },
       h1: { stars: 199, rub: 299, lavaRub: 299 },
-      d1: { stars: 349, rub: 499, lavaRub: 499 }, m1: { stars: 999, rub: 1999, lavaRub: 1999 },
+      d1: { stars: 349, rub: 499, lavaRub: 499 }, m1: { stars: 1499, rub: 1999, lavaRub: 1999 },
     };
     var methods = (st && st.methods) || ["stars"];
     var packNames = { p1: t("packP1"), p5: t("packP5"), h1: "⏱ " + t("packH1"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1") };
