@@ -74,6 +74,7 @@ export default {
       if (path === '/me')         return await me(request, env);
       if (path === '/buy')        return await buy(request, env);
       if (path === '/sendcard')   return await sendCard(request, env);
+      if (path === '/feedback')   return await submitFeedback(request, env);
       return await analyze(request, env);
     } catch (e) {
       return json({ error: 'server', text: 'Внутренняя ошибка: ' + e.message });
@@ -331,6 +332,37 @@ async function sendCard(request, env) {
   const r = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd })
     .then(x => x.json()).catch(e => ({ ok: false, description: e.message }));
   if (!r.ok) return json({ error: 'send', text: r.description || 'send failed' });
+  return json({ ok: true });
+}
+
+// Форма обратной связи на сайте: 1 бесплатный анализ один раз за аккаунт, ответы падают админу в ЛС.
+async function submitFeedback(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const sess = await getSession(env, body.token);
+  if (!sess) return json({ error: 'auth' });
+  const tgid = sess.id;
+  if (await env.RATE_LIMIT.get(`feedbackDone:${tgid}`)) {
+    return json({ error: 'already', text: 'Вы уже проходили этот опрос.' });
+  }
+  const clamp10 = (v) => Math.min(10, Math.max(1, parseInt(v, 10) || 0));
+  const design = clamp10(body.design);
+  const features = clamp10(body.features);
+  const analysis = clamp10(body.analysis);
+  const suggestions = String(body.suggestions || '').slice(0, 2000).trim();
+  const wantsCollab = !!body.collab;
+  const contact = wantsCollab ? String(body.contact || '').slice(0, 300).trim() : '';
+
+  await env.RATE_LIMIT.put(`feedbackDone:${tgid}`, '1', { expirationTtl: 60 * 60 * 24 * 365 });
+  const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+  await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + 1));
+
+  const uname = sess.username ? '@' + sess.username : `id${tgid}`;
+  let msg = `📝 Новый отзыв (${uname})\n\nДизайн: ${design}/10\nФункции: ${features}/10\nКачество анализа: ${analysis}/10`;
+  if (suggestions) msg += `\n\nПредложения:\n${suggestions}`;
+  if (wantsCollab) msg += `\n\n🤝 Хочет сотрудничать!${contact ? `\nКонтакт: ${contact}` : ''}`;
+  for (const adminId of adminIds(env)) {
+    await tgApi(env, 'sendMessage', { chat_id: adminId, text: msg }).catch(() => {});
+  }
   return json({ ok: true });
 }
 
