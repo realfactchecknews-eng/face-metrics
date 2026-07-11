@@ -470,9 +470,10 @@ async function lavaWebhook(request, env) {
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     const promoUsed = await peekOrderPromoCode(env, tgid);
-    const orderId = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '', promo: promoUsed });
+    const { id: orderId, isFirst } = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'card', upd.amount))) await trackReferralPurchase(env, tgid, pack, 'card', upd.amount);
-    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
+    const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
+    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : ''), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
 }
@@ -531,9 +532,10 @@ async function cryptoWebhook(request, env) {
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     const promoUsed = await peekOrderPromoCode(env, tgid);
-    const orderId = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '', promo: promoUsed });
+    const { id: orderId, isFirst } = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount)))) await trackReferralPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount));
-    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId), reply_markup: menuKb(L), parse_mode: 'HTML' });
+    const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
+    await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : ''), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
 }
@@ -609,7 +611,8 @@ const BL = {
     payUnlim: (d) => `👑 unlimited until ${d}`,
     paySub: (d) => `👑 month unlimited until ${d}`,
     payRec: ', auto-renewal is on',
-    payOk: (n, id) => `✅ Payment received! ${n}.\nGo back to facerate.ru — everything is updated.${id ? `\n\nOrder ID: <code>${id}</code> (quote it if you write to support)` : ''}`,
+    payOk: (n, id, bonus) => `✅ Payment received! ${n}.\nGo back to facerate.ru — everything is updated.${id ? `\n\nOrder ID: <code>${id}</code> (quote it if you write to support)` : ''}${bonus ? `\n\n${bonus}` : ''}`,
+    firstBuyBonus: (p) => `🎁 Thanks for your first purchase! Here's ${p}% off your next one — it's already applied automatically, just buy within 30 days.`,
     langSet: '🌍 Language set: English.',
     pickLang: '🌍 Choose language / Выбери язык:',
   },
@@ -660,7 +663,8 @@ const BL = {
     payUnlim: (d) => `👑 безлимит до ${d}`,
     paySub: (d) => `👑 месячный безлимит до ${d}`,
     payRec: ', автопродление включено',
-    payOk: (n, id) => `✅ Оплата получена! ${n}.\nВозвращайся на facerate.ru — всё уже обновлено.${id ? `\n\nID заказа: <code>${id}</code> (укажи его, если напишешь в поддержку)` : ''}`,
+    payOk: (n, id, bonus) => `✅ Оплата получена! ${n}.\nВозвращайся на facerate.ru — всё уже обновлено.${id ? `\n\nID заказа: <code>${id}</code> (укажи его, если напишешь в поддержку)` : ''}${bonus ? `\n\n${bonus}` : ''}`,
+    firstBuyBonus: (p) => `🎁 Спасибо за первую покупку! Дарим скидку ${p}% на следующую — она уже применена автоматически, просто купи в течение 30 дней.`,
     langSet: '🌍 Язык переключён: русский.',
     pickLang: '🌍 Choose language / Выбери язык:',
   },
@@ -808,6 +812,24 @@ async function tgWebhook(request, env) {
       await env.RATE_LIMIT.put(`promo:${m[1].toUpperCase()}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
       await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Промокод ${m[1].toUpperCase()} создан: ${m[2]} активаций, ${m[3]}=${m[4]}.\nКидай его в канал — это и есть розыгрыш.` });
     }
+    return new Response('ok');
+  }
+
+  // ── Админ: /grantpastbuyers — разовая раздача скидки 20% всем, кто хоть раз покупал.
+  // Не трогает тех, у кого уже есть pendingDiscount (промокод/рефералка) — не плюсуется.
+  if (text.startsWith('/grantpastbuyers') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '⏳ Раздаю скидку прошлым покупателям...' });
+    let granted = 0, skipped = 0, cursor;
+    do {
+      const page = await env.RATE_LIMIT.list({ prefix: 'orders:', cursor });
+      for (const k of page.keys) {
+        const buyerId = k.name.slice('orders:'.length);
+        const ok = await grantFirstPurchaseBonus(env, buyerId);
+        if (ok) granted++; else skipped++;
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Готово: скидка 20% выдана ${granted} покупателям, пропущено ${skipped} (у них уже была своя скидка).` });
     return new Response('ok');
   }
 
@@ -1035,7 +1057,7 @@ async function handlePayment(env, msg, L) {
     }
     const paidAmount = sp.currency === 'XTR' ? sp.total_amount : sp.total_amount / 100;
     const promoUsed = await peekOrderPromoCode(env, tgid);
-    const orderId = await recordOrder(env, {
+    const { id: orderId, isFirst } = await recordOrder(env, {
       tgid, pack: payload.pack || '', method: sp.currency === 'XTR' ? 'stars' : 'rub',
       amount: paidAmount, currency: sp.currency,
       username: msg.from.username || '', name: msg.from.first_name || '',
@@ -1043,7 +1065,8 @@ async function handlePayment(env, msg, L) {
     });
     const payMethod = sp.currency === 'XTR' ? 'stars' : 'rub';
     if (!(await trackMediaPromoPurchase(env, tgid, pack, payMethod, paidAmount))) await trackReferralPurchase(env, tgid, pack, payMethod, paidAmount);
-    await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note, orderId), reply_markup: menuKb(L || 'en'), parse_mode: 'HTML' });
+    const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
+    await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note, orderId, gotBonus ? b.firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : ''), reply_markup: menuKb(L || 'en'), parse_mode: 'HTML' });
   } catch { /* payload сломан — молча игнор */ }
 }
 
@@ -1953,9 +1976,23 @@ async function recordOrder(env, entry) {
   await logTx(env, full);
   const key = `orders:${entry.tgid}`;
   const list = await getList(env, key);
+  const isFirst = list.length === 0;
   list.unshift({ ...full, ts: Date.now() });
   await putList(env, key, list.slice(0, 20), 60 * 60 * 24 * 365);
-  return id;
+  return { id, isFirst };
+}
+
+// Автопромо: 20% на следующую покупку после самой первой — начисляется через тот же
+// механизм pendingDiscount, что и ручные промокоды/рефералка (buyerDiscountPct его подхватит).
+// TTL длиннее обычных 24ч (30 дней), т.к. это награда, а не срочный купон.
+const FIRST_BUY_DISCOUNT_PCT = 20;
+// Не плюсуется и не перетирает уже висящую скидку (промокод/рефералка) — если там уже
+// что-то есть, оставляем как есть, чтобы не срезать более щедрую скидку и не задваивать.
+async function grantFirstPurchaseBonus(env, tgid) {
+  const existing = await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`);
+  if (existing) return false;
+  await env.RATE_LIMIT.put(`pendingDiscount:${tgid}`, String(FIRST_BUY_DISCOUNT_PCT), { expirationTtl: 60 * 60 * 24 * 30 });
+  return true;
 }
 async function ordersText(env, tgid, L) {
   const list = await getList(env, `orders:${tgid}`);
