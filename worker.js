@@ -1,7 +1,7 @@
 // ─── FaceRate worker: анализ + аккаунты (Telegram) + квоты + Stars-платежи ───
 //
 // Роуты:
-//   POST /            — анализ (нужен token сессии; 1 free/день за подписку на канал, дальше кредиты)
+//   POST /            — анализ (нужен token сессии; 1 free/неделю за подписку на канал, дальше кредиты)
 //   POST /auth        — вход через Telegram Login Widget (проверка hash)
 //   POST /me          — статус аккаунта (квота, кредиты, подписка)
 //   POST /buy            — создать инвойс: method=stars|rub|crypto (по умолчанию stars)
@@ -19,9 +19,11 @@
 //          MEDIA_BOT_TOKEN (бот для медийных партнёров — своя статистика по реф-коду), MEDIA_WEBHOOK_SECRET (опц.).
 // KV: RATE_LIMIT.
 
-const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/день
+const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/неделю
 const LAVA_MIN_RUB = 50;                 // минимальная сумма инвойса у Lava.top — ниже нельзя ни при какой скидке
-const FREE_PER_DAY = 1;                  // бесплатных анализов в день подписчику
+const FREE_PER_WEEK = 1;                 // бесплатных анализов в неделю подписчику
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+function weekBucket() { return Math.floor(Date.now() / WEEK_MS); } // сброс раз в 7 дней от эпохи
 const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
 const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
   p1: { type: 'credits', credits: 1, stars: 29,  rub: 50,  label: '1 анализ', labelEn: '1 analysis' }, // 50₽ — минималка Lava.top
@@ -117,21 +119,21 @@ async function analyze(request, env) {
   if (!sess) return json({ error: 'auth', text: 'Войдите через Telegram, чтобы получить бесплатный анализ.' });
   const tgid = sess.id;
 
-  // Квота: безлимит → подписка на канал (1 free/день) → кредиты.
+  // Квота: безлимит → подписка на канал (1 free/неделю) → кредиты.
   const unlimUntil = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
   const subscribed = await isSubscribed(env, tgid);
-  const freeKey = `q:${tgid}:${today}`;
+  const freeKey = `qw:${tgid}:${weekBucket()}`;
   const freeUsed = parseInt(await env.RATE_LIMIT.get(freeKey) || '0', 10);
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
 
   let mode = null;
   if (unlimUntil > Date.now()) mode = 'unlim';
-  else if (subscribed && freeUsed < FREE_PER_DAY) mode = 'free';
+  else if (subscribed && freeUsed < FREE_PER_WEEK) mode = 'free';
   else if (credits > 0) mode = 'paid';
   else if (!subscribed) {
-    return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в день.', channel: CHANNEL });
+    return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в неделю.', channel: CHANNEL });
   } else {
-    return json({ error: 'pay', text: 'Бесплатный анализ на сегодня использован. Купи кредиты, чтобы продолжить.', packs: PACKS });
+    return json({ error: 'pay', text: 'Бесплатный анализ на этой неделе уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS });
   }
 
   // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
@@ -185,11 +187,11 @@ async function analyze(request, env) {
     return json({ error: 'model', text: `Сервис перегружен, попробуйте ещё раз. (${lastErr})` });
   }
 
-  // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик дня; paid → минус кредит.
-  let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_DAY - freeUsed) : 0;
+  // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели; paid → минус кредит.
+  let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_WEEK - freeUsed) : 0;
   if (mode === 'free') {
-    await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 93600 });
-    freeLeft = FREE_PER_DAY - freeUsed - 1;
+    await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
+    freeLeft = FREE_PER_WEEK - freeUsed - 1;
   } else if (mode === 'paid') {
     creditsLeft = credits - 1;
     await env.RATE_LIMIT.put(`credits:${tgid}`, String(creditsLeft));
@@ -246,14 +248,13 @@ async function me(request, env) {
 }
 
 async function statusFor(env, user, token, fresh) {
-  const today = new Date().toISOString().slice(0, 10);
   const subscribed = await isSubscribed(env, user.id, fresh);
-  const freeUsed = parseInt(await env.RATE_LIMIT.get(`q:${user.id}:${today}`) || '0', 10);
+  const freeUsed = parseInt(await env.RATE_LIMIT.get(`qw:${user.id}:${weekBucket()}`) || '0', 10);
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${user.id}`) || '0', 10);
   const unlimUntil = parseInt(await env.RATE_LIMIT.get(`unlim:${user.id}`) || '0', 10);
   return {
     token, user, subscribed,
-    freeLeft: subscribed ? Math.max(0, FREE_PER_DAY - freeUsed) : 0,
+    freeLeft: subscribed ? Math.max(0, FREE_PER_WEEK - freeUsed) : 0,
     credits, channel: CHANNEL, packs: PACKS, methods: enabledMethods(env),
     unlimUntil: unlimUntil > Date.now() ? unlimUntil : 0,
   };
@@ -607,12 +608,12 @@ const BL = {
     shop1: (s) => `1 analysis — ${s}⭐`, shop5: (s) => `5 — ${s}⭐`,
     shopD: (s) => `🔥 Day unlimited — ${s}⭐`, shopM: (s) => `👑 Month unlimited — ${s}⭐`,
     loginOk: '✅ Logged in! Go back to the site — the page will pick up your account automatically.',
-    hello: '🖤 FaceRate — AI face rating by looksmaxxing canons.\n\nSubscribe to ' + CHANNEL + ' = 1 free analysis per day.',
+    hello: '🖤 FaceRate — AI face rating by looksmaxxing canons.\n\nSubscribe to ' + CHANNEL + ' = 1 free analysis per week.',
     statusHead: '💎 Your status:\n',
     statusUnlim: (d) => `👑 Unlimited until ${d}\n`,
     statusCredits: (n) => `⭐ Credits: ${n}\n`,
-    statusSub: (n) => `✅ Subscribed to the channel — free today: ${n}\n`,
-    statusNoSub: `❌ Not subscribed to ${CHANNEL} — subscribe for 1 free analysis per day\n`,
+    statusSub: (n) => `✅ Subscribed to the channel — free this week: ${n}\n`,
+    statusNoSub: `❌ Not subscribed to ${CHANNEL} — subscribe for 1 free analysis per week\n`,
     subDesc: 'Month unlimited. Auto-renews — cancel anytime in Telegram settings.',
     packDesc: (l) => l + ' on facerate.ru',
     invoiceFail: (e) => 'Could not create invoice: ' + e,
@@ -660,12 +661,12 @@ const BL = {
     shop1: (s) => `1 анализ — ${s}⭐`, shop5: (s) => `5 — ${s}⭐`,
     shopD: (s) => `🔥 Безлимит на день — ${s}⭐`, shopM: (s) => `👑 Безлимит на месяц — ${s}⭐`,
     loginOk: '✅ Вход выполнен! Возвращайся на сайт — страница подхватит аккаунт сама.',
-    hello: '🖤 FaceRate — AI-оценка лица по канонам луксмаксинга.\n\nПодписка на ' + CHANNEL + ' = 1 бесплатный анализ в день.',
+    hello: '🖤 FaceRate — AI-оценка лица по канонам луксмаксинга.\n\nПодписка на ' + CHANNEL + ' = 1 бесплатный анализ в неделю.',
     statusHead: '💎 Твой статус:\n',
     statusUnlim: (d) => `👑 Безлимит до ${d}\n`,
     statusCredits: (n) => `⭐ Кредиты: ${n}\n`,
-    statusSub: (n) => `✅ Подписан на канал — бесплатных сегодня: ${n}\n`,
-    statusNoSub: `❌ Не подписан на ${CHANNEL} — подпишись и получай 1 бесплатный анализ в день\n`,
+    statusSub: (n) => `✅ Подписан на канал — бесплатных на этой неделе: ${n}\n`,
+    statusNoSub: `❌ Не подписан на ${CHANNEL} — подпишись и получай 1 бесплатный анализ в неделю\n`,
     subDesc: 'Безлимит на месяц. Автопродление — отключается в настройках Telegram в любой момент.',
     packDesc: (l) => l + ' на facerate.ru',
     invoiceFail: (e) => 'Не удалось выставить счёт: ' + e,
@@ -910,15 +911,14 @@ async function handleCallback(env, cq) {
   if (data === 'menu') {
     await reply(b.menu, menuKb(L));
   } else if (data === 'status') {
-    const today = new Date().toISOString().slice(0, 10);
     const credits = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
-    const freeUsed = parseInt(await env.RATE_LIMIT.get(`q:${tgid}:${today}`) || '0', 10);
+    const freeUsed = parseInt(await env.RATE_LIMIT.get(`qw:${tgid}:${weekBucket()}`) || '0', 10);
     const unlim = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
     const sub = await isSubscribed(env, tgid, true);
     let t = b.statusHead;
     if (unlim > Date.now()) t += b.statusUnlim(fmtDate(unlim, L));
     t += b.statusCredits(credits);
-    t += sub ? b.statusSub(Math.max(0, FREE_PER_DAY - freeUsed)) : b.statusNoSub;
+    t += sub ? b.statusSub(Math.max(0, FREE_PER_WEEK - freeUsed)) : b.statusNoSub;
     await reply(t, menuKb(L));
   } else if (data === 'shop') {
     // Шаг 1: выбор способа оплаты.
@@ -1151,7 +1151,7 @@ const SUP = {
     sent: '✅ Sent to the operator. Please wait for a reply.',
     noAdmin: 'Operator is temporarily unavailable, please try later.',
     langSet: '🌍 Language set: English.',
-    faq: '❓ FAQ\n\n• Free analysis — subscribe to @wwwfacerateru (1/day).\n• Paid — Telegram Stars or crypto in the payments bot.\n• No access after paying? Refresh facerate.ru; if it persists — tap “Call an operator”.\n• Promo codes — button in the payments bot; codes drop in channel giveaways.\n• Privacy — your photo is used only for the analysis and is not published.\n\nStill stuck? Just type your question here.',
+    faq: '❓ FAQ\n\n• Free analysis — subscribe to @wwwfacerateru (1/week).\n• Paid — Telegram Stars or crypto in the payments bot.\n• No access after paying? Refresh facerate.ru; if it persists — tap “Call an operator”.\n• Promo codes — button in the payments bot; codes drop in channel giveaways.\n• Privacy — your photo is used only for the analysis and is not published.\n\nStill stuck? Just type your question here.',
   },
   ru: {
     hello: '👋 Поддержка FaceRate. Задай вопрос — отвечу сразу. Или выбери пункт ниже.',
@@ -1162,7 +1162,7 @@ const SUP = {
     sent: '✅ Отправлено оператору. Дождись ответа.',
     noAdmin: 'Оператор временно недоступен, попробуй позже.',
     langSet: '🌍 Язык переключён: русский.',
-    faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в день).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
+    faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в неделю).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
   },
 };
 function supMenuKb(L, isAdmin) {
@@ -1370,14 +1370,14 @@ async function findOrderById(env, id) {
 const SUP_FAQ = {
   ru: `Ты — вежливый саппорт сервиса FaceRate (facerate.ru) — это AI-оценка лица по канонам луксмаксинга (сайт + Telegram-бот).
 Факты:
-- Бесплатно: подписка на канал @wwwfacerateru даёт 1 бесплатный анализ в день.
+- Бесплатно: подписка на канал @wwwfacerateru даёт 1 бесплатный анализ в неделю.
 - Платно: пакеты «1 анализ», «5 анализов», «безлимит на день», «безлимит на месяц». Оплата — Telegram Stars или криптой (через CryptoBot), цена в звёздах или рублях.
 - Вход на сайте — через Telegram. После оплаты доступ появляется автоматически, обнови страницу.
 - Промокоды: в боте кнопка «Ввести промокод»; коды бывают в розыгрышах в канале.
 Отвечай кратко (2–4 предложения), на русском. Если вопрос про возврат денег, проблему с оплатой, доступ после оплаты, баг или что-то, в чём не уверен — не выдумывай, а попроси нажать «Позвать оператора».`,
   en: `You are the polite support agent for FaceRate (facerate.ru) — AI face rating by looksmaxxing canons (website + Telegram bot).
 Facts:
-- Free: subscribing to the @wwwfacerateru channel gives 1 free analysis per day.
+- Free: subscribing to the @wwwfacerateru channel gives 1 free analysis per week.
 - Paid: packages "1 analysis", "5 analyses", "day unlimited", "month unlimited". Payment via Telegram Stars or crypto (CryptoBot), priced in stars or rubles.
 - Login on the site is via Telegram. After payment access appears automatically — refresh the page.
 - Promo codes: the bot has an "Enter promo code" button; codes appear in channel giveaways.
