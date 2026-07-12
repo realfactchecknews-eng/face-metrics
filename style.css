@@ -264,8 +264,8 @@ html, body {
 }
 .bp-pill-wrap {
   position: relative;
-  width: 84px;
-  height: 35px;
+  width: 132px;
+  height: 55px;
   margin: 0 auto 10px;
   transform-style: preserve-3d;
 }
