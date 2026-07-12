@@ -98,7 +98,7 @@
     <div class="bp-scene ls-a" id="bpScene" style="--d:0.38s">
       <div class="bp-pill-wrap" id="bpPillWrap">
         <model-viewer class="menu-pill-3d" id="bpPill3d" src="assets/pill3d/scene.gltf"
-          auto-rotate rotation-per-second="26deg" camera-controls="false"
+          auto-rotate auto-rotate-delay="0" rotation-per-second="26deg" camera-controls="false"
           disable-zoom disable-pan interaction-prompt="none"
           exposure="1.1" shadow-intensity="0" camera-orbit="0deg 78deg 105%"
           field-of-view="22deg" loading="eager" reveal="auto"></model-viewer>
@@ -152,7 +152,7 @@
     <div class="menu-pill-stage" id="menuPillStage">
       <div class="menu-pill-wrap" id="menuPillWrap">
         <model-viewer class="menu-pill-3d" src="assets/pill3d/scene.gltf"
-          auto-rotate rotation-per-second="18deg" camera-controls="false"
+          auto-rotate auto-rotate-delay="0" rotation-per-second="18deg" camera-controls="false"
           disable-zoom disable-pan interaction-prompt="none"
           exposure="1.1" shadow-intensity="0" camera-orbit="0deg 78deg 105%"
           field-of-view="22deg" loading="eager" reveal="auto"></model-viewer>
@@ -164,7 +164,7 @@
     <div class="menu-tiles">
       <button class="menu-tile" data-view="history"><span class="mt-ic">✦</span><span class="mt-tx"><b>История оценок</b><i>Прошлые результаты</i></span></button>
       <button class="menu-tile" data-view="glossary"><span class="mt-ic">❡</span><span class="mt-tx"><b>Луксмакс-словарь</b><i>Термины простыми словами</i></span></button>
-      <button class="menu-tile" data-view="articles"><span class="mt-ic">📖</span><span class="mt-tx"><b>Термины и статьи</b><i>PSL, fWHR, canthal tilt</i></span></button>
+      <button class="menu-tile" data-view="articles"><span class="mt-ic">❦</span><span class="mt-tx"><b>Термины и статьи</b><i>PSL, fWHR, canthal tilt</i></span></button>
       <button class="menu-tile" data-view="how"><span class="mt-ic">◎</span><span class="mt-tx"><b>Как это работает</b><i>Геометрия + AI</i></span></button>
       <button class="menu-tile" data-view="feedback"><span class="mt-ic">✎</span><span class="mt-tx"><b>Обратная связь</b><i>Пожелания и идеи</i></span></button>
     </div>
@@ -547,6 +547,6 @@
      Модель assets/pill3d/ — "Pill (Capsule)" by jaromir.ternavskiy, CC-BY-4.0:
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
-<script src="app.js?v=38"></script>
+<script src="app.js?v=39"></script>
 </body>
 </html>
