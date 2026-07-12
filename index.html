@@ -147,7 +147,11 @@
   <div class="menu-inner">
     <div class="menu-pill-stage" id="menuPillStage">
       <div class="menu-pill-wrap" id="menuPillWrap">
-        <div class="bp-pill"></div>
+        <model-viewer class="menu-pill-3d" src="assets/pill3d/scene.gltf"
+          auto-rotate rotation-per-second="18deg" camera-controls="false"
+          disable-zoom disable-pan interaction-prompt="none"
+          exposure="1.1" shadow-intensity="0" camera-orbit="0deg 78deg 105%"
+          field-of-view="22deg" loading="eager" reveal="auto"></model-viewer>
       </div>
       <div class="menu-pill-shadow"></div>
     </div>
@@ -467,6 +471,11 @@
       &nbsp;&middot;&nbsp;
       <a href="feedback.html" style="color:#888;text-decoration:none">Оставить отзыв</a>
     </p>
+    <p style="margin-top:6px;font-size:0.72rem;color:#555">
+      3D-модель "Pill (Capsule)" —
+      <a href="https://sketchfab.com/jaromir.ternavskiy" style="color:#666" target="_blank" rel="noopener">jaromir.ternavskiy</a>,
+      <a href="http://creativecommons.org/licenses/by/4.0/" style="color:#666" target="_blank" rel="noopener">CC-BY-4.0</a>
+    </p>
   </div>
 </footer>
 
@@ -544,6 +553,10 @@
 <button id="langBtn" class="mute-btn lang-btn" title="Language">RU</button>
 
 <!-- FaceLandmarker (tasks-vision) is loaded on demand via dynamic import() inside app.js -->
-<script src="app.js?v=36"></script>
+<!-- 3D-пилюля в меню: model-viewer (Google), только для рендера glTF, без сборки.
+     Модель assets/pill3d/ — "Pill (Capsule)" by jaromir.ternavskiy, CC-BY-4.0:
+     https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+<script src="app.js?v=37"></script>
 </body>
 </html>

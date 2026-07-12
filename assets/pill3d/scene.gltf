@@ -1,0 +1,301 @@
+{
+  "accessors": [
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 401,
+      "max": [
+        2.5,
+        1.0,
+        1.0
+      ],
+      "min": [
+        0.010599136352539062,
+        -1.0,
+        -1.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 4812,
+      "componentType": 5126,
+      "count": 401,
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 0,
+      "componentType": 5125,
+      "count": 2154,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 9624,
+      "componentType": 5126,
+      "count": 401,
+      "max": [
+        0.1170738935470581,
+        1.0677928924560547,
+        1.0746395587921143
+      ],
+      "min": [
+        -2.5450124740600586,
+        -1.0677928924560547,
+        -1.0667994022369385
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 14436,
+      "componentType": 5126,
+      "count": 401,
+      "max": [
+        0.9999932646751404,
+        1.0,
+        0.9999932050704956
+      ],
+      "min": [
+        -0.9999932050704956,
+        -1.0,
+        -0.9999932050704956
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 8616,
+      "componentType": 5125,
+      "count": 2154,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "extras": {
+      "author": "jaromir.ternavskiy (https://sketchfab.com/jaromir.ternavskiy)",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590",
+      "title": "Pill (Capsule)"
+    },
+    "generator": "Sketchfab-14.91.0",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 17232,
+      "name": "floatBufferViews",
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 19248,
+      "byteOffset": 17232,
+      "byteStride": 12,
+      "name": "floatBufferViews",
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 36480,
+      "uri": "scene.bin"
+    }
+  ],
+  "extensionsRequired": [
+    "KHR_materials_pbrSpecularGlossiness"
+  ],
+  "materials": [
+    {
+      "name": "GoldLight",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.85,
+          0.72,
+          0.47,
+          1.0
+        ],
+        "metallicFactor": 0.75,
+        "roughnessFactor": 0.28
+      },
+      "doubleSided": true
+    },
+    {
+      "name": "GoldDark",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.55,
+          0.42,
+          0.22,
+          1.0
+        ],
+        "metallicFactor": 0.85,
+        "roughnessFactor": 0.32
+      },
+      "doubleSided": true
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Roundcube_Material_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0
+          },
+          "indices": 2,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "Roundcube.001_Material.001_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 4,
+            "POSITION": 3
+          },
+          "indices": 5,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "children": [
+        1
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.220446049250313e-16,
+        -1.0,
+        0.0,
+        0.0,
+        1.0,
+        2.220446049250313e-16,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Sketchfab_model"
+    },
+    {
+      "children": [
+        2
+      ],
+      "matrix": [
+        0.009999999776482582,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.009999999776482582,
+        0.0,
+        0.0,
+        -0.009999999776482582,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "9818346c5c844249b3a846ac0b18a0bf.fbx"
+    },
+    {
+      "children": [
+        3,
+        5
+      ],
+      "name": "RootNode"
+    },
+    {
+      "children": [
+        4
+      ],
+      "matrix": [
+        100.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.629206793918314e-05,
+        -99.99999999999868,
+        0.0,
+        0.0,
+        99.99999999999868,
+        -1.629206793918314e-05,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Roundcube"
+    },
+    {
+      "mesh": 0,
+      "name": "Roundcube_Material_0"
+    },
+    {
+      "children": [
+        6
+      ],
+      "matrix": [
+        97.7315902709961,
+        0.0,
+        0.0,
+        0.0,
+        -0.0,
+        -1.5922497084994783e-05,
+        -97.7315902709948,
+        0.0,
+        0.0,
+        97.7315902709948,
+        -1.5922497084994783e-05,
+        0.0,
+        -4.008450984954834,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Roundcube.001"
+    },
+    {
+      "mesh": 1,
+      "name": "Roundcube.001_Material.001_0"
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Sketchfab_Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}

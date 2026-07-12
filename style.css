@@ -1745,7 +1745,12 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
   transform: rotateX(var(--rx)) rotateY(var(--ry));
   transition: transform .25s ease-out;
 }
-.menu-pill-wrap .bp-pill { width: 100%; height: 100%; }
+.menu-pill-3d {
+  width: 100%; height: 100%;
+  --poster-color: transparent;
+  background-color: transparent;
+  pointer-events: none;
+}
 .menu-pill-shadow {
   width: 60%; height: 16px; margin: 18px auto 0;
   background: radial-gradient(ellipse, rgba(0,0,0,0.6) 0%, transparent 70%);
