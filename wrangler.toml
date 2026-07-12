@@ -13,6 +13,11 @@ id = "252f7860538642e0a684414741893076"
 [vars]
 BOT_USERNAME = "faceratepay_bot"
 
+# Раз в час проверяет, не истёк ли активный розыгрыш (giveaway:current) — если да, сам
+# выбирает победителей, начисляет анализы и уведомляет. См. scheduled() в worker.js.
+[triggers]
+crons = ["0 * * * *"]
+
 # Секреты (НЕ хранить здесь) — задать через wrangler secret put:
 #   wrangler secret put OPENROUTER_API_KEY
 #   wrangler secret put TG_BOT_TOKEN

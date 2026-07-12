@@ -84,6 +84,10 @@ export default {
       return json({ error: 'server', text: 'Внутренняя ошибка: ' + e.message });
     }
   },
+  // Cron Trigger (см. [triggers] в wrangler.toml) — раз в час проверяет истёкшие розыгрыши.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(checkGiveawayDraw(env));
+  },
 };
 
 // Разовый вызов (защищён тем же секретом, что и сам вебхук) — перерегистрирует вебхук с
@@ -284,6 +288,67 @@ async function isSubscribed(env, tgid, fresh) {
   } catch { /* сеть — считаем не подписан, кэш короткий */ }
   await env.RATE_LIMIT.put(cacheKey, ok ? '1' : '0', { expirationTtl: 300 });
   return ok;
+}
+
+// ─────────────────────────── Розыгрыш (giveaway) ───────────────────────────
+// giveaway:current — {id, endTs, credits, winners, entries:[tgid,...]}. Один активный
+// розыгрыш одновременно. Участие — явный клик «Участвовать» + живая проверка подписки
+// на канал (fresh=true, не из кэша), иначе засчитать могли бы и неподписанных.
+async function getGiveaway(env) {
+  const raw = await env.RATE_LIMIT.get('giveaway:current');
+  return raw ? JSON.parse(raw) : null;
+}
+async function saveGiveaway(env, gw) {
+  await env.RATE_LIMIT.put('giveaway:current', JSON.stringify(gw), { expirationTtl: 60 * 60 * 24 * 21 });
+}
+
+// Собственно розыгрыш: случайный выбор победителей из entries, с ЖИВОЙ повторной проверкой
+// подписки перед начислением (человек мог отписаться после того, как нажал «Участвовать») —
+// если отписался, пропускаем его и тянем следующего из пула вместо него. Начисляет credits,
+// уведомляет каждого победителя лично, закрывает розыгрыш. Общая для /drawgiveaway (руками)
+// и scheduled() (само по истечении срока).
+async function runGiveawayDraw(env) {
+  const gw = await getGiveaway(env);
+  if (!gw) return { ok: false, reason: 'none' };
+  if (!gw.entries.length) {
+    await env.RATE_LIMIT.delete('giveaway:current');
+    return { ok: false, reason: 'empty' };
+  }
+  const pool = [...gw.entries];
+  const picked = [];
+  let unsubSkipped = 0;
+  while (picked.length < gw.winners && pool.length) {
+    const idx = Math.floor(Math.random() * pool.length);
+    const candidate = pool.splice(idx, 1)[0];
+    const stillSubscribed = await isSubscribed(env, candidate, true);
+    if (!stillSubscribed) { unsubSkipped++; continue; }
+    picked.push(candidate);
+  }
+  for (const winnerId of picked) {
+    const cur = parseInt(await env.RATE_LIMIT.get(`credits:${winnerId}`) || '0', 10);
+    await env.RATE_LIMIT.put(`credits:${winnerId}`, String(cur + gw.credits));
+    const wL = await userLang(env, winnerId);
+    await tgApi(env, 'sendMessage', { chat_id: winnerId, text: BL[wL].gwWinMsg(gw.credits) }).catch(() => {});
+  }
+  await env.RATE_LIMIT.delete('giveaway:current');
+  return { ok: true, gw, picked, unsubSkipped, totalEntries: gw.entries.length };
+}
+
+function giveawayResultsPost(r) {
+  return `🏆 Итоги розыгрыша!\n\nПобедители (по id): ${r.picked.join(', ')}\nКаждому начислено: ${r.gw.credits} бесплатных анализов.\n\nСпасибо всем, кто участвовал — новый розыгрыш скоро!`;
+}
+
+// Вызывается раз в час из scheduled() — если срок активного розыгрыша истёк, сам разыгрывает
+// и шлёт готовый пост-отчёт всем админам (SUPPORT_ADMIN_ID) в личку, постить в канал — руками.
+async function checkGiveawayDraw(env) {
+  const gw = await getGiveaway(env);
+  if (!gw || gw.endTs > Date.now()) return;
+  const r = await runGiveawayDraw(env);
+  if (!r.ok) return;
+  const notice = `⏰ Розыгрыш ${r.gw.id} завершён автоматически.\nУчастников: ${r.totalEntries}, победителей: ${r.picked.length}.${r.unsubSkipped ? ` (пропущено ${r.unsubSkipped} — отписались до розыгрыша)` : ''}\n\nГотовый пост для канала:\n\n---\n${giveawayResultsPost(r)}\n---`;
+  for (const adminId of adminIds(env)) {
+    await tgApi(env, 'sendMessage', { chat_id: adminId, text: notice }).catch(() => {});
+  }
 }
 
 // ─────────────────────────── Stars-платежи ───────────────────────────
@@ -628,6 +693,13 @@ const BL = {
     unsubNone: 'Subscription not found.',
     gw: '🎉 Giveaways of free analyses and unlimited passes happen in ' + CHANNEL + '.\n\nCatch promo codes in posts and enter them here via «🎁 Enter promo code». First come, first served.',
     kbChannel: '📢 Open channel',
+    kbGwJoin: '🙋 Enter the giveaway',
+    gwActive: (n, c, d) => `🎉 Giveaway is on!\n\n🏆 ${n} winner(s), ${c} free analyses each\n⏳ Draw: ${d}\n\nTo enter: subscribe to ${CHANNEL} and tap the button below.`,
+    gwNeedSub: `❌ You need to be subscribed to ${CHANNEL} to enter. Subscribe, then tap the button again.`,
+    gwJoined: (n) => `✅ You're in! ${n} people are entered so far. Good luck — winners get notified right here.`,
+    gwAlready: (n) => `✅ You're already entered (${n} participants so far). Sit tight, winners get notified here.`,
+    gwNone: `🎉 No giveaway running right now. Watch ${CHANNEL} for the next one.`,
+    gwWinMsg: (c) => `🏆 You won the FaceRate giveaway! +${c} free analyses have been added to your account. Enjoy!`,
     promoBad: "That doesn't look like a promo code. Try again from the menu.",
     promoNo: '❌ No such promo code, or it has expired.',
     promoUsed: 'You already used this promo code 😉',
@@ -681,6 +753,13 @@ const BL = {
     unsubNone: 'Подписка не найдена.',
     gw: '🎉 Розыгрыши бесплатных анализов и безлимитов проходят в канале ' + CHANNEL + '.\n\nЛови промокоды в постах и вводи их здесь через «🎁 Ввести промокод». Кто успел — того и анализы.',
     kbChannel: '📢 Открыть канал',
+    kbGwJoin: '🙋 Участвовать в розыгрыше',
+    gwActive: (n, c, d) => `🎉 Идёт розыгрыш!\n\n🏆 Победителей: ${n}, приз каждому: ${c} бесплатных анализов\n⏳ Итоги: ${d}\n\nЧтобы участвовать: подпишись на ${CHANNEL} и жми кнопку ниже.`,
+    gwNeedSub: `❌ Чтобы участвовать, нужна подписка на ${CHANNEL}. Подпишись и нажми кнопку ещё раз.`,
+    gwJoined: (n) => `✅ Ты участвуешь! Всего участников: ${n}. Держи кулачки — победителям напишем прямо сюда.`,
+    gwAlready: (n) => `✅ Ты уже участвуешь (всего участников: ${n}). Итоги подведём и напишем сюда же.`,
+    gwNone: `🎉 Сейчас розыгрыша нет. Следи за ${CHANNEL} — анонс будет там.`,
+    gwWinMsg: (c) => `🏆 Ты выиграл(а) розыгрыш FaceRate! Начислили +${c} бесплатных анализов. Пользуйся на здоровье!`,
     promoBad: 'Это не похоже на промокод. Попробуй ещё раз через меню.',
     promoNo: '❌ Такого промокода нет или он истёк.',
     promoUsed: 'Ты уже активировал этот промокод 😉',
@@ -832,6 +911,16 @@ async function tgWebhook(request, env) {
     } else if (/^ref_[a-z0-9_-]{1,40}$/i.test(code)) {
       await attributeReferral(env, tgid, code.slice(4).toUpperCase());
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.hello, reply_markup: menuKb(L) });
+    } else if (code === 'giveaway') {
+      const gw = await getGiveaway(env);
+      if (gw && gw.endTs > Date.now()) {
+        await tgApi(env, 'sendMessage', {
+          chat_id: chat, text: b.gwActive(gw.winners, gw.credits, fmtDate(gw.endTs, L)),
+          reply_markup: { inline_keyboard: [[{ text: b.kbGwJoin, callback_data: 'gw:join' }], [{ text: b.kbBack, callback_data: 'menu' }]] },
+        });
+      } else {
+        await tgApi(env, 'sendMessage', { chat_id: chat, text: b.gwNone, reply_markup: menuKb(L) });
+      }
     } else {
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.hello, reply_markup: menuKb(L) });
     }
@@ -854,6 +943,45 @@ async function tgWebhook(request, env) {
       await env.RATE_LIMIT.put(`promo:${m[1].toUpperCase()}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
       await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Промокод ${m[1].toUpperCase()} создан: ${m[2]} активаций, ${m[3]}=${m[4]}.\nКидай его в канал — это и есть розыгрыш.` });
     }
+    return new Response('ok');
+  }
+
+  // ── Админ: /newgiveaway победителей приз_анализов дней — запускает розыгрыш
+  // с явным участием (кнопка «Участвовать» + живая проверка подписки). Отдаёт готовый
+  // текст для поста в канал (с диплинком на бота), постить туда — руками, как и промокоды.
+  if (text.startsWith('/newgiveaway') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const m = text.match(/^\/newgiveaway\s+(\d+)\s+(\d+)\s+(\d+)/);
+    if (!m) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/newgiveaway ПОБЕДИТЕЛЕЙ АНАЛИЗОВ_В_ПРИЗ ДНЕЙ\nНапример: /newgiveaway 3 5 7' });
+      return new Response('ok');
+    }
+    const winners = parseInt(m[1], 10), credits = parseInt(m[2], 10), days = parseInt(m[3], 10);
+    const endTs = Date.now() + days * 24 * 60 * 60 * 1000;
+    const gw = { id: crypto.randomUUID().slice(0, 8), endTs, credits, winners, entries: [] };
+    await saveGiveaway(env, gw);
+    const botUsername = env.BOT_USERNAME || 'faceratepay_bot';
+    const link = `https://t.me/${botUsername}?start=giveaway`;
+    const endDate = fmtDate(endTs, 'ru');
+    const post = `🎉 РОЗЫГРЫШ!\n\nРазыгрываем ${credits} бесплатных анализов лица среди ${winners} победител${winners === 1 ? 'я' : 'ей'}.\n\nУсловия:\n1. Быть подписанным на этот канал\n2. Нажать «Участвовать» в боте\n\nИтоги подведём ${endDate}, победителей объявим здесь же.\n\n👉 ${link}`;
+    await tgApi(env, 'sendMessage', {
+      chat_id: chat,
+      text: `✅ Розыгрыш запущен: id ${gw.id}, ${winners} победител${winners === 1 ? 'я' : 'ей'} по ${credits} анализов, итоги ${endDate}.\n\nГотовый пост для канала (добавь кнопку-ссылку на ${link} через редактор поста):\n\n---\n${post}\n---\n\nПо истечении срока розыгрыш подведётся сам (проверка раз в час) — я пришлю тебе готовый пост с победителями. Если нужно разыграть раньше срока вручную — команда /drawgiveaway.`,
+    });
+    return new Response('ok');
+  }
+
+  // ── Админ: /drawgiveaway — досрочно разыграть вручную (обычно не нужно: розыгрыш
+  // сам подводит итоги по истечении срока, см. checkGiveawayDraw()/scheduled()).
+  if (text.startsWith('/drawgiveaway') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const r = await runGiveawayDraw(env);
+    if (!r.ok) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: r.reason === 'empty' ? 'Участников не было, розыгрыш закрыт без победителей.' : 'Активного розыгрыша нет.' });
+      return new Response('ok');
+    }
+    await tgApi(env, 'sendMessage', {
+      chat_id: chat,
+      text: `✅ Разыграно среди ${r.totalEntries} участников, победителей: ${r.picked.length}.${r.unsubSkipped ? ` (пропущено ${r.unsubSkipped} — отписались)` : ''}\n\nГотовый пост для канала:\n\n---\n${giveawayResultsPost(r)}\n---`,
+    });
     return new Response('ok');
   }
 
@@ -1034,10 +1162,36 @@ async function handleCallback(env, cq) {
       await reply(b.unsubNone, menuKb(L));
     }
   } else if (data === 'gw') {
-    await reply(
-      b.gw,
-      { inline_keyboard: [[{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbBack, callback_data: 'menu' }]] },
-    );
+    const gw = await getGiveaway(env);
+    if (gw && gw.endTs > Date.now()) {
+      await reply(
+        b.gwActive(gw.winners, gw.credits, fmtDate(gw.endTs, L)),
+        { inline_keyboard: [[{ text: b.kbGwJoin, callback_data: 'gw:join' }], [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbBack, callback_data: 'menu' }]] },
+      );
+    } else {
+      await reply(
+        b.gw,
+        { inline_keyboard: [[{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbBack, callback_data: 'menu' }]] },
+      );
+    }
+  } else if (data === 'gw:join') {
+    const gw = await getGiveaway(env);
+    if (!gw || gw.endTs <= Date.now()) {
+      await reply(b.gwNone, { inline_keyboard: [[{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbBack, callback_data: 'menu' }]] });
+      return;
+    }
+    if (gw.entries.includes(tgid)) {
+      await reply(b.gwAlready(gw.entries.length), { inline_keyboard: [[{ text: b.kbBack, callback_data: 'menu' }]] });
+      return;
+    }
+    const subscribed = await isSubscribed(env, tgid, true);
+    if (!subscribed) {
+      await reply(b.gwNeedSub, { inline_keyboard: [[{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbGwJoin, callback_data: 'gw:join' }], [{ text: b.kbBack, callback_data: 'menu' }]] });
+      return;
+    }
+    gw.entries.push(tgid);
+    await saveGiveaway(env, gw);
+    await reply(b.gwJoined(gw.entries.length), { inline_keyboard: [[{ text: b.kbBack, callback_data: 'menu' }]] });
   }
 }
 
