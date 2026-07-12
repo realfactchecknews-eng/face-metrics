@@ -958,6 +958,9 @@ async function tgWebhook(request, env) {
     } else if (/^ref_[a-z0-9_-]{1,40}$/i.test(code)) {
       await attributeReferral(env, tgid, code.slice(4).toUpperCase());
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.hello, reply_markup: menuKb(L) });
+    } else if (code === 'shop') {
+      // Диплинк из постов про акцию/цены — сразу к выбору способа оплаты, минуя меню.
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: methodKb(L, env) });
     } else if (code === 'giveaway') {
       const gw = await getGiveaway(env);
       if (gw && gw.endTs > Date.now()) {
