@@ -30,14 +30,16 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // передаём эту сумму в /invoice (см. createLavaInvoice) — их дашборд НЕ нужно трогать вручную,
   // цена всегда совпадает с тем, что показано на сайте/в боте. rub — цена для крипты (CryptoBot)
   // и запасного ЮKassa-инвойса, ей код тоже управляет напрямую.
-  p1: { type: 'credits', credits: 1, stars: 49,  rub: 79,   lavaRub: 79,   label: '1 анализ', labelEn: '1 analysis' },
+  // p1.rub=62 — намеренно НЕ круглое число: при -20% (buyerDiscountPct/applyDiscount) даёт
+  // ровно 62*0.8=49.6 → round() → 50₽, узнаваемая "старая" цена в чеке со скидкой.
+  p1: { type: 'credits', credits: 1, stars: 39,  rub: 62,   lavaRub: 62,   label: '1 анализ', labelEn: '1 analysis' },
   p5: { type: 'credits', credits: 5, stars: 100, rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses' },
-  h1: { type: 'unlim',  hours: 1,    stars: 199, rub: 299,  lavaRub: 299,  label: 'Безлимит на час', labelEn: 'Hour unlimited' },
-  d1: { type: 'unlim',  hours: 24,   stars: 349, rub: 499,  lavaRub: 499,  label: 'Безлимит на день', labelEn: 'Day unlimited' },
+  h1: { type: 'unlim',  hours: 1,    stars: 129, rub: 179,  lavaRub: 179,  label: 'Безлимит на час', labelEn: 'Hour unlimited' },
+  d1: { type: 'unlim',  hours: 24,   stars: 219, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited' },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 1499, rub: 1999, lavaRub: 1999, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
+  m1: { type: 'unlim',  hours: 720,  stars: 899,  rub: 1199, lavaRub: 1199, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
 };
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
 function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }
@@ -852,14 +854,17 @@ function packsKb(method, L, discPct) {
     const disc = Math.max(1, Math.round(base * (100 - discPct) / 100));
     return `${disc}${unit(p)} (вместо ${base}${unit(p)})`;
   };
-  // Для p5 показываем зачёркнутую цену «как если бы» покупать по одному (5×p1) —
-  // наглядная выгода объёма прямо в тексте кнопки (юникод-зачёркивание, works в Telegram).
+  // Показываем зачёркнутую цену «как если бы» покупать отдельными p1 — наглядная выгода
+  // объёма/безлимита прямо в тексте кнопки (юникод-зачёркивание, works в Telegram).
+  // p5 vs 5×p1, d1 vs 5×p1 (день "стоит" как 5 разовых анализов), m1 vs 30×p1 (месяц по 1/день).
   const strike = (s) => String(s).split('').map((ch) => ch + '̶').join('');
+  const STRIKE_MULT = { p5: 5, d1: 5, m1: 30 };
   const row = (id, emoji) => {
     let label = `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`;
-    if (id === 'p5') {
-      const singleRaw = raw(PACKS.p1) * 5;
-      if (singleRaw > raw(PACKS.p5)) label += ` (было бы ${strike(singleRaw + unit(PACKS.p5))})`;
+    const mult = STRIKE_MULT[id];
+    if (mult) {
+      const singleRaw = raw(PACKS.p1) * mult;
+      if (singleRaw > raw(PACKS[id])) label += ` (было бы ${strike(singleRaw + unit(PACKS[id]))})`;
     }
     return [{ text: label, callback_data: `pay:${id}:${method}` }];
   };

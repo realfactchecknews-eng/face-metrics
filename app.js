@@ -2229,9 +2229,10 @@ function showPaywall(state, st) {
         var price = rawPrice(p) + unit;
         var top = id === "m1" ? " <i class='pw-hit'>top</i>" : "";
         var was = "";
-        // 5 анализов дешевле, чем 5 раз купить по одному — показываем зачёркнутую "старую" цену.
-        if (id === "p5" && packs.p1) {
-          var singleTotal = rawPrice(packs.p1) * 5;
+        // Пакет/безлимит дешевле, чем купить эквивалент по одному — показываем зачёркнутую "старую" цену.
+        var strikeMult = { p5: 5, d1: 5, m1: 30 }[id];
+        if (strikeMult && packs.p1) {
+          var singleTotal = rawPrice(packs.p1) * strikeMult;
           if (singleTotal > rawPrice(p)) was = " <s class='pw-was'>" + singleTotal + unit + "</s>";
         }
         btn(packNames[id] + " — " + was + " " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
