@@ -264,8 +264,8 @@ html, body {
 }
 .bp-pill-wrap {
   position: relative;
-  width: 132px;
-  height: 55px;
+  width: 210px;
+  height: 88px;
   margin: 0 auto 10px;
   transform-style: preserve-3d;
 }
@@ -327,13 +327,11 @@ html, body {
   text-transform: uppercase;
 }
 
-/* Pill Spin Animation (on landing page) */
+/* Idle rotation is handled by <model-viewer auto-rotate> itself now (real 3D camera
+   spin, not a flat CSS rotateY of the rendered image — that used to look 2D/edge-on
+   at ~90°/270°). The wrap just holds a fixed tilt so the model reads as "resting". */
 .bp-pill-wrap {
-  animation: pillIdleSpin 6s linear infinite;
-}
-@keyframes pillIdleSpin {
-  from { transform: rotateX(20deg) rotateY(0deg); }
-  to { transform: rotateX(20deg) rotateY(360deg); }
+  transform: rotateX(20deg);
 }
 
 /* When the transition starts, fade out everything around the pill so the
