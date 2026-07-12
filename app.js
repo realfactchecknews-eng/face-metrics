@@ -2208,7 +2208,7 @@ function showPaywall(state, st) {
   } else { // pay
     var packs = (st && st.packs) || {
       p1: { stars: 39, rub: 62, lavaRub: 62, oldStars: 49, oldRub: 79, oldLavaRub: 79 },
-      p5: { stars: 100, rub: 149, lavaRub: 149, oldStars: 170, oldRub: 250, oldLavaRub: 250 },
+      p5: { stars: 99, rub: 149, lavaRub: 149, oldStars: 170, oldRub: 250, oldLavaRub: 250 },
       h1: { stars: 129, rub: 179, lavaRub: 179, oldStars: 199, oldRub: 299, oldLavaRub: 299 },
       d1: { stars: 219, rub: 299, lavaRub: 299, oldStars: 349, oldRub: 499, oldLavaRub: 499 },
       m1: { stars: 899, rub: 1199, lavaRub: 1199, oldStars: 1499, oldRub: 1999, oldLavaRub: 1999 },

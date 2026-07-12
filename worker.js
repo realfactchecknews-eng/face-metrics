@@ -35,7 +35,7 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // old* — "обычная" цена ДО текущей недельной акции (см. SALE_ENDS_AT), показывается
   // зачёркнутой в packsKb()/пейволле сайта, пока акция активна.
   p1: { type: 'credits', credits: 1, stars: 39,  rub: 62,   lavaRub: 62,   label: '1 анализ', labelEn: '1 analysis', oldStars: 49,   oldRub: 79,   oldLavaRub: 79 },
-  p5: { type: 'credits', credits: 5, stars: 100, rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses', oldStars: 170,  oldRub: 250,  oldLavaRub: 250 },
+  p5: { type: 'credits', credits: 5, stars: 99,  rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses', oldStars: 170,  oldRub: 250,  oldLavaRub: 250 },
   h1: { type: 'unlim',  hours: 1,    stars: 129, rub: 179,  lavaRub: 179,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 199,  oldRub: 299,  oldLavaRub: 299 },
   d1: { type: 'unlim',  hours: 24,   stars: 219, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 349,  oldRub: 499,  oldLavaRub: 499 },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
