@@ -2206,13 +2206,24 @@ function showPaywall(state, st) {
       b.textContent = t("pwChecking"); pwRecheck();
     });
   } else { // pay
-    title.textContent = t("pwPayTitle");
-    sub.textContent = t("pwPaySub");
     var packs = (st && st.packs) || {
-      p1: { stars: 49, rub: 79, lavaRub: 79 }, p5: { stars: 100, rub: 149, lavaRub: 149 },
-      h1: { stars: 199, rub: 299, lavaRub: 299 },
-      d1: { stars: 349, rub: 499, lavaRub: 499 }, m1: { stars: 1499, rub: 1999, lavaRub: 1999 },
+      p1: { stars: 39, rub: 62, lavaRub: 62, oldStars: 49, oldRub: 79, oldLavaRub: 79 },
+      p5: { stars: 100, rub: 149, lavaRub: 149 },
+      h1: { stars: 129, rub: 179, lavaRub: 179, oldStars: 199, oldRub: 299, oldLavaRub: 299 },
+      d1: { stars: 219, rub: 299, lavaRub: 299, oldStars: 349, oldRub: 499, oldLavaRub: 499 },
+      m1: { stars: 899, rub: 1199, lavaRub: 1199, oldStars: 1499, oldRub: 1999, oldLavaRub: 1999 },
     };
+    var saleEndsAt = (st && st.saleEndsAt) || 0;
+    // Таймер до конца недельной акции — на самом видном месте под заголовком.
+    function saleCountdownText() {
+      if (!saleEndsAt || saleEndsAt <= Date.now()) return "";
+      var ms = saleEndsAt - Date.now();
+      var days = Math.floor(ms / 86400000), hours = Math.floor((ms % 86400000) / 3600000);
+      var left = days > 0 ? (days + "д " + hours + "ч") : (hours + "ч " + Math.floor((ms % 3600000) / 60000) + "м");
+      return "🔥 Цены недели! До повышения: " + left;
+    }
+    title.textContent = t("pwPayTitle");
+    sub.textContent = saleCountdownText() || t("pwPaySub");
     var methods = (st && st.methods) || ["stars"];
     var packNames = { p1: t("packP1"), p5: t("packP5"), h1: "⏱ " + t("packH1"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1") };
     var methodNames = { stars: t("payStars"), rub: t("payCard"), sbp: t("paySbp"), crypto: t("payCrypto") };
@@ -2223,17 +2234,25 @@ function showPaywall(state, st) {
       function rawPrice(p) {
         return method === "stars" ? p.stars : (((method === "rub" || method === "sbp") && p.lavaRub) ? p.lavaRub : p.rub);
       }
+      function rawOldPrice(p) {
+        return method === "stars" ? p.oldStars : (((method === "rub" || method === "sbp") && p.oldLavaRub) ? p.oldLavaRub : p.oldRub);
+      }
       function packBtn(id) {
         var p = packs[id]; if (!p) return;
         var unit = method === "stars" ? "⭐" : "₽";
         var price = rawPrice(p) + unit;
-        var top = id === "m1" ? " <i class='pw-hit'>top</i>" : "";
+        var top = id === "m1" ? (" <i class='pw-hit'>" + (saleEndsAt && saleEndsAt > Date.now() ? "🔥 хит скидки" : "top") + "</i>") : "";
         var was = "";
-        // Пакет/безлимит дешевле, чем купить эквивалент по одному — показываем зачёркнутую "старую" цену.
-        var strikeMult = { p5: 5, d1: 5, m1: 30 }[id];
-        if (strikeMult && packs.p1) {
-          var singleTotal = rawPrice(packs.p1) * strikeMult;
+        // p5 — зачёркнутая цена "как если бы 5×p1 по отдельности" (выгода объёма).
+        if (id === "p5" && packs.p1) {
+          var singleTotal = rawPrice(packs.p1) * 5;
           if (singleTotal > rawPrice(p)) was = " <s class='pw-was'>" + singleTotal + unit + "</s>";
+        } else {
+          // Остальные — зачёркнутая ОБЫЧНАЯ цена (до недельной акции), если акция ещё активна.
+          var oldPrice = rawOldPrice(p);
+          if (saleEndsAt && saleEndsAt > Date.now() && oldPrice && oldPrice > rawPrice(p)) {
+            was = " <s class='pw-was'>" + oldPrice + unit + "</s>";
+          }
         }
         btn(packNames[id] + " — " + was + " " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
       }

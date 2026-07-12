@@ -32,15 +32,21 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // и запасного ЮKassa-инвойса, ей код тоже управляет напрямую.
   // p1.rub=62 — намеренно НЕ круглое число: при -20% (buyerDiscountPct/applyDiscount) даёт
   // ровно 62*0.8=49.6 → round() → 50₽, узнаваемая "старая" цена в чеке со скидкой.
-  p1: { type: 'credits', credits: 1, stars: 39,  rub: 62,   lavaRub: 62,   label: '1 анализ', labelEn: '1 analysis' },
+  // old* — "обычная" цена ДО текущей недельной акции (см. SALE_ENDS_AT), показывается
+  // зачёркнутой в packsKb()/пейволле сайта, пока акция активна.
+  p1: { type: 'credits', credits: 1, stars: 39,  rub: 62,   lavaRub: 62,   label: '1 анализ', labelEn: '1 analysis', oldStars: 49,   oldRub: 79,   oldLavaRub: 79 },
   p5: { type: 'credits', credits: 5, stars: 100, rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses' },
-  h1: { type: 'unlim',  hours: 1,    stars: 129, rub: 179,  lavaRub: 179,  label: 'Безлимит на час', labelEn: 'Hour unlimited' },
-  d1: { type: 'unlim',  hours: 24,   stars: 219, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited' },
+  h1: { type: 'unlim',  hours: 1,    stars: 129, rub: 179,  lavaRub: 179,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 199,  oldRub: 299,  oldLavaRub: 299 },
+  d1: { type: 'unlim',  hours: 24,   stars: 219, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 349,  oldRub: 499,  oldLavaRub: 499 },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 899,  rub: 1199, lavaRub: 1199, label: 'Безлимит на месяц', labelEn: 'Month unlimited' },
+  m1: { type: 'unlim',  hours: 720,  stars: 899,  rub: 1199, lavaRub: 1199, label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 1499, oldRub: 1999, oldLavaRub: 1999 },
 };
+// Недельная акция на новые цены выше — по истечении можно вернуть old*-значения в основные
+// поля (или оставить как есть, тогда акция станет постоянной ценой). Таймер на сайте/в боте
+// считает именно до этой даты. Поставь актуальную дату при продлении/завершении акции.
+const SALE_ENDS_AT = Date.parse('2026-07-19T12:00:00+03:00');
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
 function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }
 function enabledMethods(env) {
@@ -142,7 +148,7 @@ async function analyze(request, env) {
   else if (!subscribed) {
     return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в неделю.', channel: CHANNEL });
   } else {
-    return json({ error: 'pay', text: 'Бесплатный анализ на этой неделе уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env) });
+    return json({ error: 'pay', text: 'Бесплатный анализ на этой неделе уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0 });
   }
 
   // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
@@ -265,6 +271,7 @@ async function statusFor(env, user, token, fresh) {
     token, user, subscribed,
     freeLeft: subscribed ? Math.max(0, FREE_PER_WEEK - freeUsed) : 0,
     credits, channel: CHANNEL, packs: PACKS, methods: enabledMethods(env),
+    saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0,
     unlimUntil: unlimUntil > Date.now() ? unlimUntil : 0,
   };
 }
@@ -841,34 +848,45 @@ function methodKb(L, env) {
 // Шаг 2: тарифы с ценой в валюте выбранного способа. discPct>0 — показать зачёркнутую
 // старую цену и цену со скидкой, чтобы применённое промо было видно ДО оплаты, а не
 // сюрпризом в чеке (иначе выглядит как баг «сумма меньше ожидаемой»).
+const strike = (s) => String(s).split('').map((ch) => ch + '̶').join('');
+function saleActive() { return Date.now() < SALE_ENDS_AT; }
+// Человеко-читаемый остаток до конца акции (дни+часы, либо часы+минуты в последний день).
+function saleCountdown(L) {
+  const ms = SALE_ENDS_AT - Date.now();
+  if (ms <= 0) return null;
+  const days = Math.floor(ms / 86400000), hours = Math.floor((ms % 86400000) / 3600000);
+  if (days > 0) return L === 'ru' ? `${days} дн ${hours} ч` : `${days}d ${hours}h`;
+  const mins = Math.floor((ms % 3600000) / 60000);
+  return L === 'ru' ? `${hours} ч ${mins} мин` : `${hours}h ${mins}m`;
+}
 function packsKb(method, L, discPct) {
   const raw = (p) => method === 'stars' ? p.stars : (method === 'rub' || method === 'sbp') ? (p.lavaRub || p.rub) : p.rub;
+  const rawOld = (p) => method === 'stars' ? p.oldStars : (method === 'rub' || method === 'sbp') ? (p.oldLavaRub || p.oldRub) : p.oldRub;
   const unit = (p) => method === 'stars' ? '⭐' : '₽';
   const cardLike = method === 'rub' || method === 'sbp';
   const price = (p) => {
     const base = raw(p);
-    if (!discPct) return `${base}${unit(p)}`;
     // Lava.top (карта/СБП) не принимает инвойс дешевле LAVA_MIN_RUB ни при какой скидке —
     // если тариф уже на этом полу (самый дешёвый — ровно 50₽), скидка технически неприменима.
-    if (cardLike && base <= LAVA_MIN_RUB) return `${base}${unit(p)} (без скидки — минимум платёжки)`;
-    const disc = Math.max(1, Math.round(base * (100 - discPct) / 100));
-    return `${disc}${unit(p)} (вместо ${base}${unit(p)})`;
+    const cur = discPct && !(cardLike && base <= LAVA_MIN_RUB) ? Math.max(1, Math.round(base * (100 - discPct) / 100)) : base;
+    const old = saleActive() ? rawOld(p) : null;
+    const oldTxt = old && old > cur ? `${strike(old + unit(p))} ` : '';
+    return `${oldTxt}${cur}${unit(p)}`;
   };
-  // Показываем зачёркнутую цену «как если бы» покупать отдельными p1 — наглядная выгода
-  // объёма/безлимита прямо в тексте кнопки (юникод-зачёркивание, works в Telegram).
-  // p5 vs 5×p1, d1 vs 5×p1 (день "стоит" как 5 разовых анализов), m1 vs 30×p1 (месяц по 1/день).
-  const strike = (s) => String(s).split('').map((ch) => ch + '̶').join('');
-  const STRIKE_MULT = { p5: 5, d1: 5, m1: 30 };
-  const row = (id, emoji) => {
+  // p5: зачёркнутая цена «как если бы 5×p1 по отдельности» — наглядная выгода объёма
+  // (отдельно от акционного old-прайса выше, который сравнивает с обычной ценой самого p5).
+  const row = (id, emoji, note) => {
     let label = `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`;
-    const mult = STRIKE_MULT[id];
-    if (mult) {
-      const singleRaw = raw(PACKS.p1) * mult;
-      if (singleRaw > raw(PACKS[id])) label += ` (было бы ${strike(singleRaw + unit(PACKS[id]))})`;
+    if (id === 'p5') {
+      const singleRaw = raw(PACKS.p1) * 5;
+      if (singleRaw > raw(PACKS.p5)) label += ` (было бы ${strike(singleRaw + unit(PACKS.p5))})`;
     }
+    if (note) label += note;
     return [{ text: label, callback_data: `pay:${id}:${method}` }];
   };
-  const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ')];
+  const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : '')];
+  const cd = saleActive() ? saleCountdown(L) : null;
+  if (cd) rows.unshift([{ text: (L === 'ru' ? `🔥 Цены недели! До повышения: ${cd}` : `🔥 Weekly prices! Ends in: ${cd}`), callback_data: 'noop' }]);
   if (discPct) rows.unshift([{ text: `🎁 Промо-скидка ${discPct}% уже применена`, callback_data: 'noop' }]);
   rows.push([{ text: BL[L].kbBack, callback_data: 'shop' }]);
   return { inline_keyboard: rows };
