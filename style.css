@@ -372,6 +372,10 @@ html, body {
   animation: pillOpen 1s cubic-bezier(0.7, 0, 0.3, 1) forwards;
   background: radial-gradient(ellipse at 36% 30%, #2a2a2a 0%, #000 100%);
 }
+/* Same flash-and-collapse, but for the real 3D <model-viewer> pill (landing page). */
+#bpScene.pill-split #bpPill3d {
+  animation: pillOpen 1s cubic-bezier(0.7, 0, 0.3, 1) forwards;
+}
 @keyframes pillOpen {
   0% {
     transform: scaleY(1);
