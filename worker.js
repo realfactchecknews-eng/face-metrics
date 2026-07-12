@@ -87,6 +87,7 @@ export default {
   // Cron Trigger (см. [triggers] в wrangler.toml) — раз в час проверяет истёкшие розыгрыши.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(checkGiveawayDraw(env));
+    ctx.waitUntil(checkOpenRouterBalance(env));
   },
 };
 
@@ -336,6 +337,33 @@ async function runGiveawayDraw(env) {
 
 function giveawayResultsPost(r) {
   return `🏆 Итоги розыгрыша!\n\nПобедители (по id): ${r.picked.join(', ')}\nКаждому начислено: ${r.gw.credits} бесплатных анализов.\n\nСпасибо всем, кто участвовал — новый розыгрыш скоро!`;
+}
+
+// Раз в час проверяет баланс OpenRouter (аккаунт, не дневной лимит ключа) и шлёт админам
+// предупреждение, когда осталось меньше OR_LOW_BALANCE_USD. orLowBalanceAlerted — чтобы не
+// спамить каждый час, пока баланс не пополнят (флаг сам снимается, когда баланс снова в норме).
+const OR_LOW_BALANCE_USD = 3;
+async function checkOpenRouterBalance(env) {
+  if (!env.OPENROUTER_API_KEY) return;
+  let r;
+  try {
+    r = await fetch('https://openrouter.ai/api/v1/credits', {
+      headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}` },
+    }).then(x => x.json());
+  } catch { return; }
+  const total = r?.data?.total_credits, used = r?.data?.total_usage;
+  if (typeof total !== 'number' || typeof used !== 'number') return;
+  const remaining = total - used;
+  if (remaining > OR_LOW_BALANCE_USD) {
+    await env.RATE_LIMIT.delete('orLowBalanceAlerted');
+    return;
+  }
+  if (await env.RATE_LIMIT.get('orLowBalanceAlerted')) return;
+  await env.RATE_LIMIT.put('orLowBalanceAlerted', '1', { expirationTtl: 60 * 60 * 12 });
+  const text = `⚠️ Баланс OpenRouter низкий: $${remaining.toFixed(2)} осталось.\nПополни на openrouter.ai/settings/credits, иначе AI-анализ перестанет работать.`;
+  for (const adminId of adminIds(env)) {
+    await tgApi(env, 'sendMessage', { chat_id: adminId, text }).catch(() => {});
+  }
 }
 
 // Вызывается раз в час из scheduled() — если срок активного розыгрыша истёк, сам разыгрывает
