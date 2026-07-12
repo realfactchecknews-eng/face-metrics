@@ -2208,7 +2208,7 @@ function showPaywall(state, st) {
   } else { // pay
     var packs = (st && st.packs) || {
       p1: { stars: 39, rub: 62, lavaRub: 62, oldStars: 49, oldRub: 79, oldLavaRub: 79 },
-      p5: { stars: 100, rub: 149, lavaRub: 149 },
+      p5: { stars: 100, rub: 149, lavaRub: 149, oldStars: 170, oldRub: 250, oldLavaRub: 250 },
       h1: { stars: 129, rub: 179, lavaRub: 179, oldStars: 199, oldRub: 299, oldLavaRub: 299 },
       d1: { stars: 219, rub: 299, lavaRub: 299, oldStars: 349, oldRub: 499, oldLavaRub: 499 },
       m1: { stars: 899, rub: 1199, lavaRub: 1199, oldStars: 1499, oldRub: 1999, oldLavaRub: 1999 },
@@ -2243,16 +2243,10 @@ function showPaywall(state, st) {
         var price = rawPrice(p) + unit;
         var top = id === "m1" ? (" <i class='pw-hit'>" + (saleEndsAt && saleEndsAt > Date.now() ? "🔥 хит скидки" : "top") + "</i>") : "";
         var was = "";
-        // p5 — зачёркнутая цена "как если бы 5×p1 по отдельности" (выгода объёма).
-        if (id === "p5" && packs.p1) {
-          var singleTotal = rawPrice(packs.p1) * 5;
-          if (singleTotal > rawPrice(p)) was = " <s class='pw-was'>" + singleTotal + unit + "</s>";
-        } else {
-          // Остальные — зачёркнутая ОБЫЧНАЯ цена (до недельной акции), если акция ещё активна.
-          var oldPrice = rawOldPrice(p);
-          if (saleEndsAt && saleEndsAt > Date.now() && oldPrice && oldPrice > rawPrice(p)) {
-            was = " <s class='pw-was'>" + oldPrice + unit + "</s>";
-          }
+        // Зачёркнутая ОБЫЧНАЯ цена (до недельной акции), пока акция активна.
+        var oldPrice = rawOldPrice(p);
+        if (saleEndsAt && saleEndsAt > Date.now() && oldPrice && oldPrice > rawPrice(p)) {
+          was = " <s class='pw-was'>" + oldPrice + unit + "</s>";
         }
         btn(packNames[id] + " — " + was + " " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
       }

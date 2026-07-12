@@ -35,7 +35,7 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // old* — "обычная" цена ДО текущей недельной акции (см. SALE_ENDS_AT), показывается
   // зачёркнутой в packsKb()/пейволле сайта, пока акция активна.
   p1: { type: 'credits', credits: 1, stars: 39,  rub: 62,   lavaRub: 62,   label: '1 анализ', labelEn: '1 analysis', oldStars: 49,   oldRub: 79,   oldLavaRub: 79 },
-  p5: { type: 'credits', credits: 5, stars: 100, rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses' },
+  p5: { type: 'credits', credits: 5, stars: 100, rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses', oldStars: 170,  oldRub: 250,  oldLavaRub: 250 },
   h1: { type: 'unlim',  hours: 1,    stars: 129, rub: 179,  lavaRub: 179,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 199,  oldRub: 299,  oldLavaRub: 299 },
   d1: { type: 'unlim',  hours: 24,   stars: 219, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 349,  oldRub: 499,  oldLavaRub: 499 },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
@@ -873,14 +873,8 @@ function packsKb(method, L, discPct) {
     const oldTxt = old && old > cur ? `${strike(old + unit(p))} ` : '';
     return `${oldTxt}${cur}${unit(p)}`;
   };
-  // p5: зачёркнутая цена «как если бы 5×p1 по отдельности» — наглядная выгода объёма
-  // (отдельно от акционного old-прайса выше, который сравнивает с обычной ценой самого p5).
   const row = (id, emoji, note) => {
     let label = `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`;
-    if (id === 'p5') {
-      const singleRaw = raw(PACKS.p1) * 5;
-      if (singleRaw > raw(PACKS.p5)) label += ` (было бы ${strike(singleRaw + unit(PACKS.p5))})`;
-    }
     if (note) label += note;
     return [{ text: label, callback_data: `pay:${id}:${method}` }];
   };
