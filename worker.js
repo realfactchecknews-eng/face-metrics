@@ -210,6 +210,11 @@ async function analyze(request, env) {
   } else if (mode === 'paid') {
     creditsLeft = credits - 1;
     await env.RATE_LIMIT.put(`credits:${tgid}`, String(creditsLeft));
+  } else if (mode === 'unlim') {
+    // Счётчик анализов за текущую сессию безлимита (только для статистики, не влияет на лимиты).
+    const unlimUseKey = `unlimUse:${tgid}:${unlimUntil}`;
+    const unlimUseCnt = parseInt(await env.RATE_LIMIT.get(unlimUseKey) || '0', 10);
+    await env.RATE_LIMIT.put(unlimUseKey, String(unlimUseCnt + 1), { expirationTtl: 60 * 60 * 24 * 7 });
   }
   const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
   await env.RATE_LIMIT.put(`g:${today}`, String(g + 1), { expirationTtl: 93600 });
@@ -935,6 +940,8 @@ async function tgWebhook(request, env) {
   const msg = upd.message;
   if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
   const chat = msg.chat.id, tgid = msg.from.id;
+  // Метка "этот tgid когда-либо писал боту" — нужна только для рассылок (/broadcast), без TTL.
+  if (env.RATE_LIMIT) await env.RATE_LIMIT.put(`user:${tgid}`, '1');
   const L = await userLang(env, tgid);
   const b = BL[L];
 
@@ -956,8 +963,9 @@ async function tgWebhook(request, env) {
       await env.RATE_LIMIT.put(`authcode:${code}`, JSON.stringify({ token, user }), { expirationTtl: 600 });
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.loginOk, reply_markup: menuKb(L) });
     } else if (/^ref_[a-z0-9_-]{1,40}$/i.test(code)) {
-      await attributeReferral(env, tgid, code.slice(4).toUpperCase());
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: b.hello, reply_markup: menuKb(L) });
+      const gotBonus = await attributeReferral(env, tgid, code.slice(4).toUpperCase());
+      const greetText = gotBonus ? (L === 'ru' ? b.hello + '\n\n🎁 Тебе начислен +1 бесплатный анализ за переход по реферальной ссылке!' : b.hello + '\n\n🎁 You got +1 free analysis for joining via a referral link!') : b.hello;
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: greetText, reply_markup: menuKb(L) });
     } else if (code === 'shop') {
       // Диплинк из постов про акцию/цены — сразу к выбору способа оплаты, минуя меню.
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: methodKb(L, env) });
@@ -1032,6 +1040,28 @@ async function tgWebhook(request, env) {
       chat_id: chat,
       text: `✅ Разыграно среди ${r.totalEntries} участников, победителей: ${r.picked.length}.${r.unsubSkipped ? ` (пропущено ${r.unsubSkipped} — отписались)` : ''}\n\nГотовый пост для канала:\n\n---\n${giveawayResultsPost(r)}\n---`,
     });
+    return new Response('ok');
+  }
+
+  // ── Админ: /broadcast ТЕКСТ — разослать сообщение всем известным пользователям бота
+  // (собираем tgid из всех KV-следов: user:, orders:, unlim:, credits:, qw:, lang:).
+  if (text.startsWith('/broadcast') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const body = text.slice('/broadcast'.length).trim();
+    if (!body) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/broadcast ТЕКСТ СООБЩЕНИЯ' });
+      return new Response('ok');
+    }
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '⏳ Собираю список пользователей и рассылаю...' });
+    const ids = await collectAllUserIds(env);
+    let sent = 0, failed = 0;
+    for (const id of ids) {
+      try {
+        await tgApi(env, 'sendMessage', { chat_id: id, text: body });
+        sent++;
+      } catch { failed++; }
+      await new Promise((r) => setTimeout(r, 40)); // мягкий троттлинг под лимиты Telegram
+    }
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Рассылка завершена: всего ${ids.length}, отправлено ${sent}, не доставлено ${failed} (заблокировали бота и т.п.).` });
     return new Response('ok');
   }
 
@@ -1730,11 +1760,42 @@ async function myPersonalRefText(env, tgid, L) {
   const link = refLink(env, code);
   const left = Math.max(0, PERSONAL_REF_DISCOUNT_THRESHOLD - (r.purchases || 0));
   if (L === 'ru') {
-    return `🔗 Твоя реферальная ссылка:\n${link}\n\nЗа каждую покупку ЛЮБОГО тарифа по этой ссылке тебе начисляется +1 анализ.\nПосле ${PERSONAL_REF_DISCOUNT_THRESHOLD} покупок по ссылке (суммарно): тем, кто покупает по ней — скидка ${PERSONAL_REF_DISCOUNT_PCT}%, а ТЕБЕ САМОМУ на все свои покупки — скидка ${PERSONAL_REF_OWNER_DISCOUNT_PCT}%.\n\nПереходов: ${r.clicks || 0}\nПокупок: ${r.purchases || 0}${left > 0 ? `\nДо скидок: ещё ${left} покупок(и)` : `\nСкидки уже активны`}\nЗаработано анализов: ${r.creditsEarned || 0}`;
+    return `🔗 Твоя реферальная ссылка:\n${link}\n\n🎁 Приведи друга — и вы ОБА сразу получаете по 1 бесплатному анализу, как только он перейдёт по ссылке.\n\nЕсть и бонус за объём: после ${PERSONAL_REF_DISCOUNT_THRESHOLD} покупок по ссылке (суммарно) — тем, кто покупает по ней, скидка ${PERSONAL_REF_DISCOUNT_PCT}%, а ТЕБЕ САМОМУ на все свои покупки — скидка ${PERSONAL_REF_OWNER_DISCOUNT_PCT}%.\n\nПереходов: ${r.clicks || 0}\nПокупок: ${r.purchases || 0}${left > 0 ? `\nДо скидок: ещё ${left} покупок(и)` : `\nСкидки уже активны`}\nЗаработано анализов: ${r.creditsEarned || 0}`;
   }
-  return `🔗 Your personal referral link:\n${link}\n\nFor every purchase (any pack) made through this link, you get +1 free analysis.\nOnce ${PERSONAL_REF_DISCOUNT_THRESHOLD} purchases have gone through this link (total): buyers get ${PERSONAL_REF_DISCOUNT_PCT}% off, and YOU get ${PERSONAL_REF_OWNER_DISCOUNT_PCT}% off all your own purchases.\n\nClicks: ${r.clicks || 0}\nPurchases: ${r.purchases || 0}${left > 0 ? `\nPurchases until discounts unlock: ${left}` : `\nDiscounts are already active`}\nAnalyses earned: ${r.creditsEarned || 0}`;
+  return `🔗 Your personal referral link:\n${link}\n\n🎁 Bring a friend — you BOTH instantly get 1 free analysis the moment they open the link.\n\nThere's also a volume bonus: once ${PERSONAL_REF_DISCOUNT_THRESHOLD} purchases have gone through this link (total), buyers get ${PERSONAL_REF_DISCOUNT_PCT}% off, and YOU get ${PERSONAL_REF_OWNER_DISCOUNT_PCT}% off all your own purchases.\n\nClicks: ${r.clicks || 0}\nPurchases: ${r.purchases || 0}${left > 0 ? `\nPurchases until discounts unlock: ${left}` : `\nDiscounts are already active`}\nAnalyses earned: ${r.creditsEarned || 0}`;
 }
 // Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
+// Собирает уникальные tgid из всех KV-префиксов, где встречается id пользователя —
+// используется только для /broadcast. Новых пользователей (после деплоя этой фичи) полностью
+// покрывает user:tgid (пишется на каждое входящее сообщение); задним числом подтягиваем ещё
+// из orders:/unlim:/credits:/qw:/lang: — так рассылка захватит и тех, кто писал боту раньше.
+async function collectAllUserIds(env) {
+  const ids = new Set();
+  const prefixes = ['user:', 'orders:', 'unlim:', 'credits:', 'lang:'];
+  for (const prefix of prefixes) {
+    let cursor;
+    do {
+      const page = await env.RATE_LIMIT.list({ prefix, cursor });
+      for (const k of page.keys) {
+        const rest = k.name.slice(prefix.length);
+        const id = rest.split(':')[0];
+        if (/^\d+$/.test(id)) ids.add(id);
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+  }
+  let cursor;
+  do {
+    const page = await env.RATE_LIMIT.list({ prefix: 'qw:', cursor });
+    for (const k of page.keys) {
+      const parts = k.name.split(':'); // qw:tgid:weekBucket
+      if (parts[1] && /^\d+$/.test(parts[1])) ids.add(parts[1]);
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return [...ids];
+}
+
 async function attributeReferral(env, tgid, code) {
   const ref = await getRef(env, code);
   if (!ref) return; // код не создан админом — игнорируем мусорные ссылки
@@ -1743,7 +1804,18 @@ async function attributeReferral(env, tgid, code) {
   if (already) return;
   await env.RATE_LIMIT.put(`refby:${tgid}`, code);
   ref.clicks = (ref.clicks || 0) + 1;
+  let gaveJoinBonus = false;
+  if (ref.personal) {
+    // Мгновенная награда за переход по личной реф-ссылке: и другу, и владельцу ссылки — по 1 анализу.
+    const friendCur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+    await env.RATE_LIMIT.put(`credits:${tgid}`, String(friendCur + 1));
+    const ownerCur = parseInt(await env.RATE_LIMIT.get(`credits:${ref.ownerTgid}`) || '0', 10);
+    await env.RATE_LIMIT.put(`credits:${ref.ownerTgid}`, String(ownerCur + 1));
+    ref.creditsEarned = (ref.creditsEarned || 0) + 1;
+    gaveJoinBonus = true;
+  }
   await env.RATE_LIMIT.put(`ref:${code}`, JSON.stringify(ref));
+  return gaveJoinBonus;
 }
 // Выручка в рублях для отчёта партнёру — по фактически уплаченной сумме (с учётом скидки), если она
 // известна и уже в рублях (card/rub/crypto); для stars (не рублёвая валюта) — приблизительно

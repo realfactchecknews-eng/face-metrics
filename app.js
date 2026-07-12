@@ -131,6 +131,7 @@ var I18N = {
       "<a class='art-item' href='fwhr.html' target='_blank' rel='noopener'><b>fWHR</b><span>Facial width-to-height ratio explained</span></a>" +
       "<a class='art-item' href='canthal-tilt.html' target='_blank' rel='noopener'><b>Canthal tilt</b><span>How to read and measure eye tilt</span></a>" +
       "<a class='art-item' href='glossary.html' target='_blank' rel='noopener'><b>Full glossary</b><span>Every looksmaxxing term, explained simply</span></a>" +
+      "<a class='art-item' href='faq.html' target='_blank' rel='noopener'><b>FAQ</b><span>Common questions about the analysis, payments and privacy</span></a>" +
       "</div></div>",
     fbSub: "What should we improve? What's missing? Found a bug? Tell us — it really helps.",
     fbName: "Name or nick (optional)", fbEmail: "Email for reply (optional)", fbMsg: "Your message…",
@@ -228,6 +229,7 @@ var I18N = {
       "<a class='art-item' href='fwhr.html' target='_blank' rel='noopener'><b>fWHR</b><span>Соотношение ширины и высоты лица</span></a>" +
       "<a class='art-item' href='canthal-tilt.html' target='_blank' rel='noopener'><b>Canthal tilt</b><span>Как читать и измерять наклон глаз</span></a>" +
       "<a class='art-item' href='glossary.html' target='_blank' rel='noopener'><b>Полный словарь</b><span>Все термины луксмаксинга простыми словами</span></a>" +
+      "<a class='art-item' href='faq.html' target='_blank' rel='noopener'><b>FAQ</b><span>Частые вопросы про анализ, оплату и приватность</span></a>" +
       "</div></div>",
     fbSub: "Что улучшить? Чего не хватает? Нашли ошибку? Напишите — это реально помогает.",
     fbName: "Имя или ник (необязательно)", fbEmail: "Email для ответа (необязательно)", fbMsg: "Ваше сообщение…",
