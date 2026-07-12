@@ -1718,6 +1718,17 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 .how-hero { width: 100%; border-radius: 14px; overflow: hidden; margin-bottom: 30px; border: 1px solid var(--border, #1c1c1c); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
 .how-hero img { display: block; width: 100%; height: auto; }
 
+/* articles list (Термины и статьи) */
+.art-list { display: flex; flex-direction: column; gap: 10px; }
+.art-item {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 16px 18px; border: 1px solid var(--border, #1c1c1c); border-radius: 10px;
+  text-decoration: none; transition: border-color .15s, transform .15s, background .15s;
+}
+.art-item:hover { border-color: var(--accent); transform: translateY(-2px); background: rgba(196,164,107,0.05); }
+.art-item b { color: var(--text-bright); font-weight: 400; font-size: 1.12rem; }
+.art-item span { color: var(--text-dim); font-size: 0.92rem; }
+
 /* ═════════  ПОЛНОЭКРАННОЕ МЕНЮ  ═════════ */
 .menu-screen {
   position: fixed; inset: 0; z-index: 1500;
@@ -1801,6 +1812,7 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 .menu-screen.in .menu-tile:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: .30s; }
 .menu-screen.in .menu-tile:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: .36s; }
 .menu-screen.in .menu-tile:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: .42s; }
+.menu-screen.in .menu-tile:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: .48s; }
 .menu-screen.in .menu-go { opacity: 1; transform: translateY(0); transition-delay: .50s; }
 /* the floating menuFloat keeps working on the stage after reveal */
 .menu-screen.in .menu-pill-stage { animation: menuFloat 5s ease-in-out infinite; }

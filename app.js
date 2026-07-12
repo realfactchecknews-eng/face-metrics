@@ -56,6 +56,7 @@ var I18N = {
     menuTitle: "Menu",
     tHistory: "Score history", tHistorySub: "Your past results",
     tGlossary: "Looksmax glossary", tGlossarySub: "Terms explained simply",
+    tArticles: "Terms & articles", tArticlesSub: "PSL, fWHR, canthal tilt",
     tHow: "How it works", tHowSub: "Geometry + AI",
     tFeedback: "Feedback", tFeedbackSub: "Ideas & requests",
     goAnalysis: "Go to analysis",
@@ -123,6 +124,14 @@ var I18N = {
       "<div class='how-step'><div class='how-step-num'>4</div><div class='how-step-body'><h4>Track & compare</h4><p>Every score is saved to your history so you can track progress over time, share a result card, or run a head-to-head \"Who Moggs\" comparison against a friend.</p></div></div>" +
       "</div>" +
       "<p class='how-note'>Entertainment only. The score is a subjective AI heuristic, not objective truth — treat it accordingly. Mild asymmetry is normal for every human face.</p></div>",
+    articlesHtml: "<div class='how'><p class='how-intro'>Deep-dive articles on the terms and concepts behind the score.</p>" +
+      "<div class='art-list'>" +
+      "<a class='art-item' href='psl-shkala.html' target='_blank' rel='noopener'><b>PSL scale</b><span>What the 1–10 score actually means</span></a>" +
+      "<a class='art-item' href='psl-tiers.html' target='_blank' rel='noopener'><b>PSL tiers: Sub-3 → True Adam</b><span>The full named-tier ladder, and PSL vs Appeal</span></a>" +
+      "<a class='art-item' href='fwhr.html' target='_blank' rel='noopener'><b>fWHR</b><span>Facial width-to-height ratio explained</span></a>" +
+      "<a class='art-item' href='canthal-tilt.html' target='_blank' rel='noopener'><b>Canthal tilt</b><span>How to read and measure eye tilt</span></a>" +
+      "<a class='art-item' href='glossary.html' target='_blank' rel='noopener'><b>Full glossary</b><span>Every looksmaxxing term, explained simply</span></a>" +
+      "</div></div>",
     fbSub: "What should we improve? What's missing? Found a bug? Tell us — it really helps.",
     fbName: "Name or nick (optional)", fbEmail: "Email for reply (optional)", fbMsg: "Your message…",
     fbSend: "Send", fbSending: "Sending…", fbOk: "Thank you! Message sent.", fbErr: "Could not send. Try later.",
@@ -145,6 +154,7 @@ var I18N = {
     menuTitle: "Меню",
     tHistory: "История оценок", tHistorySub: "Прошлые результаты",
     tGlossary: "Луксмакс-словарь", tGlossarySub: "Термины простыми словами",
+    tArticles: "Термины и статьи", tArticlesSub: "PSL, fWHR, canthal tilt",
     tHow: "Как это работает", tHowSub: "Геометрия + AI",
     tFeedback: "Обратная связь", tFeedbackSub: "Пожелания и идеи",
     goAnalysis: "Перейти к анализу",
@@ -211,6 +221,14 @@ var I18N = {
       "<div class='how-step'><div class='how-step-num'>4</div><div class='how-step-body'><h4>Прогресс и сравнение</h4><p>Каждый результат сохраняется в историю, чтобы отслеживать прогресс, делиться карточкой результата или устроить дуэль «Who Moggs» с другом.</p></div></div>" +
       "</div>" +
       "<p class='how-note'>Только развлечение. Балл — субъективная эвристика ИИ, а не объективная истина. Лёгкая асимметрия — норма для любого лица.</p></div>",
+    articlesHtml: "<div class='how'><p class='how-intro'>Подробные статьи про термины и понятия, лежащие в основе оценки.</p>" +
+      "<div class='art-list'>" +
+      "<a class='art-item' href='psl-shkala.html' target='_blank' rel='noopener'><b>PSL-шкала</b><span>Что реально значит балл от 1 до 10</span></a>" +
+      "<a class='art-item' href='psl-tiers.html' target='_blank' rel='noopener'><b>PSL-тиры: от Sub-3 до True Adam</b><span>Полная лестница тиров + PSL vs Appeal</span></a>" +
+      "<a class='art-item' href='fwhr.html' target='_blank' rel='noopener'><b>fWHR</b><span>Соотношение ширины и высоты лица</span></a>" +
+      "<a class='art-item' href='canthal-tilt.html' target='_blank' rel='noopener'><b>Canthal tilt</b><span>Как читать и измерять наклон глаз</span></a>" +
+      "<a class='art-item' href='glossary.html' target='_blank' rel='noopener'><b>Полный словарь</b><span>Все термины луксмаксинга простыми словами</span></a>" +
+      "</div></div>",
     fbSub: "Что улучшить? Чего не хватает? Нашли ошибку? Напишите — это реально помогает.",
     fbName: "Имя или ник (необязательно)", fbEmail: "Email для ответа (необязательно)", fbMsg: "Ваше сообщение…",
     fbSend: "Отправить", fbSending: "Отправка…", fbOk: "Спасибо! Сообщение отправлено.", fbErr: "Не удалось отправить. Попробуйте позже.",
@@ -241,6 +259,7 @@ function applyLang() {
     [".menu-title", "menuTitle"],
     [".menu-tile[data-view='history'] .mt-tx b", "tHistory"], [".menu-tile[data-view='history'] .mt-tx i", "tHistorySub"],
     [".menu-tile[data-view='glossary'] .mt-tx b", "tGlossary"], [".menu-tile[data-view='glossary'] .mt-tx i", "tGlossarySub"],
+    [".menu-tile[data-view='articles'] .mt-tx b", "tArticles"], [".menu-tile[data-view='articles'] .mt-tx i", "tArticlesSub"],
     [".menu-tile[data-view='how'] .mt-tx b", "tHow"], [".menu-tile[data-view='how'] .mt-tx i", "tHowSub"],
     [".menu-tile[data-view='feedback'] .mt-tx b", "tFeedback"], [".menu-tile[data-view='feedback'] .mt-tx i", "tFeedbackSub"],
     ["#menuGoBtn span:first-child", "goAnalysis"],
@@ -1833,6 +1852,7 @@ function roundRect(c2, x, y, w, h, r) {
   var VIEWS = {
     history: { titleKey: "tHistory", render: renderHistory },
     glossary: { titleKey: "tGlossary", render: renderGlossary },
+    articles: { titleKey: "tArticles", render: renderArticles },
     how: { titleKey: "tHow", render: renderHow },
   };
 
@@ -1861,6 +1881,10 @@ function roundRect(c2, x, y, w, h, r) {
 
   function renderHow(box) {
     box.innerHTML = t("howHtml");
+  }
+
+  function renderArticles(box) {
+    box.innerHTML = t("articlesHtml");
   }
 
   // глобальный доступ (например из iframe словаря)
