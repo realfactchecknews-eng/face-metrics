@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "ru.facerate.twa",
+    "sha256_cert_fingerprints": ["27:27:3B:BE:A2:11:4D:C2:CB:B2:84:7E:D8:6C:5E:71:CA:90:99:7B:8E:2D:62:C6:8C:B3:06:A8:D5:47:19:DD"]
+  }
+}]
