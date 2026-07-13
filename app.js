@@ -127,7 +127,7 @@ var I18N = {
     articlesHtml: "<div class='how'><p class='how-intro'>Deep-dive articles on the terms and concepts behind the score.</p>" +
       "<div class='art-list'>" +
       "<a class='art-item' href='psl-shkala.html' target='_blank' rel='noopener'><b>PSL scale</b><span>What the 1–10 score actually means</span></a>" +
-      "<a class='art-item' href='psl-tiers.html' target='_blank' rel='noopener'><b>PSL tiers: the real forum scale</b><span>Sub-Human → Chad per looksmax.org, and PSL vs Appeal</span></a>" +
+      "<a class='art-item' href='psl-tiers.html' target='_blank' rel='noopener'><b>PSL tiers: Sub-3 to True Adam</b><span>Full tier scale from looksmax.org, and PSL vs Appeal</span></a>" +
       "<a class='art-item' href='fwhr.html' target='_blank' rel='noopener'><b>fWHR</b><span>Facial width-to-height ratio explained</span></a>" +
       "<a class='art-item' href='canthal-tilt.html' target='_blank' rel='noopener'><b>Canthal tilt</b><span>How to read and measure eye tilt</span></a>" +
       "<a class='art-item' href='glossary.html' target='_blank' rel='noopener'><b>Full glossary</b><span>Every looksmaxxing term, explained simply</span></a>" +
@@ -225,7 +225,7 @@ var I18N = {
     articlesHtml: "<div class='how'><p class='how-intro'>Подробные статьи про термины и понятия, лежащие в основе оценки.</p>" +
       "<div class='art-list'>" +
       "<a class='art-item' href='psl-shkala.html' target='_blank' rel='noopener'><b>PSL-шкала</b><span>Что реально значит балл от 1 до 10</span></a>" +
-      "<a class='art-item' href='psl-tiers.html' target='_blank' rel='noopener'><b>PSL-тиры: реальная шкала форумов</b><span>Sub-Human → Chad по looksmax.org + PSL vs Appeal</span></a>" +
+      "<a class='art-item' href='psl-tiers.html' target='_blank' rel='noopener'><b>PSL-тиры: от Sub-3 до True Adam</b><span>Полная шкала тиров с looksmax.org + PSL vs Appeal</span></a>" +
       "<a class='art-item' href='fwhr.html' target='_blank' rel='noopener'><b>fWHR</b><span>Соотношение ширины и высоты лица</span></a>" +
       "<a class='art-item' href='canthal-tilt.html' target='_blank' rel='noopener'><b>Canthal tilt</b><span>Как читать и измерять наклон глаз</span></a>" +
       "<a class='art-item' href='glossary.html' target='_blank' rel='noopener'><b>Полный словарь</b><span>Все термины луксмаксинга простыми словами</span></a>" +
