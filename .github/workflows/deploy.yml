@@ -35,6 +35,8 @@ jobs:
             robots.txt sitemap.xml yandex_*.html google*.html \
             vendor assets \
             _site/ 2>/dev/null || true
+          mkdir -p _site/.well-known
+          cp .well-known/assetlinks.json _site/.well-known/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
