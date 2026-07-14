@@ -141,6 +141,7 @@ var I18N = {
     errNoFace: "Could not detect a face. Try another photo — the face should look at the camera in good lighting.",
     errGeneric: "Analysis error. Try refreshing the page.",
     emptyAnswer: "Empty response.",
+    cashbackToast: "🎁 Cashback! +1 free analysis for spending 3 credits.",
     gateRestricted: "Access restricted.", errPrefix: "Error: ",
     tCompare: "Who Moggs?", tCompareSub: "Face-off: compare two faces",
     cmpTitle: "Who Moggs?", cmpSub: "Upload two faces — AI decides who mogs whom. 1 credit.",
@@ -239,6 +240,7 @@ var I18N = {
     errNoFace: "Не удалось распознать лицо. Попробуйте другое фото — лицо должно быть направлено в камеру.",
     errGeneric: "Ошибка при анализе. Попробуйте обновить страницу.",
     emptyAnswer: "Пустой ответ.",
+    cashbackToast: "🎁 Кешбэк! +1 бесплатный анализ за 3 потраченных кредита.",
     gateRestricted: "Доступ ограничен.", errPrefix: "Ошибка: ",
     tCompare: "Who Moggs?", tCompareSub: "Дуэль: сравни два лица",
     cmpTitle: "Who Moggs?", cmpSub: "Загрузи два лица — ИИ решит, кто кого моггает. 1 кредит.",
@@ -1218,6 +1220,7 @@ async function callAI(metrics, shapeInfo) {
     aiReport.classList.remove("hidden");
     // Обновляем чип квоты по факту списания.
     if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
+    if (data.cashback) showCashbackToast();
   } catch (err) {
     stopAIHUD();
     aiErrorText.textContent = t("errPrefix") + err.message;
@@ -1956,6 +1959,25 @@ function clearAccount() { localStorage.removeItem("fm-tg"); }
 function isEdgyTone() {
   var cb = document.getElementById("toneEdgy");
   return cb ? cb.checked : false;
+}
+
+function showCashbackToast() {
+  var el = document.createElement("div");
+  el.textContent = t("cashbackToast");
+  el.style.cssText = "position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);"
+    + "background:#161311;border:1px solid #c4a46b;color:#f0ece6;padding:12px 20px;border-radius:10px;"
+    + "font-family:'Cormorant Garamond',serif;font-size:1.05rem;z-index:9999;opacity:0;"
+    + "transition:opacity .35s ease,transform .35s ease;text-align:center;max-width:90vw;";
+  document.body.appendChild(el);
+  requestAnimationFrame(function() {
+    el.style.opacity = "1";
+    el.style.transform = "translateX(-50%) translateY(0)";
+  });
+  setTimeout(function() {
+    el.style.opacity = "0";
+    el.style.transform = "translateX(-50%) translateY(20px)";
+    setTimeout(function() { el.remove(); }, 400);
+  }, 4200);
 }
 
 function updateQuotaChip(freeLeft, credits, subscribed, unlimUntil) {

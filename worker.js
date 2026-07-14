@@ -22,6 +22,7 @@
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/неделю
 const LAVA_MIN_RUB = 50;                 // минимальная сумма инвойса у Lava.top — ниже нельзя ни при какой скидке
 const FREE_PER_WEEK = 1;                 // бесплатных анализов в неделю подписчику
+const CASHBACK_EVERY = 3;                // каждые N потраченных платных кредитов -> +1 анализ кешбэком
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 function weekBucket() { return Math.floor(Date.now() / WEEK_MS); } // сброс раз в 7 дней от эпохи
 const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
@@ -203,12 +204,23 @@ async function analyze(request, env) {
   }
 
   // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели; paid → минус кредит.
-  let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_WEEK - freeUsed) : 0;
+  let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_WEEK - freeUsed) : 0, cashback = false;
   if (mode === 'free') {
     await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
     freeLeft = FREE_PER_WEEK - freeUsed - 1;
   } else if (mode === 'paid') {
     creditsLeft = credits - 1;
+    // Кешбэк лояльности: каждые CASHBACK_EVERY потраченных ПЛАТНЫХ кредита (накопительно,
+    // без привязки к дням) — +1 анализ сверху. Считаем от общего числа потраченных кредитов
+    // за всё время (spent:tgid), не от текущей покупки — так работает и растянуто по времени,
+    // и если человек тратит кредиты пачкой за один раз.
+    const spentKey = `spent:${tgid}`;
+    const spent = parseInt(await env.RATE_LIMIT.get(spentKey) || '0', 10) + 1;
+    await env.RATE_LIMIT.put(spentKey, String(spent));
+    if (spent % CASHBACK_EVERY === 0) {
+      creditsLeft += 1;
+      cashback = true;
+    }
     await env.RATE_LIMIT.put(`credits:${tgid}`, String(creditsLeft));
   } else if (mode === 'unlim') {
     // Счётчик анализов за текущую сессию безлимита (только для статистики, не влияет на лимиты).
@@ -219,7 +231,7 @@ async function analyze(request, env) {
   const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
   await env.RATE_LIMIT.put(`g:${today}`, String(g + 1), { expirationTtl: 93600 });
 
-  return json({ text: data.choices[0].message.content, mode, creditsLeft, freeLeft, subscribed });
+  return json({ text: data.choices[0].message.content, mode, creditsLeft, freeLeft, subscribed, cashback });
 }
 
 // ─────────────────────────── Вход через Telegram ───────────────────────────
