@@ -88,6 +88,8 @@ export default {
       if (path === '/buy')        return await buy(request, env);
       if (path === '/sendcard')   return await sendCard(request, env);
       if (path === '/feedback')   return await submitFeedback(request, env);
+      if (path === '/partner-data')  return await partnerData(request, env);
+      if (path === '/partner-admin') return await partnerAdmin(request, env);
       return await analyze(request, env);
     } catch (e) {
       return json({ error: 'server', text: 'Внутренняя ошибка: ' + e.message });
@@ -1097,6 +1099,31 @@ async function tgWebhook(request, env) {
     }
     if (!r?.items?.length) t += r?.error ? `Ошибка: ${r.error}` : '(пусто)';
     await tgApi(env, 'sendMessage', { chat_id: chat, text: t.slice(0, 4000), parse_mode: 'HTML' });
+    return new Response('ok');
+  }
+
+  // ── Админ: /cashbackbackfill — разовая ручная выдача кешбэка (14.07.2026) тем, кто
+  // уже потратил 3+ платных кредита ДО того, как появилась автоматическая механика
+  // кешбэка. Список и суммы посчитаны один раз вручную (orders: минус текущий баланс
+  // credits:), захардкожены ниже — это не рекуррентная механика, просто разовый жест.
+  // Идемпотентно по cashbackBackfillDone:tgid — безопасно запускать повторно.
+  if (text.startsWith('/cashbackbackfill') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const BACKFILL = { '1163642139': 2, '1839159272': 2, '753733837': 2, '8552442679': 2 };
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '⏳ Выдаю кешбэк и рассылаю уведомления...' });
+    let granted = 0, skipped = 0;
+    for (const [buyerId, amount] of Object.entries(BACKFILL)) {
+      if (await env.RATE_LIMIT.get(`cashbackBackfillDone:${buyerId}`)) { skipped++; continue; }
+      await env.RATE_LIMIT.put(`cashbackBackfillDone:${buyerId}`, '1', { expirationTtl: 60 * 60 * 24 * 365 });
+      const cur = parseInt(await env.RATE_LIMIT.get(`credits:${buyerId}`) || '0', 10);
+      await env.RATE_LIMIT.put(`credits:${buyerId}`, String(cur + amount));
+      const L = await userLang(env, buyerId);
+      const msgText = L === 'ru'
+        ? `🖤 Спасибо, что вы с нами!\n\nМы запустили кешбэк — теперь каждые 3 потраченных анализа возвращают +1 анализ автоматически. Вы уже успели потратить достаточно кредитов ДО того, как эта механика появилась — поэтому дарим вам ${amount} анализ${amount === 1 ? '' : 'а'} в знак благодарности за доверие.\n\nОн уже зачислен на ваш аккаунт — можно использовать прямо сейчас.\n\nAscend & Forget 🖤`
+        : `🖤 Thank you for being with us!\n\nWe just launched cashback — every 3 spent analyses now return +1 analysis automatically. You'd already spent enough credits BEFORE this feature existed — so here's ${amount} analysis${amount === 1 ? '' : 'es'} on us, as a thank-you.\n\nAlready added to your account — ready to use right now.\n\nAscend & Forget 🖤`;
+      await tgApi(env, 'sendMessage', { chat_id: buyerId, text: msgText });
+      granted++;
+    }
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Готово: начислено ${granted}, пропущено (уже обработаны раньше) ${skipped}.` });
     return new Response('ok');
   }
 
@@ -2949,6 +2976,77 @@ window.addEventListener('hashchange', load);
 </script>
 </body></html>`;
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+// ─────────────────────── Портал медиапартнёров (facerate.online) ───────────────────────
+// Партнёр = уже существующий медиа-промокод (promo:CODE с mediaPct). Отдельный PIN
+// (partnerpin:CODE) даёт партнёру доступ ТОЛЬКО к своей карточке, без ADMIN_STATS_TOKEN.
+// Задачи (ptasks:CODE) — простой JSON-массив, управляется мной через /partner-admin.
+async function partnerData(request, env) {
+  let body; try { body = await request.json(); } catch { return json({ error: 'bad request' }); }
+  const code = String(body.code || '').toUpperCase().trim();
+  const pin = String(body.pin || '').trim();
+  if (!code || !pin) return json({ error: 'forbidden' });
+  const savedPin = await env.RATE_LIMIT.get(`partnerpin:${code}`);
+  if (!savedPin || savedPin !== pin) return json({ error: 'forbidden' });
+  const raw = await env.RATE_LIMIT.get(`promo:${code}`);
+  if (!raw) return json({ error: 'forbidden' });
+  let p; try { p = JSON.parse(raw); } catch { return json({ error: 'forbidden' }); }
+  if (p.mediaPct == null) return json({ error: 'forbidden' });
+  const tasksRaw = await env.RATE_LIMIT.get(`ptasks:${code}`);
+  let tasks = []; try { tasks = tasksRaw ? JSON.parse(tasksRaw) : []; } catch { tasks = []; }
+  return json({
+    code, label: p.label || '', mediaPct: p.mediaPct, discount: p.discount || 0,
+    purchases: p.purchases || 0, revenueRub: p.revenueRub || 0,
+    earned: Math.round((p.revenueRub || 0) * (p.mediaPct || 0) / 100),
+    tasks,
+  });
+}
+// Единая админ-точка для управления партнёрским порталом — защищена тем же секретом,
+// что и /admin-stats/data (ADMIN_STATS_TOKEN), чтобы не заводить ещё один секрет.
+async function partnerAdmin(request, env) {
+  let body; try { body = await request.json(); } catch { return json({ error: 'bad request' }); }
+  if (!env.ADMIN_STATS_TOKEN || body.token !== env.ADMIN_STATS_TOKEN) {
+    return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  }
+  const code = String(body.code || '').toUpperCase().trim();
+  if (body.action === 'setPin') {
+    if (!code) return json({ error: 'no code' });
+    const pin = body.pin ? String(body.pin).trim() : String(Math.floor(100000 + Math.random() * 900000));
+    await env.RATE_LIMIT.put(`partnerpin:${code}`, pin);
+    return json({ ok: true, code, pin });
+  }
+  if (body.action === 'addTask') {
+    if (!code || !body.text) return json({ error: 'no code/text' });
+    const raw = await env.RATE_LIMIT.get(`ptasks:${code}`);
+    let tasks = []; try { tasks = raw ? JSON.parse(raw) : []; } catch { tasks = []; }
+    tasks.unshift({ text: String(body.text), done: false, ts: Date.now() });
+    await env.RATE_LIMIT.put(`ptasks:${code}`, JSON.stringify(tasks.slice(0, 30)));
+    return json({ ok: true, tasks });
+  }
+  if (body.action === 'toggleTask') {
+    if (!code || body.idx == null) return json({ error: 'no code/idx' });
+    const raw = await env.RATE_LIMIT.get(`ptasks:${code}`);
+    let tasks = []; try { tasks = raw ? JSON.parse(raw) : []; } catch { tasks = []; }
+    if (tasks[body.idx]) tasks[body.idx].done = !tasks[body.idx].done;
+    await env.RATE_LIMIT.put(`ptasks:${code}`, JSON.stringify(tasks));
+    return json({ ok: true, tasks });
+  }
+  if (body.action === 'list') {
+    const promoList = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+    const partners = [];
+    for (const k of promoList.keys) {
+      const raw = await env.RATE_LIMIT.get(k.name);
+      if (!raw) continue;
+      let p; try { p = JSON.parse(raw); } catch { continue; }
+      if (p.mediaPct == null) continue;
+      const c = k.name.slice('promo:'.length);
+      const pin = await env.RATE_LIMIT.get(`partnerpin:${c}`);
+      partners.push({ code: c, label: p.label || '', hasPin: !!pin, purchases: p.purchases || 0, revenueRub: p.revenueRub || 0 });
+    }
+    return json({ partners });
+  }
+  return json({ error: 'unknown action' });
 }
 
 // ─────────────────────────── Утилиты ───────────────────────────
