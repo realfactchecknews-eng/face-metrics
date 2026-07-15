@@ -624,7 +624,7 @@ async function lavaWebhook(request, env) {
     const { id: orderId, isFirst } = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'card', upd.amount))) await trackReferralPurchase(env, tgid, pack, 'card', upd.amount);
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
-    const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', m1UpsellText(pack, L)].filter(Boolean).join('\n\n');
+    const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -687,7 +687,7 @@ async function cryptoWebhook(request, env) {
     const { id: orderId, isFirst } = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount)))) await trackReferralPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount));
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
-    const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', m1UpsellText(pack, L)].filter(Boolean).join('\n\n');
+    const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -695,9 +695,19 @@ async function cryptoWebhook(request, env) {
 
 // Кросс-сейл на m1 после оплаты разового пакета (p1/p5) — таргетирует уже платящих,
 // самая дешёвая аудитория для допродажи. Безлимит/подписку не трогаем (там уже max тариф).
-function m1UpsellText(pack, L) {
+// Если у покупателя сейчас висит pendingDiscount (чаще всего — автопромо после первой покупки,
+// см. grantFirstPurchaseBonus), явно напоминаем, что его можно применить именно к m1 —
+// иначе скидка и апселл выглядят как два несвязанных сообщения.
+async function m1UpsellText(env, tgid, pack, L) {
   if (!pack || pack.type !== 'credits') return '';
   const m1 = PACKS.m1;
+  const discPct = parseInt(await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`) || '0', 10);
+  if (discPct > 0) {
+    const discPrice = applyDiscount(m1.rub, discPct);
+    return L === 'ru'
+      ? `👑 Часто берёшь анализы? У тебя активна скидка ${discPct}% — успей применить её к безлимиту на месяц: ${discPrice}₽ вместо ${m1.rub}₽. Открой бота и жми «Купить».`
+      : `👑 Analyzing often? Your ${discPct}% discount is active — use it on the monthly unlimited: ${discPrice}₽ instead of ${m1.rub}₽. Open the bot and tap "Buy".`;
+  }
   return L === 'ru'
     ? `👑 Часто берёшь анализы? Безлимит на месяц — всего ${m1.rub}₽ вместо оплаты за каждый анализ по отдельности. Открой бота и жми «Купить».`
     : `👑 Analyzing often? Get unlimited for a month — just ${m1.rub}₽ instead of paying per analysis. Open the bot and tap "Buy".`;
@@ -1426,7 +1436,7 @@ async function handlePayment(env, msg, L) {
     const payMethod = sp.currency === 'XTR' ? 'stars' : 'rub';
     if (!(await trackMediaPromoPurchase(env, tgid, pack, payMethod, paidAmount))) await trackReferralPurchase(env, tgid, pack, payMethod, paidAmount);
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
-    const extra = [gotBonus ? b.firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', m1UpsellText(pack, L || 'en')].filter(Boolean).join('\n\n');
+    const extra = [gotBonus ? b.firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', await m1UpsellText(env, tgid, pack, L || 'en')].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note, orderId, extra), reply_markup: menuKb(L || 'en'), parse_mode: 'HTML' });
   } catch { /* payload сломан — молча игнор */ }
 }
