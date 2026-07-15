@@ -3032,6 +3032,29 @@ async function partnerAdmin(request, env) {
     await env.RATE_LIMIT.put(`ptasks:${code}`, JSON.stringify(tasks));
     return json({ ok: true, tasks });
   }
+  if (body.action === 'deleteTask') {
+    if (!code || body.idx == null) return json({ error: 'no code/idx' });
+    const raw = await env.RATE_LIMIT.get(`ptasks:${code}`);
+    let tasks = []; try { tasks = raw ? JSON.parse(raw) : []; } catch { tasks = []; }
+    tasks.splice(body.idx, 1);
+    await env.RATE_LIMIT.put(`ptasks:${code}`, JSON.stringify(tasks));
+    return json({ ok: true, tasks });
+  }
+  if (body.action === 'get') {
+    if (!code) return json({ error: 'no code' });
+    const raw = await env.RATE_LIMIT.get(`promo:${code}`);
+    if (!raw) return json({ error: 'not found' });
+    let p; try { p = JSON.parse(raw); } catch { return json({ error: 'bad promo' }); }
+    const tasksRaw = await env.RATE_LIMIT.get(`ptasks:${code}`);
+    let tasks = []; try { tasks = tasksRaw ? JSON.parse(tasksRaw) : []; } catch { tasks = []; }
+    const pin = await env.RATE_LIMIT.get(`partnerpin:${code}`);
+    return json({
+      code, label: p.label || '', mediaPct: p.mediaPct || 0, discount: p.discount || 0,
+      purchases: p.purchases || 0, revenueRub: p.revenueRub || 0,
+      earned: Math.round((p.revenueRub || 0) * (p.mediaPct || 0) / 100),
+      pin: pin || null, tasks,
+    });
+  }
   if (body.action === 'list') {
     const promoList = await env.RATE_LIMIT.list({ prefix: 'promo:' });
     const partners = [];
