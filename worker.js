@@ -42,7 +42,7 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 899,  rub: 1199, lavaRub: 1199, label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 1499, oldRub: 1999, oldLavaRub: 1999 },
+  m1: { type: 'unlim',  hours: 720,  stars: 749,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 1499, oldRub: 1999, oldLavaRub: 1999 },
 };
 // Недельная акция на новые цены выше — по истечении можно вернуть old*-значения в основные
 // поля (или оставить как есть, тогда акция станет постоянной ценой). Таймер на сайте/в боте
