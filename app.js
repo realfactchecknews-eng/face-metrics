@@ -694,6 +694,7 @@ function showConsent() {
 })();
 
 resetBtn.addEventListener("click", function() {
+  localStorage.removeItem("fm-view");
   uploadSection.classList.remove("hidden");
   analysisView.classList.add("hidden");
   document.body.classList.remove("analyzing");
@@ -1455,6 +1456,7 @@ function saveLastResult(overall, reportText) {
   try {
     var entry = { score: overall, date: Date.now(), report: reportText || "" };
     localStorage.setItem("fm-last", JSON.stringify(entry));
+    localStorage.setItem("fm-view", "analysis");
     var hist = JSON.parse(localStorage.getItem("fm-history") || "[]");
     hist.unshift({ score: overall, date: entry.date });
     localStorage.setItem("fm-history", JSON.stringify(hist.slice(0, 20)));
@@ -1484,6 +1486,28 @@ function saveLastResult(overall, reportText) {
     if (close) close.addEventListener("click", function() { modal.classList.add("hidden"); });
     modal.addEventListener("click", function(e) { if (e.target === modal) modal.classList.add("hidden"); });
   }
+})();
+
+// При рефреше страницы — восстанавливаем экран результатов если пользователь там был
+(function restoreAnalysisView() {
+  if (localStorage.getItem("fm-view") !== "analysis") return;
+  var last;
+  try { last = JSON.parse(localStorage.getItem("fm-last") || "null"); } catch (e) { return; }
+  if (!last || !last.report) return;
+  uploadSection.classList.add("hidden");
+  analysisView.classList.remove("hidden");
+  resultsDiv.classList.remove("hidden");
+  var aiReport = document.getElementById("aiReport");
+  if (aiReport) aiReport.classList.remove("hidden");
+  renderAIReport(last.report);
+  var sb = document.getElementById("shareBtn");
+  if (sb) sb.classList.remove("hidden");
+  var tb = document.getElementById("tgCardBtn");
+  if (tb) tb.classList.remove("hidden");
+  var cb = document.getElementById("toCompareBtn");
+  if (cb) cb.classList.remove("hidden");
+  var banner = document.getElementById("lastResultBanner");
+  if (banner) banner.classList.add("hidden");
 })();
 
 // Рендерит сохранённый отчёт в произвольный контейнер (read-only).
