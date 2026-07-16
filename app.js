@@ -2071,7 +2071,7 @@ function pollTgLogin(code, btn) {
   var tries = 0;
   function tick() {
     tries++;
-    if (tries > 80) { // ~5 мин — покрывает возврат из встроенного браузера ТГ
+    if (tries > 300) { // ~5 мин — покрывает возврат из встроенного браузера ТГ
       clearInterval(_authPollTimer); _authPollTimer = null;
       localStorage.removeItem(TG_LOGIN_PENDING_KEY);
       if (btn) { btn.disabled = false; btn.style.flexDirection = ""; btn.style.gap = ""; btn.innerHTML = t("loginBtn"); }
@@ -2092,7 +2092,7 @@ function pollTgLogin(code, btn) {
     }).catch(function(){});
   }
   tick();
-  _authPollTimer = setInterval(tick, 2500);
+  _authPollTimer = setInterval(tick, 1000);
 }
 
 // Если страницу пересобрало (вернулись из встроенного браузера ТГ) — докручиваем
