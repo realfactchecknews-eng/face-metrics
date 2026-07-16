@@ -1327,7 +1327,7 @@ function parseAIReport(text) {
   return result;
 }
 
-function renderAIReport(text) {
+function renderAIReport(text, skipSideEffects) {
   var parsed  = parseAIReport(text);
   window._fmParsed = parsed; // для share-карточки
   var scoreEl = document.getElementById("overallScoreNum");
@@ -1386,16 +1386,21 @@ function renderAIReport(text) {
   }
 
   // Отчёт готов — звук, сохранение, кнопка «Поделиться».
-  if (parsed.overall !== null) {
+  // skipSideEffects=true при восстановлении сохранённого отчёта после рефреша страницы —
+  // звук/сохранение/автоотправка карточки в ТГ уже случились при первом рендере, повтор
+  // приводит к дублю (и пустой карточке, т.к. фото уже не в памяти после рефреша).
+  if (parsed.overall !== null && !skipSideEffects) {
     playPing();
     saveLastResult(parsed.overall, text);
+    autoSendTgCard();
+  }
+  if (parsed.overall !== null) {
     var sb = document.getElementById("shareBtn");
     if (sb) sb.classList.remove("hidden");
     var tb = document.getElementById("tgCardBtn");
     if (tb) tb.classList.remove("hidden");
     var cb = document.getElementById("toCompareBtn");
     if (cb) cb.classList.remove("hidden");
-    autoSendTgCard();
   }
 }
 
@@ -1499,7 +1504,7 @@ function saveLastResult(overall, reportText) {
   resultsDiv.classList.remove("hidden");
   var aiReport = document.getElementById("aiReport");
   if (aiReport) aiReport.classList.remove("hidden");
-  renderAIReport(last.report);
+  renderAIReport(last.report, true);
   var sb = document.getElementById("shareBtn");
   if (sb) sb.classList.remove("hidden");
   var tb = document.getElementById("tgCardBtn");
