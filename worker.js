@@ -21,10 +21,25 @@
 
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/неделю
 const LAVA_MIN_RUB = 50;                 // минимальная сумма инвойса у Lava.top — ниже нельзя ни при какой скидке
-const FREE_PER_WEEK = 1;                 // бесплатных анализов в неделю подписчику
+const FREE_PER_WEEK = 1;                 // бесплатных анализов в неделю подписчику, который НИКОГДА не покупал (тизер-отчёт)
+const BUYER_FREE_COOLDOWN_S = 3 * 24 * 60 * 60; // те, кто хоть раз покупал: полный бесплатный анализ раз в 3 дня вместо тизера раз в неделю
 const CASHBACK_EVERY = 3;                // каждые N потраченных платных кредитов -> +1 анализ кешбэком
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 function weekBucket() { return Math.floor(Date.now() / WEEK_MS); } // сброс раз в 7 дней от эпохи
+
+// Флаг «когда-либо покупал» (ставится в recordOrder на любой реальный платёж, без TTL).
+// Не путать с промокодами/розыгрышами — те начисляют credits/unlim напрямую и УЖЕ всегда
+// дают полный отчёт (идут через mode='paid'/'unlim', тизер применяется только к mode='free').
+async function isBuyer(env, tgid) {
+  return !!(await env.RATE_LIMIT.get(`everBought:${tgid}`));
+}
+// Доступен ли сейчас бесплатный анализ: новичкам — раз в неделю (weekBucket), тем кто уже
+// покупал — раз в 3 дня по cooldown-ключу (freeCd:tgid).
+async function freeQuotaAvailable(env, tgid, buyer) {
+  if (buyer) return !(await env.RATE_LIMIT.get(`freeCd:${tgid}`));
+  const freeUsed = parseInt(await env.RATE_LIMIT.get(`qw:${tgid}:${weekBucket()}`) || '0', 10);
+  return freeUsed < FREE_PER_WEEK;
+}
 const ADMIN_USERNAMES = ['Matveyika'];   // кто может создавать промокоды в боте
 const PACKS = {                          // тарифы: stars — XTR, rub — рубли (ЮKassa/CryptoBot)
   // lavaRub — целевая цена по карте/СБП. Для офферов с isDynamicPrice:true в Lava.top мы сами
@@ -137,22 +152,27 @@ async function analyze(request, env) {
   if (!sess) return json({ error: 'auth', text: 'Войдите через Telegram, чтобы получить бесплатный анализ.' });
   const tgid = sess.id;
 
-  // Квота: безлимит → подписка на канал (1 free/неделю) → кредиты.
+  // Квота: безлимит → подписка на канал (free, тизер новичкам / полный тем кто уже покупал) → кредиты.
   const unlimUntil = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
   const subscribed = await isSubscribed(env, tgid);
   const freeKey = `qw:${tgid}:${weekBucket()}`;
   const freeUsed = parseInt(await env.RATE_LIMIT.get(freeKey) || '0', 10);
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+  const buyer = await isBuyer(env, tgid);
+  const freeAvail = subscribed && await freeQuotaAvailable(env, tgid, buyer);
 
   let mode = null;
   if (unlimUntil > Date.now()) mode = 'unlim';
-  else if (subscribed && freeUsed < FREE_PER_WEEK) mode = 'free';
+  else if (freeAvail) mode = 'free';
   else if (credits > 0) mode = 'paid';
   else if (!subscribed) {
     return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в неделю.', channel: CHANNEL });
   } else {
-    return json({ error: 'pay', text: 'Бесплатный анализ на этой неделе уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0 });
+    return json({ error: 'pay', text: 'Бесплатный анализ уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0 });
   }
+  // Тизер (урезанный отчёт) — только для новичков, которые никогда не покупали.
+  // Те, кто хоть раз покупал, получают ПОЛНЫЙ бесплатный анализ раз в 3 дня — бонус лояльности.
+  const isTeaser = mode === 'free' && !buyer;
 
   // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
   // Не блокирует уже оплативших (unlim/paid), чтобы платёж не пропадал впустую при наплыве трафика.
@@ -164,11 +184,11 @@ async function analyze(request, env) {
   }
 
   // Модель.
-  // Бесплатный тир (mode === 'free'): урезаем ответ ИИ до тизера (общий балл + 3 категории,
-  // без остальных 5 и без рекомендаций) — экономит токены (меньше вывода) и мотивирует купить
+  // Тизер (isTeaser, только новички без покупок): урезаем ответ ИИ до общего балла + 3 категорий,
+  // без остальных 5 и без рекомендаций — экономит токены (меньше вывода) и мотивирует купить
   // полный разбор. Промпт после этого суффикса не меняем, просто просим модель не выводить лишнее.
   const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: ОБЩИЙ_БАЛЛ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
-  const promptText = mode === 'free' ? body.prompt + FREE_TEASER_SUFFIX : body.prompt;
+  const promptText = isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt;
 
   const imgs = Array.isArray(body.images) && body.images.length
     ? body.images
@@ -183,7 +203,7 @@ async function analyze(request, env) {
   const buildBody = (withSeed) => {
     const b = {
       model: 'x-ai/grok-4.3',
-      max_tokens: mode === 'free' ? 900 : 2200,
+      max_tokens: isTeaser ? 900 : 2200,
       temperature: 0.35,
       top_p: 0.85,
       reasoning: { effort: 'low' },
@@ -211,11 +231,16 @@ async function analyze(request, env) {
     return json({ error: 'model', text: `Сервис перегружен, попробуйте ещё раз. (${lastErr})` });
   }
 
-  // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели; paid → минус кредит.
+  // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели (или 3-дневный кулдаун
+  // для тех, кто уже покупал); paid → минус кредит.
   let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_WEEK - freeUsed) : 0, cashback = false;
   if (mode === 'free') {
-    await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
-    freeLeft = FREE_PER_WEEK - freeUsed - 1;
+    if (buyer) {
+      await env.RATE_LIMIT.put(`freeCd:${tgid}`, '1', { expirationTtl: BUYER_FREE_COOLDOWN_S });
+    } else {
+      await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
+    }
+    freeLeft = 0;
   } else if (mode === 'paid') {
     creditsLeft = credits - 1;
     // Кешбэк лояльности: каждые CASHBACK_EVERY потраченных ПЛАТНЫХ кредита (накопительно,
@@ -239,7 +264,7 @@ async function analyze(request, env) {
   const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
   await env.RATE_LIMIT.put(`g:${today}`, String(g + 1), { expirationTtl: 93600 });
 
-  return json({ text: data.choices[0].message.content, mode, creditsLeft, freeLeft, subscribed, cashback });
+  return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback });
 }
 
 // ─────────────────────────── Вход через Telegram ───────────────────────────
@@ -289,12 +314,12 @@ async function me(request, env) {
 
 async function statusFor(env, user, token, fresh) {
   const subscribed = await isSubscribed(env, user.id, fresh);
-  const freeUsed = parseInt(await env.RATE_LIMIT.get(`qw:${user.id}:${weekBucket()}`) || '0', 10);
+  const buyer = await isBuyer(env, user.id);
+  const freeLeft = subscribed && await freeQuotaAvailable(env, user.id, buyer) ? 1 : 0;
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${user.id}`) || '0', 10);
   const unlimUntil = parseInt(await env.RATE_LIMIT.get(`unlim:${user.id}`) || '0', 10);
   return {
-    token, user, subscribed,
-    freeLeft: subscribed ? Math.max(0, FREE_PER_WEEK - freeUsed) : 0,
+    token, user, subscribed, freeLeft,
     credits, channel: CHANNEL, packs: PACKS, methods: enabledMethods(env),
     saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0,
     unlimUntil: unlimUntil > Date.now() ? unlimUntil : 0,
@@ -1216,13 +1241,14 @@ async function handleCallback(env, cq) {
     await reply(b.menu, menuKb(L));
   } else if (data === 'status') {
     const credits = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
-    const freeUsed = parseInt(await env.RATE_LIMIT.get(`qw:${tgid}:${weekBucket()}`) || '0', 10);
     const unlim = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
     const sub = await isSubscribed(env, tgid, true);
+    const buyerFlag = await isBuyer(env, tgid);
+    const freeAvail = sub && await freeQuotaAvailable(env, tgid, buyerFlag);
     let t = b.statusHead;
     if (unlim > Date.now()) t += b.statusUnlim(fmtDate(unlim, L));
     t += b.statusCredits(credits);
-    t += sub ? b.statusSub(Math.max(0, FREE_PER_WEEK - freeUsed)) : b.statusNoSub;
+    t += sub ? b.statusSub(freeAvail ? 1 : 0) : b.statusNoSub;
     await reply(t, menuKb(L));
   } else if (data === 'shop') {
     // Шаг 1: выбор способа оплаты.
@@ -2398,6 +2424,9 @@ async function recordOrder(env, entry) {
   const isFirst = list.length === 0;
   list.unshift({ ...full, ts: Date.now() });
   await putList(env, key, list.slice(0, 20), 60 * 60 * 24 * 365);
+  // Постоянный флаг «хоть раз реально покупал» — даёт полный (не тизерный) бесплатный
+  // анализ раз в 3 дня вместо тизера раз в неделю (см. analyze()). Без TTL.
+  await env.RATE_LIMIT.put(`everBought:${entry.tgid}`, '1');
   return { id, isFirst };
 }
 

@@ -1220,7 +1220,7 @@ async function callAI(metrics, shapeInfo) {
     var data = await res.json();
     stopAIHUD();
     if (data.error) { showGate(data); return; }
-    renderAIReport(data.text || t("emptyAnswer"), false, data.mode);
+    renderAIReport(data.text || t("emptyAnswer"), false, !!data.teaser);
     aiReport.classList.remove("hidden");
     // Обновляем чип квоты по факту списания.
     if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
@@ -1330,7 +1330,7 @@ function parseAIReport(text) {
   return result;
 }
 
-function renderAIReport(text, skipSideEffects, mode) {
+function renderAIReport(text, skipSideEffects, isTeaser) {
   var parsed  = parseAIReport(text);
   window._fmParsed = parsed; // для share-карточки
   var scoreEl = document.getElementById("overallScoreNum");
@@ -1394,7 +1394,7 @@ function renderAIReport(text, skipSideEffects, mode) {
   // приводит к дублю (и пустой карточке, т.к. фото уже не в памяти после рефреша).
   if (parsed.overall !== null && !skipSideEffects) {
     playPing();
-    saveLastResult(parsed.overall, text, mode);
+    saveLastResult(parsed.overall, text, isTeaser);
     autoSendTgCard();
   }
   if (parsed.overall !== null) {
@@ -1407,7 +1407,8 @@ function renderAIReport(text, skipSideEffects, mode) {
   }
   // Бесплатный тир получает урезанный отчёт (3 из 8 категорий, без рекомендаций) —
   // показываем карточку с призывом купить полный разбор вместо оставшихся категорий.
-  if (mode === "free") showTeaserUpsell(); else hideTeaserUpsell();
+  window._fmTeaser = !!isTeaser; // для share-карточки (замочек на балле)
+  if (isTeaser) showTeaserUpsell(); else hideTeaserUpsell();
 }
 
 function showTeaserUpsell() {
@@ -1488,9 +1489,9 @@ function playPing() {
 
 
 /* ───────────────────  Последний результат + история  ─────────────────── */
-function saveLastResult(overall, reportText, mode) {
+function saveLastResult(overall, reportText, teaser) {
   try {
-    var entry = { score: overall, date: Date.now(), report: reportText || "", mode: mode || null };
+    var entry = { score: overall, date: Date.now(), report: reportText || "", teaser: !!teaser };
     localStorage.setItem("fm-last", JSON.stringify(entry));
     localStorage.setItem("fm-view", "analysis");
     var hist = JSON.parse(localStorage.getItem("fm-history") || "[]");
@@ -1535,7 +1536,7 @@ function saveLastResult(overall, reportText, mode) {
   resultsDiv.classList.remove("hidden");
   var aiReport = document.getElementById("aiReport");
   if (aiReport) aiReport.classList.remove("hidden");
-  renderAIReport(last.report, true, last.mode);
+  renderAIReport(last.report, true, !!last.teaser);
   var sb = document.getElementById("shareBtn");
   if (sb) sb.classList.remove("hidden");
   var tb = document.getElementById("tgCardBtn");
@@ -1744,8 +1745,13 @@ function buildShareCard() {
     g.textAlign = "center";
     g.font = "27px Georgia, serif"; ls(10); g.fillStyle = GOLD;
     g.fillText("OVERALL PSL SCORE", W / 2, by + 52); ls(0);
-    // разделитель с ромбом
-    var dy = by + 88;
+    // Тизер (бесплатный урезанный отчёт) — замочек + приглашение открыть полный разбор в боте.
+    if (window._fmTeaser) {
+      g.font = "22px Georgia, serif"; ls(2); g.fillStyle = GOLD_HI;
+      g.fillText("🔒 " + (lang() === "ru" ? "ПОЛНЫЙ РАЗБОР — В БОТЕ" : "FULL REPORT — IN THE BOT"), W / 2, by + 90); ls(0);
+    }
+    // разделитель с ромбом (сдвинут ниже на тизере, чтобы не наезжать на надпись про замочек)
+    var dy = by + (window._fmTeaser ? 128 : 88);
     var lg = g.createLinearGradient(W / 2 - 260, 0, W / 2 + 260, 0);
     lg.addColorStop(0, "rgba(196,164,107,0)"); lg.addColorStop(0.5, "rgba(196,164,107,0.8)"); lg.addColorStop(1, "rgba(196,164,107,0)");
     g.strokeStyle = lg; g.lineWidth = 1.5;
