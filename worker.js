@@ -164,20 +164,26 @@ async function analyze(request, env) {
   }
 
   // Модель.
+  // Бесплатный тир (mode === 'free'): урезаем ответ ИИ до тизера (общий балл + 3 категории,
+  // без остальных 5 и без рекомендаций) — экономит токены (меньше вывода) и мотивирует купить
+  // полный разбор. Промпт после этого суффикса не меняем, просто просим модель не выводить лишнее.
+  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: ОБЩИЙ_БАЛЛ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
+  const promptText = mode === 'free' ? body.prompt + FREE_TEASER_SUFFIX : body.prompt;
+
   const imgs = Array.isArray(body.images) && body.images.length
     ? body.images
     : (body.image ? [body.image] : []);
   const messages = imgs.length
     ? [{ role: 'user', content: [
         ...imgs.map((b64) => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } })),
-        { type: 'text', text: body.prompt },
+        { type: 'text', text: promptText },
       ]}]
-    : [{ role: 'user', content: body.prompt }];
+    : [{ role: 'user', content: promptText }];
 
   const buildBody = (withSeed) => {
     const b = {
       model: 'x-ai/grok-4.3',
-      max_tokens: 2200,
+      max_tokens: mode === 'free' ? 900 : 2200,
       temperature: 0.35,
       top_p: 0.85,
       reasoning: { effort: 'low' },

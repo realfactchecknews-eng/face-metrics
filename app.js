@@ -112,6 +112,7 @@ var I18N = {
     gateHint: "After subscribing, come back and press “Analyze” again.",
     invoiceCreating: "Creating invoice…", invoiceOpening: "Opening Telegram…", invoiceErr: "Error, try again", netErr: "Network unavailable",
     pwPickMethod: "Choose payment method", pwPickPack: "Choose a package", payStars: "⭐ Telegram Stars", payCard: "💳 Card (RUB)", paySbp: "📲 SBP (RUB)", payCrypto: "🪙 Crypto", pwBack: "← Back",
+    teaserTitle: "Full report locked", teaserBody: "This free report shows only 3 of 8 categories. Unlock the full breakdown (Jaw, Maxilla, Nose, Lips/Cheekbones, Grooming) plus personal recommendations.", teaserBtn: "Unlock full report",
     histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
     histAvg: "Average score: ", histCount: " · analyses: ",
     howHtml: "<div class='how'>" +
@@ -211,6 +212,7 @@ var I18N = {
     gateHint: "После подписки вернись и нажми «Анализировать» ещё раз.",
     invoiceCreating: "Создаю счёт…", invoiceOpening: "Открываю Telegram…", invoiceErr: "Ошибка, ещё раз", netErr: "Сеть недоступна",
     pwPickMethod: "Выбери способ оплаты", pwPickPack: "Выбери пакет", payStars: "⭐ Telegram Stars", payCard: "💳 Картой (₽)", paySbp: "📲 СБП (₽)", payCrypto: "🪙 Криптой", pwBack: "← Назад",
+    teaserTitle: "Полный разбор закрыт", teaserBody: "В бесплатном отчёте показаны только 3 категории из 8. Открой полный разбор (Джоулайн, Максилла, Нос, Губы/Скулы, Груминг) и персональные рекомендации.", teaserBtn: "Открыть полный разбор",
     histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
     histAvg: "Средний балл: ", histCount: " · оценок: ",
     howHtml: "<div class='how'>" +
@@ -727,6 +729,7 @@ function clearReport() {
   if (aiReport) aiReport.classList.add("hidden");
   if (aiError)  aiError.classList.add("hidden");
   if (aiRecs)   aiRecs.classList.add("hidden");
+  hideTeaserUpsell();
 
   var num  = document.getElementById("overallScoreNum");
   if (num) { num.textContent = "--"; num.style.color = ""; }
@@ -1217,7 +1220,7 @@ async function callAI(metrics, shapeInfo) {
     var data = await res.json();
     stopAIHUD();
     if (data.error) { showGate(data); return; }
-    renderAIReport(data.text || t("emptyAnswer"));
+    renderAIReport(data.text || t("emptyAnswer"), false, data.mode);
     aiReport.classList.remove("hidden");
     // Обновляем чип квоты по факту списания.
     if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
@@ -1327,7 +1330,7 @@ function parseAIReport(text) {
   return result;
 }
 
-function renderAIReport(text, skipSideEffects) {
+function renderAIReport(text, skipSideEffects, mode) {
   var parsed  = parseAIReport(text);
   window._fmParsed = parsed; // для share-карточки
   var scoreEl = document.getElementById("overallScoreNum");
@@ -1391,7 +1394,7 @@ function renderAIReport(text, skipSideEffects) {
   // приводит к дублю (и пустой карточке, т.к. фото уже не в памяти после рефреша).
   if (parsed.overall !== null && !skipSideEffects) {
     playPing();
-    saveLastResult(parsed.overall, text);
+    saveLastResult(parsed.overall, text, mode);
     autoSendTgCard();
   }
   if (parsed.overall !== null) {
@@ -1402,6 +1405,34 @@ function renderAIReport(text, skipSideEffects) {
     var cb = document.getElementById("toCompareBtn");
     if (cb) cb.classList.remove("hidden");
   }
+  // Бесплатный тир получает урезанный отчёт (3 из 8 категорий, без рекомендаций) —
+  // показываем карточку с призывом купить полный разбор вместо оставшихся категорий.
+  if (mode === "free") showTeaserUpsell(); else hideTeaserUpsell();
+}
+
+function showTeaserUpsell() {
+  var box = document.getElementById("teaserUpsell");
+  if (!box) return;
+  box.innerHTML = "<div class=\"teaser-upsell-lock\">🔒</div>" +
+    "<p class=\"teaser-upsell-title\">" + t("teaserTitle") + "</p>" +
+    "<p class=\"teaser-upsell-body\">" + t("teaserBody") + "</p>" +
+    "<button class=\"teaser-upsell-btn\" type=\"button\">" + t("teaserBtn") + "</button>";
+  box.classList.remove("hidden");
+  var btn = box.querySelector(".teaser-upsell-btn");
+  if (btn) btn.addEventListener("click", function() {
+    var acc = getAccount(); if (!acc) return;
+    fetch(WORKER_URL + "/me", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: acc.token }),
+    }).then(function(r){ return r.json(); }).then(function(st){
+      if (!st.error) showPaywall("pay", st);
+    }).catch(function(){});
+  });
+}
+
+function hideTeaserUpsell() {
+  var box = document.getElementById("teaserUpsell");
+  if (box) { box.classList.add("hidden"); box.innerHTML = ""; }
 }
 
 // Молча шлёт карточку отчёта в Telegram сразу после анализа, если юзер залогинен через ТГ —
@@ -1457,9 +1488,9 @@ function playPing() {
 
 
 /* ───────────────────  Последний результат + история  ─────────────────── */
-function saveLastResult(overall, reportText) {
+function saveLastResult(overall, reportText, mode) {
   try {
-    var entry = { score: overall, date: Date.now(), report: reportText || "" };
+    var entry = { score: overall, date: Date.now(), report: reportText || "", mode: mode || null };
     localStorage.setItem("fm-last", JSON.stringify(entry));
     localStorage.setItem("fm-view", "analysis");
     var hist = JSON.parse(localStorage.getItem("fm-history") || "[]");
@@ -1504,7 +1535,7 @@ function saveLastResult(overall, reportText) {
   resultsDiv.classList.remove("hidden");
   var aiReport = document.getElementById("aiReport");
   if (aiReport) aiReport.classList.remove("hidden");
-  renderAIReport(last.report, true);
+  renderAIReport(last.report, true, last.mode);
   var sb = document.getElementById("shareBtn");
   if (sb) sb.classList.remove("hidden");
   var tb = document.getElementById("tgCardBtn");
