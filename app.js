@@ -1760,7 +1760,17 @@ function buildShareCard() {
     g.fillStyle = GOLD_HI; g.fillRect(-5, -5, 10, 10); g.restore();
 
     // ── Категории: 2 колонки, бары ──
-    var cats = (parsed.categories || []).slice(0, 8);
+    // На тизере (бесплатный урезанный отчёт) parsed.categories содержит только 3 из 8 —
+    // остальные 5 рисуем как размытые/закрытые плашки с замочком вместо того, чтобы просто
+    // их не показывать (наглядно видно, что скрыто, а не просто "меньше строк").
+    var FULL_CAT_LABELS = [t("labelSym"), "Canthal Tilt / Eyes", "Midface / Maxilla", "Jawline / Mandible", "Nose", t("labelLips"), "Skin", "Grooming / Style"];
+    var realCats = parsed.categories || [];
+    var cats = window._fmTeaser
+      ? FULL_CAT_LABELS.map(function(label){
+          var found = realCats.filter(function(c){ return c.label === label; })[0];
+          return found ? { label: label, score: found.score, locked: false } : { label: label, score: null, locked: true };
+        })
+      : realCats.slice(0, 8).map(function(c){ return { label: c.label, score: c.score, locked: false }; });
     var cy0 = dy + 60, rowH = 92, colW = 425;
     var cols = [{ x: 105 }, { x: 105 + colW + 30 }];
     g.textBaseline = "alphabetic";
@@ -1769,22 +1779,38 @@ function buildShareCard() {
       var x = col.x, y = cy0 + row * rowH;
       // ромб-буллет
       g.save(); g.translate(x + 9, y + 2); g.rotate(Math.PI / 4);
-      g.strokeStyle = GOLD; g.lineWidth = 2; g.strokeRect(-6, -6, 12, 12); g.restore();
-      // название + балл на ОДНОЙ линии (название слева, балл справа)
-      g.textBaseline = "alphabetic";
-      g.textAlign = "left"; g.font = "27px Georgia, serif"; g.fillStyle = TXT; ls(1);
+      g.strokeStyle = cat.locked ? "#4a4a4a" : GOLD; g.lineWidth = 2; g.strokeRect(-6, -6, 12, 12); g.restore();
       var name = cat.label.length > 20 ? cat.label.slice(0, 19) + "…" : cat.label;
-      g.fillText(name, x + 32, y + 10); ls(0);
-      g.textAlign = "right"; g.font = "31px Georgia, serif"; g.fillStyle = "#ecdaa8";
-      g.fillText(cat.score.toFixed(1), x + colW - 18, y + 11);
-      // бар под ними
       var bw = colW - 50, bx = x + 32, byy = y + 34;
-      g.fillStyle = "#1d1912"; roundRect(g, bx, byy, bw, 7, 3.5); g.fill();
-      var fillW = Math.max(8, bw * Math.min(cat.score, 10) / 10);
-      var bg2 = g.createLinearGradient(bx, 0, bx + fillW, 0);
-      bg2.addColorStop(0, "#8a6c38"); bg2.addColorStop(1, GOLD_HI);
-      g.fillStyle = bg2; roundRect(g, bx, byy, fillW, 7, 3.5); g.fill();
-      g.beginPath(); g.arc(bx + fillW, byy + 3.5, 5, 0, Math.PI * 2); g.fillStyle = GOLD_HI; g.fill();
+      if (cat.locked) {
+        // Размытые название/балл/бар (нечитаемо намеренно) + чёткий замочек поверх.
+        g.save();
+        try { g.filter = "blur(3px)"; } catch (e) {}
+        g.textBaseline = "alphabetic";
+        g.textAlign = "left"; g.font = "27px Georgia, serif"; g.fillStyle = "#555";
+        g.fillText(name, x + 32, y + 10);
+        g.textAlign = "right"; g.font = "31px Georgia, serif"; g.fillStyle = "#555";
+        g.fillText("6.5", x + colW - 18, y + 11);
+        g.fillStyle = "#242018"; roundRect(g, bx, byy, bw, 7, 3.5); g.fill();
+        g.fillStyle = "#4a4030"; roundRect(g, bx, byy, bw * 0.5, 7, 3.5); g.fill();
+        g.restore();
+        g.textAlign = "center"; g.font = "24px Georgia, serif"; g.fillStyle = GOLD_HI;
+        g.fillText("🔒", x + colW / 2, y + 22);
+      } else {
+        // название + балл на ОДНОЙ линии (название слева, балл справа)
+        g.textBaseline = "alphabetic";
+        g.textAlign = "left"; g.font = "27px Georgia, serif"; g.fillStyle = TXT; ls(1);
+        g.fillText(name, x + 32, y + 10); ls(0);
+        g.textAlign = "right"; g.font = "31px Georgia, serif"; g.fillStyle = "#ecdaa8";
+        g.fillText(cat.score.toFixed(1), x + colW - 18, y + 11);
+        // бар под ними
+        g.fillStyle = "#1d1912"; roundRect(g, bx, byy, bw, 7, 3.5); g.fill();
+        var fillW = Math.max(8, bw * Math.min(cat.score, 10) / 10);
+        var bg2 = g.createLinearGradient(bx, 0, bx + fillW, 0);
+        bg2.addColorStop(0, "#8a6c38"); bg2.addColorStop(1, GOLD_HI);
+        g.fillStyle = bg2; roundRect(g, bx, byy, fillW, 7, 3.5); g.fill();
+        g.beginPath(); g.arc(bx + fillW, byy + 3.5, 5, 0, Math.PI * 2); g.fillStyle = GOLD_HI; g.fill();
+      }
     });
 
     // ── Summary + POTENTIAL ──

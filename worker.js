@@ -21,8 +21,7 @@
 
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/неделю
 const LAVA_MIN_RUB = 50;                 // минимальная сумма инвойса у Lava.top — ниже нельзя ни при какой скидке
-const FREE_PER_WEEK = 1;                 // бесплатных анализов в неделю подписчику, который НИКОГДА не покупал (тизер-отчёт)
-const BUYER_FREE_COOLDOWN_S = 3 * 24 * 60 * 60; // те, кто хоть раз покупал: полный бесплатный анализ раз в 3 дня вместо тизера раз в неделю
+const FREE_PER_WEEK = 1;                 // бесплатных анализов в неделю подписчику (у всех одинаковый ритм)
 const CASHBACK_EVERY = 3;                // каждые N потраченных платных кредитов -> +1 анализ кешбэком
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 function weekBucket() { return Math.floor(Date.now() / WEEK_MS); } // сброс раз в 7 дней от эпохи
@@ -33,10 +32,9 @@ function weekBucket() { return Math.floor(Date.now() / WEEK_MS); } // сброс
 async function isBuyer(env, tgid) {
   return !!(await env.RATE_LIMIT.get(`everBought:${tgid}`));
 }
-// Доступен ли сейчас бесплатный анализ: новичкам — раз в неделю (weekBucket), тем кто уже
-// покупал — раз в 3 дня по cooldown-ключу (freeCd:tgid).
+// Доступен ли сейчас бесплатный анализ — ритм ОДИНАКОВЫЙ для всех (раз в неделю, weekBucket).
+// Разница между новичком и тем, кто уже покупал — не в частоте, а в ПОЛНОТЕ отчёта (см. isTeaser).
 async function freeQuotaAvailable(env, tgid, buyer) {
-  if (buyer) return !(await env.RATE_LIMIT.get(`freeCd:${tgid}`));
   const freeUsed = parseInt(await env.RATE_LIMIT.get(`qw:${tgid}:${weekBucket()}`) || '0', 10);
   return freeUsed < FREE_PER_WEEK;
 }
@@ -231,16 +229,11 @@ async function analyze(request, env) {
     return json({ error: 'model', text: `Сервис перегружен, попробуйте ещё раз. (${lastErr})` });
   }
 
-  // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели (или 3-дневный кулдаун
-  // для тех, кто уже покупал); paid → минус кредит.
+  // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели (одинаковый для всех); paid → минус кредит.
   let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_WEEK - freeUsed) : 0, cashback = false;
   if (mode === 'free') {
-    if (buyer) {
-      await env.RATE_LIMIT.put(`freeCd:${tgid}`, '1', { expirationTtl: BUYER_FREE_COOLDOWN_S });
-    } else {
-      await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
-    }
-    freeLeft = 0;
+    await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
+    freeLeft = FREE_PER_WEEK - freeUsed - 1;
   } else if (mode === 'paid') {
     creditsLeft = credits - 1;
     // Кешбэк лояльности: каждые CASHBACK_EVERY потраченных ПЛАТНЫХ кредита (накопительно,
