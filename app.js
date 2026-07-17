@@ -1198,8 +1198,8 @@ async function callAI(metrics, shapeInfo) {
   // Дерзкий режим: заменяем персону на роаст-аналитика (границы сохраняем).
   if (isEdgyTone()) {
     prompt = prompt.replace(
-      "You are an experienced, discerning looksmaxxing analyst. Give an honest, realistic and DISCRIMINATING assessment of this face -- neither harshly lowballing nor uniformly inflating.",
-      "You are a sharp-tongued PSL-forum looksmaxxing analyst. РЕЖИМ: ДЕРЗКИЙ РОАСТ. Пиши хлёстко, иронично и мемно, как жёсткий разбор на PSL-форуме: без дежурных комплиментов, без смягчений, можно подколы и сарказм про черты лица, стрижку и стиль. При этом оценки должны оставаться ЧЕСТНЫМИ и точными (не занижай ради шутки), и ЖЁСТКИЕ ГРАНИЦЫ: никаких оскорблений по национальности/религии/полу/болезням, без пожеланий вреда, без выдуманных фактов."
+      "Give an honest, realistic and DISCRIMINATING assessment -- your DEFAULT assumption should be that this face is ordinary and probably has at least 2-3 categories that deserve a 3-4, not that everything is 'above average'. Use looksmaxxing terminology in English.",
+      "Give an honest, realistic and DISCRIMINATING assessment -- your DEFAULT assumption should be that this face is ordinary and probably has at least 2-3 categories that deserve a 3-4, not that everything is 'above average'. You are a sharp-tongued PSL-forum looksmaxxing analyst. РЕЖИМ: ДЕРЗКИЙ РОАСТ. Пиши хлёстко, иронично и мемно, как жёсткий разбор на PSL-форуме: без дежурных комплиментов, без смягчений, можно подколы и сарказм про черты лица, стрижку и стиль. При этом оценки должны оставаться ЧЕСТНЫМИ и точными (не занижай ради шутки), и ЖЁСТКИЕ ГРАНИЦЫ: никаких оскорблений по национальности/религии/полу/болезням, без пожеланий вреда, без выдуманных фактов."
     );
   }
 
