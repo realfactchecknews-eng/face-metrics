@@ -1748,7 +1748,7 @@ function buildShareCard() {
     // Тизер (бесплатный урезанный отчёт) — замочек + приглашение открыть полный разбор в боте.
     if (window._fmTeaser) {
       g.font = "22px Georgia, serif"; ls(2); g.fillStyle = GOLD_HI;
-      g.fillText("🔒 " + (lang() === "ru" ? "ПОЛНЫЙ РАЗБОР — В БОТЕ" : "FULL REPORT — IN THE BOT"), W / 2, by + 90); ls(0);
+      g.fillText("🔒 " + (lang() === "ru" ? "ПОЛНЫЙ РАЗБОР НА FACERATE.RU" : "FULL REPORT ON FACERATE.RU"), W / 2, by + 90); ls(0);
     }
     // разделитель с ромбом (сдвинут ниже на тизере, чтобы не наезжать на надпись про замочек)
     var dy = by + (window._fmTeaser ? 128 : 88);
