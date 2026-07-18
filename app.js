@@ -1214,7 +1214,7 @@ async function callAI(metrics, shapeInfo) {
     var acc = getAccount();
     var res = await fetch(WORKER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: prompt, images: images, token: acc ? acc.token : null })
+      body: JSON.stringify({ prompt: prompt, images: images, token: acc ? acc.token : null, lang: lang() })
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
@@ -1274,7 +1274,11 @@ function backToUploadTop() {
 
 // Одно изображение (canvas) → base64 jpeg, с даунскейлом до maxSize.
 function oneToBase64(src, maxSize) {
-  maxSize = maxSize || 900;
+  // 672px вместо 900px: Grok режет картинку на тайлы 448x448 (256 токенов/тайл, макс 6 тайлов
+  // = 1792 токена). При 900px портретное фото почти всегда упирается в потолок 6 тайлов;
+  // при 672px обычно укладывается в 4 тайла (1280 токенов) без заметной потери детализации
+  // лица для анализа. Экономия ~512 токенов на КАЖДОЕ фото (х2 при фронт+профиль).
+  maxSize = maxSize || 672;
   var scale = Math.min(1, maxSize / Math.max(src.width, src.height));
   var off = document.createElement("canvas");
   off.width = Math.round(src.width * scale); off.height = Math.round(src.height * scale);

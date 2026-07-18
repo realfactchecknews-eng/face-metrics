@@ -198,6 +198,13 @@ async function analyze(request, env) {
       ]}]
     : [{ role: 'user', content: promptText }];
 
+  // session_id: xAI-кэш промптов чувствителен к server affinity — без стабильного ключа
+  // одинаковые запросы могут разлетаться по разным бэкендам и кэш статичной части промпта
+  // (~2500 токенов калибровки, идёт ДО картинок/метрик в тексте) не срабатывает. Бакет по
+  // языку — этого достаточно, весь общий текст промпта идентичен у всех RU/EN юзеров,
+  // разница (метрики, фото, тизер-суффикс) всегда идёт ПОСЛЕ статичного блока.
+  const sessionId = 'facerate-' + (body.lang === 'ru' ? 'ru' : 'en');
+
   const buildBody = (withSeed) => {
     const b = {
       model: 'x-ai/grok-4.3',
@@ -205,6 +212,7 @@ async function analyze(request, env) {
       temperature: 0.35,
       top_p: 0.85,
       reasoning: { effort: 'low' },
+      session_id: sessionId,
       messages,
     };
     if (withSeed) b.seed = 1337;
