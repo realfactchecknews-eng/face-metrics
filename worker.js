@@ -48,15 +48,15 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // ровно 62*0.8=49.6 → round() → 50₽, узнаваемая "старая" цена в чеке со скидкой.
   // old* — "обычная" цена ДО текущей недельной акции (см. SALE_ENDS_AT), показывается
   // зачёркнутой в packsKb()/пейволле сайта, пока акция активна.
-  // Повышение цен 21.07.2026 на "штучные"/короткие тарифы (то, что реально берут) — old*
-  // здесь это ФАКТИЧЕСКАЯ предыдущая цена (не выдуманная), показывается зачёркнутой пока
-  // активна новая акция (см. SALE_ENDS_AT). m1 НАМЕРЕННО не поднят и не участвует в акции —
-  // old* у него равны текущей цене, чтобы оставаться самым выгодным по цене/анализ и НЕ
-  // показывать зачёркивание (packsKb: `old && old > cur` — при равенстве просто не рисуется).
+  // Повышение цен 21.07.2026: поднят ТОЛЬКО p1 (самый ходовой тариф) — цель специально
+  // сделать остальные опции выглядеть выгоднее НА ФОНЕ p1, а не поднять всё сразу. p5/h1/d1/m1
+  // оставлены на прежнем уровне (h1/d1 почти не покупают, задирать их бессмысленно). old* у
+  // p1 = фактическая предыдущая цена (зачёркивается пока активна акция, см. SALE_ENDS_AT).
+  // У остальных old* равны текущей цене — зачёркивания не будет (packsKb: `old && old > cur`).
   p1: { type: 'credits', credits: 1, stars: 45,  rub: 70,   lavaRub: 70,   label: '1 анализ', labelEn: '1 analysis', oldStars: 39,   oldRub: 62,   oldLavaRub: 62 },
-  p5: { type: 'credits', credits: 5, stars: 110, rub: 170,  lavaRub: 170,  label: '5 анализов', labelEn: '5 analyses', oldStars: 99,   oldRub: 149,  oldLavaRub: 149 },
-  h1: { type: 'unlim',  hours: 1,    stars: 145, rub: 200,  lavaRub: 200,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 129,  oldRub: 179,  oldLavaRub: 179 },
-  d1: { type: 'unlim',  hours: 24,   stars: 245, rub: 340,  lavaRub: 340,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 219,  oldRub: 299,  oldLavaRub: 299 },
+  p5: { type: 'credits', credits: 5, stars: 99,  rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses', oldStars: 99,   oldRub: 149,  oldLavaRub: 149 },
+  h1: { type: 'unlim',  hours: 1,    stars: 139, rub: 199,  lavaRub: 199,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 139,  oldRub: 199,  oldLavaRub: 199 },
+  d1: { type: 'unlim',  hours: 24,   stars: 219, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 219,  oldRub: 299,  oldLavaRub: 299 },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
