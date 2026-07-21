@@ -48,19 +48,24 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // ровно 62*0.8=49.6 → round() → 50₽, узнаваемая "старая" цена в чеке со скидкой.
   // old* — "обычная" цена ДО текущей недельной акции (см. SALE_ENDS_AT), показывается
   // зачёркнутой в packsKb()/пейволле сайта, пока акция активна.
-  p1: { type: 'credits', credits: 1, stars: 39,  rub: 62,   lavaRub: 62,   label: '1 анализ', labelEn: '1 analysis', oldStars: 49,   oldRub: 79,   oldLavaRub: 79 },
-  p5: { type: 'credits', credits: 5, stars: 99,  rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses', oldStars: 170,  oldRub: 250,  oldLavaRub: 250 },
-  h1: { type: 'unlim',  hours: 1,    stars: 129, rub: 179,  lavaRub: 179,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 199,  oldRub: 299,  oldLavaRub: 299 },
-  d1: { type: 'unlim',  hours: 24,   stars: 219, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 349,  oldRub: 499,  oldLavaRub: 499 },
+  // Повышение цен 21.07.2026 на "штучные"/короткие тарифы (то, что реально берут) — old*
+  // здесь это ФАКТИЧЕСКАЯ предыдущая цена (не выдуманная), показывается зачёркнутой пока
+  // активна новая акция (см. SALE_ENDS_AT). m1 НАМЕРЕННО не поднят и не участвует в акции —
+  // old* у него равны текущей цене, чтобы оставаться самым выгодным по цене/анализ и НЕ
+  // показывать зачёркивание (packsKb: `old && old > cur` — при равенстве просто не рисуется).
+  p1: { type: 'credits', credits: 1, stars: 45,  rub: 70,   lavaRub: 70,   label: '1 анализ', labelEn: '1 analysis', oldStars: 39,   oldRub: 62,   oldLavaRub: 62 },
+  p5: { type: 'credits', credits: 5, stars: 110, rub: 170,  lavaRub: 170,  label: '5 анализов', labelEn: '5 analyses', oldStars: 99,   oldRub: 149,  oldLavaRub: 149 },
+  h1: { type: 'unlim',  hours: 1,    stars: 145, rub: 200,  lavaRub: 200,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 129,  oldRub: 179,  oldLavaRub: 179 },
+  d1: { type: 'unlim',  hours: 24,   stars: 245, rub: 340,  lavaRub: 340,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 219,  oldRub: 299,  oldLavaRub: 299 },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 749,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 1499, oldRub: 1999, oldLavaRub: 1999 },
+  m1: { type: 'unlim',  hours: 720,  stars: 749,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 749, oldRub: 999, oldLavaRub: 999 },
 };
 // Недельная акция на новые цены выше — по истечении можно вернуть old*-значения в основные
 // поля (или оставить как есть, тогда акция станет постоянной ценой). Таймер на сайте/в боте
 // считает именно до этой даты. Поставь актуальную дату при продлении/завершении акции.
-const SALE_ENDS_AT = Date.parse('2026-07-19T12:00:00+03:00');
+const SALE_ENDS_AT = Date.parse('2026-07-28T12:00:00+03:00');
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
 function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }
 function enabledMethods(env) {
