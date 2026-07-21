@@ -81,7 +81,7 @@ const GLOBAL_DAILY_CAP = 3000;           // потолок БЕСПЛАТНЫХ 
                                           // на оплативших (unlim/кредиты) не действует — см. analyze()
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return cors(null, 204);
     const path = new URL(request.url).pathname;
     // Единственный GET-роут во всём воркере — статичная HTML-страница статистики.
@@ -108,6 +108,7 @@ export default {
       if (path === '/feedback')   return await submitFeedback(request, env);
       if (path === '/partner-data')  return await partnerData(request, env);
       if (path === '/partner-admin') return await partnerAdmin(request, env);
+      if (path === '/bulk-discount-once') return await bulkDiscountStart(request, env, ctx);
       return await analyze(request, env);
     } catch (e) {
       return json({ error: 'server', text: 'Внутренняя ошибка: ' + e.message });
@@ -657,6 +658,7 @@ async function lavaWebhook(request, env) {
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
+    await env.RATE_LIMIT.delete(`pendingDiscount:${tgid}`); // промо-скидка одноразовая, гасим ПОСЛЕ реальной оплаты
     const promoUsed = await peekOrderPromoCode(env, tgid);
     const { id: orderId, isFirst } = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'card', upd.amount))) await trackReferralPurchase(env, tgid, pack, 'card', upd.amount);
@@ -720,6 +722,7 @@ async function cryptoWebhook(request, env) {
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
+    await env.RATE_LIMIT.delete(`pendingDiscount:${tgid}`); // промо-скидка одноразовая, гасим ПОСЛЕ реальной оплаты
     const promoUsed = await peekOrderPromoCode(env, tgid);
     const { id: orderId, isFirst } = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount)))) await trackReferralPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount));
@@ -1270,7 +1273,9 @@ async function handleCallback(env, cq) {
     const pack = PACKS[packId];
     if (!pack) return;
     const discPct = await buyerDiscountPct(env, tgid, packId);
-    await env.RATE_LIMIT.delete(`pendingDiscount:${tgid}`); // промо-скидка одноразовая; реф-скидка не тут, а в самом ref-объекте
+    // Скидку больше НЕ гасим здесь — раньше она пропадала уже при выставлении счёта, даже
+    // если человек его не оплатил (просто посмотрел цену ещё раз). Теперь гасится только
+    // после РЕАЛЬНОЙ успешной оплаты (handlePayment/lavaWebhook/cryptoWebhook), см. там.
     if (method === 'crypto') {
       const d = await createCryptoInvoice(env, tgid, packId, L, discPct);
       if (d.ok) await reply(b.payPick, { inline_keyboard: [[{ text: b.cryptoBtn, url: d.link }]] });
@@ -1463,6 +1468,7 @@ async function handlePayment(env, msg, L) {
     } else {
       note = await grantPack(env, tgid, pack, L, sp);
     }
+    await env.RATE_LIMIT.delete(`pendingDiscount:${tgid}`); // промо-скидка одноразовая, гасим ПОСЛЕ реальной оплаты
     const paidAmount = sp.currency === 'XTR' ? sp.total_amount : sp.total_amount / 100;
     const promoUsed = await peekOrderPromoCode(env, tgid);
     const { id: orderId, isFirst } = await recordOrder(env, {
@@ -1863,6 +1869,39 @@ async function myPersonalRefText(env, tgid, L) {
   }
   return `🔗 Your personal referral link:\n${link}\n\n🎁 Bring a friend — you BOTH instantly get 1 free analysis the moment they open the link.\n\nThere's also a volume bonus: once ${PERSONAL_REF_DISCOUNT_THRESHOLD} purchases have gone through this link (total), buyers get ${PERSONAL_REF_DISCOUNT_PCT}% off, and YOU get ${PERSONAL_REF_OWNER_DISCOUNT_PCT}% off all your own purchases.\n\nClicks: ${r.clicks || 0}\nPurchases: ${r.purchases || 0}${left > 0 ? `\nPurchases until discounts unlock: ${left}` : `\nDiscounts are already active`}\nAnalyses earned: ${r.creditsEarned || 0}`;
 }
+// Разовая ручная акция (21.07.2026): всем известным пользователям начисляем персональную
+// скидку 15% на следующую покупку (не суммируется и не перетирает уже висящую БОЛЬШУЮ скидку —
+// берём max) и уведомляем личным сообщением. Одноразовый HTTP-роут, защищён отдельным секретом
+// BULK_ACTION_SECRET (не тем же, что остальные роуты) — предполагается снести после использования.
+async function bulkDiscountStart(request, env, ctx) {
+  let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+  if (!env.BULK_ACTION_SECRET || body.secret !== env.BULK_ACTION_SECRET) return new Response('forbidden', { status: 403 });
+  const pct = parseInt(body.pct, 10) || 15;
+  await env.RATE_LIMIT.put('bulkDiscountResult', JSON.stringify({ status: 'running', startedAt: Date.now() }));
+  ctx.waitUntil(bulkDiscountRun(env, pct));
+  return json({ status: 'started', pct });
+}
+async function bulkDiscountRun(env, pct) {
+  const ids = await collectAllUserIds(env);
+  let sent = 0, failed = 0, discounted = 0;
+  for (const id of ids) {
+    try {
+      const existing = parseInt(await env.RATE_LIMIT.get(`pendingDiscount:${id}`) || '0', 10);
+      const finalPct = Math.max(existing, pct);
+      await env.RATE_LIMIT.put(`pendingDiscount:${id}`, String(finalPct), { expirationTtl: 60 * 60 * 24 * 30 });
+      discounted++;
+      const L = (await env.RATE_LIMIT.get(`lang:${id}`)) || 'ru';
+      const text = L === 'ru'
+        ? `🎁 Тебе персонально начислена скидка ${finalPct}% на следующую покупку — уже применена, ничего вводить не нужно. Просто выбери тариф в «⭐ Купить анализы / безлимит», скидка сработает автоматически. Действует 30 дней.`
+        : `🎁 You've been personally granted a ${finalPct}% discount on your next purchase — already applied, nothing to enter. Just pick a package in "⭐ Buy analyses / unlimited" and the discount applies automatically. Valid for 30 days.`;
+      await tgApi(env, 'sendMessage', { chat_id: id, text });
+      sent++;
+    } catch { failed++; }
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  await env.RATE_LIMIT.put('bulkDiscountResult', JSON.stringify({ status: 'done', total: ids.length, discounted, sent, failed, finishedAt: Date.now() }));
+}
+
 // Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
 // Собирает уникальные tgid из всех KV-префиксов, где встречается id пользователя —
 // используется только для /broadcast. Новых пользователей (после деплоя этой фичи) полностью
