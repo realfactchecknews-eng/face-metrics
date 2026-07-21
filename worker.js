@@ -951,7 +951,10 @@ function packsKb(method, L, discPct) {
     // Lava.top (карта/СБП) не принимает инвойс дешевле LAVA_MIN_RUB ни при какой скидке —
     // если тариф уже на этом полу (самый дешёвый — ровно 50₽), скидка технически неприменима.
     const cur = discPct && !(cardLike && base <= LAVA_MIN_RUB) ? Math.max(1, Math.round(base * (100 - discPct) / 100)) : base;
-    const old = saleActive() ? rawOld(p) : null;
+    // Если активна персональная скидка — зачёркиваем ТЕКУЩУЮ базовую цену (base), а не старую
+    // цену до недельного повышения (rawOld). Иначе два разных "было" сливаются в одно число и
+    // выглядит как "подешевело с 39 до 38", хотя на самом деле "было 45 (база), стало 38 (со скидкой)".
+    const old = discPct ? base : (saleActive() ? rawOld(p) : null);
     const oldTxt = old && old > cur ? `${strike(old + unit(p))} ` : '';
     return `${oldTxt}${cur}${unit(p)}`;
   };
@@ -1873,33 +1876,43 @@ async function myPersonalRefText(env, tgid, L) {
 // скидку 15% на следующую покупку (не суммируется и не перетирает уже висящую БОЛЬШУЮ скидку —
 // берём max) и уведомляем личным сообщением. Одноразовый HTTP-роут, защищён отдельным секретом
 // BULK_ACTION_SECRET (не тем же, что остальные роуты) — предполагается снести после использования.
+// Батч вместо одного гигантского цикла — предыдущая версия молча умирала в районе 144/3775
+// (похоже на лимит выполнения Workers для waitUntil), зависая в статусе 'running' навсегда.
+// Теперь каждый вызов обрабатывает не больше BATCH пользователей и ЗАПОМИНАЕТ, кого уже
+// уведомил (bulkNotified:tgid) — можно смело дёргать эндпоинт повторно, продолжит с места
+// остановки, а не будет слать дубли.
 async function bulkDiscountStart(request, env, ctx) {
   let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
   if (!env.BULK_ACTION_SECRET || body.secret !== env.BULK_ACTION_SECRET) return new Response('forbidden', { status: 403 });
   const pct = parseInt(body.pct, 10) || 15;
-  await env.RATE_LIMIT.put('bulkDiscountResult', JSON.stringify({ status: 'running', startedAt: Date.now() }));
-  ctx.waitUntil(bulkDiscountRun(env, pct));
-  return json({ status: 'started', pct });
-}
-async function bulkDiscountRun(env, pct) {
+  const BATCH = 400;
   const ids = await collectAllUserIds(env);
-  let sent = 0, failed = 0, discounted = 0;
+  const todo = [];
   for (const id of ids) {
+    if (!(await env.RATE_LIMIT.get(`bulkNotified:${id}`))) todo.push(id);
+    if (todo.length >= BATCH) break;
+  }
+  await env.RATE_LIMIT.put('bulkDiscountResult', JSON.stringify({ status: 'running', batchSize: todo.length, totalKnown: ids.length, startedAt: Date.now() }));
+  ctx.waitUntil(bulkDiscountRun(env, pct, todo, ids.length));
+  return json({ status: 'started', pct, batchSize: todo.length, totalKnown: ids.length });
+}
+async function bulkDiscountRun(env, pct, todo, totalKnown) {
+  // Упрощено для скорости (аудитория практически вся русскоязычная): без чтения текущей
+  // скидки/языка на юзера — просто ставим pct и шлём русский текст. 3 операции на юзера
+  // вместо 5 (было: get pendingDiscount, put pendingDiscount, get lang, sendMessage, put bulkNotified).
+  const text = (finalPct) => `🎁 Тебе персонально начислена скидка ${finalPct}% на следующую покупку — уже применена, ничего вводить не нужно. Просто выбери тариф в «⭐ Купить анализы / безлимит», скидка сработает автоматически. Действует 30 дней.`;
+  let sent = 0, failed = 0, discounted = 0;
+  for (const id of todo) {
     try {
-      const existing = parseInt(await env.RATE_LIMIT.get(`pendingDiscount:${id}`) || '0', 10);
-      const finalPct = Math.max(existing, pct);
-      await env.RATE_LIMIT.put(`pendingDiscount:${id}`, String(finalPct), { expirationTtl: 60 * 60 * 24 * 30 });
+      await env.RATE_LIMIT.put(`pendingDiscount:${id}`, String(pct), { expirationTtl: 60 * 60 * 24 * 30 });
       discounted++;
-      const L = (await env.RATE_LIMIT.get(`lang:${id}`)) || 'ru';
-      const text = L === 'ru'
-        ? `🎁 Тебе персонально начислена скидка ${finalPct}% на следующую покупку — уже применена, ничего вводить не нужно. Просто выбери тариф в «⭐ Купить анализы / безлимит», скидка сработает автоматически. Действует 30 дней.`
-        : `🎁 You've been personally granted a ${finalPct}% discount on your next purchase — already applied, nothing to enter. Just pick a package in "⭐ Buy analyses / unlimited" and the discount applies automatically. Valid for 30 days.`;
-      await tgApi(env, 'sendMessage', { chat_id: id, text });
+      await tgApi(env, 'sendMessage', { chat_id: id, text: text(pct) });
+      await env.RATE_LIMIT.put(`bulkNotified:${id}`, '1', { expirationTtl: 60 * 60 * 24 * 30 });
       sent++;
     } catch { failed++; }
     await new Promise((r) => setTimeout(r, 40));
   }
-  await env.RATE_LIMIT.put('bulkDiscountResult', JSON.stringify({ status: 'done', total: ids.length, discounted, sent, failed, finishedAt: Date.now() }));
+  await env.RATE_LIMIT.put('bulkDiscountResult', JSON.stringify({ status: 'batch_done', batch: todo.length, discounted, sent, failed, totalKnown, finishedAt: Date.now() }));
 }
 
 // Первое касание — фиксируем реферера за пользователем один раз и считаем клик по ссылке.
