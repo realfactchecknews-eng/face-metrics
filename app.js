@@ -2351,11 +2351,11 @@ function showPaywall(state, st) {
     });
   } else { // pay
     var packs = (st && st.packs) || {
-      p1: { stars: 39, rub: 62, lavaRub: 62, oldStars: 49, oldRub: 79, oldLavaRub: 79 },
-      p5: { stars: 99, rub: 149, lavaRub: 149, oldStars: 170, oldRub: 250, oldLavaRub: 250 },
-      h1: { stars: 129, rub: 179, lavaRub: 179, oldStars: 199, oldRub: 299, oldLavaRub: 299 },
-      d1: { stars: 219, rub: 299, lavaRub: 299, oldStars: 349, oldRub: 499, oldLavaRub: 499 },
-      m1: { stars: 899, rub: 1199, lavaRub: 1199, oldStars: 1499, oldRub: 1999, oldLavaRub: 1999 },
+      p1: { stars: 45, rub: 70, lavaRub: 70, oldStars: 39, oldRub: 62, oldLavaRub: 62 },
+      p5: { stars: 99, rub: 149, lavaRub: 149, oldStars: 99, oldRub: 149, oldLavaRub: 149 },
+      h1: { stars: 139, rub: 199, lavaRub: 199, oldStars: 139, oldRub: 199, oldLavaRub: 199 },
+      d1: { stars: 219, rub: 299, lavaRub: 299, oldStars: 219, oldRub: 299, oldLavaRub: 299 },
+      m1: { stars: 749, rub: 999, lavaRub: 999, oldStars: 749, oldRub: 999, oldLavaRub: 999 },
     };
     var saleEndsAt = (st && st.saleEndsAt) || 0;
     // Таймер до конца недельной акции — на самом видном месте под заголовком.
