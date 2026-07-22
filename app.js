@@ -2512,13 +2512,12 @@ function pwRecheck(silent) {
     if (!A.box){ cmpErr(t("cmpNoFaceA")); return; }
     if (!B.box){ cmpErr(t("cmpNoFaceB")); return; }
     cmpErr("");
-    // Гейт: те же квоты/кредиты, что и анализ (1 кредит).
+    // Гейт: Who Moggs НЕ входит в бесплатную квоту (freeLeft) — только безлимит или платные кредиты.
     _afterGate = doCompare;
     fetchStatus(false).then(function(st){
       if (st.error === "auth"){ showPaywall("auth"); return; }
       renderAccount(st);
-      if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0){ hidePaywall(); doCompare(); }
-      else if (!st.subscribed) showPaywall("sub");
+      if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.credits > 0){ hidePaywall(); doCompare(); }
       else showPaywall("pay", st);
     }).catch(function(){ doCompare(); });
   }
@@ -2552,7 +2551,7 @@ function pwRecheck(silent) {
     var images = [oneToBase64(A.canvas), oneToBase64(B.canvas)];
     fetch(WORKER_URL, {
       method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ prompt: comparePrompt(), images: images, token: acc ? acc.token : null })
+      body: JSON.stringify({ prompt: comparePrompt(), images: images, token: acc ? acc.token : null, compare: true })
     }).then(function(r){ return r.json(); }).then(function(d){
       if (d.error){ stopAIHUD("cmpLoading"); showGate(d); $("compareSection").scrollIntoView({behavior:"smooth"}); return; }
       var parsed = parseCompare(d.text || "");

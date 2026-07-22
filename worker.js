@@ -165,9 +165,12 @@ async function analyze(request, env) {
   const buyer = await isBuyer(env, tgid);
   const freeAvail = subscribed && await freeQuotaAvailable(env, tgid, buyer);
 
+  // Who Moggs (сравнение двух лиц) НЕ входит в бесплатную квоту — только безлимит или платные кредиты.
+  const freeUsable = freeAvail && !body.compare;
+
   let mode = null;
   if (unlimUntil > Date.now()) mode = 'unlim';
-  else if (freeAvail) mode = 'free';
+  else if (freeUsable) mode = 'free';
   else if (credits > 0) mode = 'paid';
   else if (!subscribed) {
     return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в неделю.', channel: CHANNEL });
