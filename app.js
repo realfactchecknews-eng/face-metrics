@@ -150,7 +150,7 @@ var I18N = {
     cmpNeedTwo: "Add both photos first.", cmpNoFaceA: "No face detected in photo A.",
     cmpNoFaceB: "No face detected in photo B.", cmpErrGen: "Something went wrong, try again.",
     cmpMogs: "MOGS", cmpVerdict: "VERDICT", cmpMogged: "MOGGED",
-    cmpShareText: "I just mogged someone on facerate.ru — think you can beat this score? Try it yourself 👇",
+    cmpShareText: "got mogged on facerate.ru 💀 think you'd do better? try it yourself 👇",
   },
   ru: {
     begin: "НАЧАТЬ АНАЛИЗ",
@@ -250,7 +250,7 @@ var I18N = {
     cmpNeedTwo: "Сначала добавь оба фото.", cmpNoFaceA: "На фото A не найдено лицо.",
     cmpNoFaceB: "На фото B не найдено лицо.", cmpErrGen: "Что-то пошло не так, попробуй ещё раз.",
     cmpMogs: "МОГГАЕТ", cmpVerdict: "ВЕРДИКТ", cmpMogged: "MOGGED",
-    cmpShareText: "Только что кое-кого обмоггал на facerate.ru — слабо побить этот балл? Попробуй сам 👇",
+    cmpShareText: "меня обмогали на facerate.ru 💀 слабо сделать лучше? попробуй сам 👇",
   },
 };
 
