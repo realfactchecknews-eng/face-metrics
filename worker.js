@@ -2470,7 +2470,7 @@ async function removeTicket(env, uid) {
 async function logTx(env, entry) {
   const list = await getList(env, 'translog');
   list.unshift({ ...entry, ts: Date.now() });
-  await putList(env, 'translog', list.slice(0, 50));
+  await putList(env, 'translog', list.slice(0, 3000));
 }
 // Короткий ID заказа — даём покупателю в подтверждении, он же виден админу в транзакциях,
 // чтобы можно было сослаться на конкретный платёж в переписке с поддержкой.
