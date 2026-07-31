@@ -217,7 +217,11 @@ async function analyze(request, env) {
   const buildBody = (withSeed) => {
     const b = {
       model: 'x-ai/grok-4.3',
-      max_tokens: isTeaser ? 900 : 2200,
+      // ВАЖНО: reasoning-токены Grok (~700-950 даже на effort:'low') считаются в этот же лимит.
+      // На старых 900 у тизера reasoning съедал весь бюджет, content приходил пустым, и юзер
+      // видел «Сервис перегружен (unknown)». Тизер всё равно короткий — реально потратится меньше,
+      // лимит нужен только чтобы reasoning не отъедал весь ответ.
+      max_tokens: isTeaser ? 1800 : 2200,
       temperature: 0.35,
       top_p: 0.85,
       reasoning: { effort: 'low' },
@@ -228,7 +232,12 @@ async function analyze(request, env) {
     return JSON.stringify(b);
   };
 
-  let data, lastErr = 'unknown';
+  // emptyKind — почему пришёл пустой ответ, если запрос сам по себе прошёл без ошибки:
+  //   'length'  — модель упёрлась в max_tokens (обычно reasoning съел бюджет);
+  //   'refusal' — модель отказалась описывать это фото;
+  // Это НЕ перегрузка, и ретраи тут не помогают — выходим из цикла сразу, чтобы не жечь
+  // токены и не держать юзера лишние 1.4 секунды.
+  let data, lastErr = 'unknown', emptyKind = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -239,10 +248,24 @@ async function analyze(request, env) {
       data = await res.json();
     } catch (err) { lastErr = err.message; data = null; }
     if (data?.choices?.[0]?.message?.content) break;
+
+    const choice = data?.choices?.[0];
+    if (choice) {
+      if (choice.message?.refusal || choice.finish_reason === 'content_filter') emptyKind = 'refusal';
+      else if (choice.finish_reason === 'length') emptyKind = 'length';
+    }
+    if (emptyKind) break;
+
     lastErr = data?.error?.message ?? lastErr;
     if (attempt < 2) await new Promise(r => setTimeout(r, 700));
   }
   if (!data?.choices?.[0]?.message?.content) {
+    if (emptyKind === 'refusal') {
+      return json({ error: 'model', text: 'ИИ не смог разобрать это фото. Попробуйте другое: лицо анфас, хорошее освещение, без фильтров.' });
+    }
+    if (emptyKind === 'length') {
+      return json({ error: 'model', text: 'Ответ ИИ не поместился в лимит. Попробуйте ещё раз — если повторится, напишите в поддержку.' });
+    }
     return json({ error: 'model', text: `Сервис перегружен, попробуйте ещё раз. (${lastErr})` });
   }
 
