@@ -18,6 +18,11 @@ BOT_USERNAME = "faceratepay_bot"
 [triggers]
 crons = ["0 * * * *"]
 
+# Хранение логов (console.log + исключения) — без этого доступен только живой `wrangler tail`,
+# и разбирать жалобу «час назад была ошибка» нечем. Нужно для диагностики пустых ответов ИИ.
+[observability]
+enabled = true
+
 # Секреты (НЕ хранить здесь) — задать через wrangler secret put:
 #   wrangler secret put OPENROUTER_API_KEY
 #   wrangler secret put TG_BOT_TOKEN

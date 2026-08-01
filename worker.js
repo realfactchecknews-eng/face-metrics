@@ -232,36 +232,59 @@ async function analyze(request, env) {
     return JSON.stringify(b);
   };
 
-  // emptyKind — почему пришёл пустой ответ, если запрос сам по себе прошёл без ошибки:
+  // emptyKind — почему пришёл пустой ответ, если сам запрос прошёл без ошибки:
   //   'length'  — модель упёрлась в max_tokens (обычно reasoning съел бюджет);
-  //   'refusal' — модель отказалась описывать это фото;
-  // Это НЕ перегрузка, и ретраи тут не помогают — выходим из цикла сразу, чтобы не жечь
+  //   'refusal' — модель отказалась описывать фото (явный refusal, content_filter,
+  //               либо «тихий отказ» Grok: пустой content при finish_reason 'stop').
+  // Это НЕ перегрузка, ретраи тут не помогают — выходим из цикла сразу, чтобы не жечь
   // токены и не держать юзера лишние 1.4 секунды.
   let data, lastErr = 'unknown', emptyKind = null;
   for (let attempt = 0; attempt < 3; attempt++) {
+    let status = 0;
     try {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENROUTER_API_KEY}` },
         body: buildBody(attempt < 2),
       });
-      data = await res.json();
+      status = res.status;
+      const raw = await res.text();
+      try { data = JSON.parse(raw); }
+      catch { data = null; lastErr = `http ${status}: ${raw.slice(0, 120)}`; }
     } catch (err) { lastErr = err.message; data = null; }
     if (data?.choices?.[0]?.message?.content) break;
 
+    // Диагностика в `wrangler tail`: без неё пустые ответы неотличимы друг от друга.
+    console.log('AI empty response', JSON.stringify({
+      attempt, status, isTeaser,
+      finish: data?.choices?.[0]?.finish_reason ?? null,
+      hasChoices: Array.isArray(data?.choices) ? data.choices.length : null,
+      usage: data?.usage ?? null,
+      raw: data ? JSON.stringify(data).slice(0, 400) : null,
+    }));
+
     const choice = data?.choices?.[0];
     if (choice) {
-      if (choice.message?.refusal || choice.finish_reason === 'content_filter') emptyKind = 'refusal';
-      else if (choice.finish_reason === 'length') emptyKind = 'length';
+      const fin = choice.finish_reason;
+      if (choice.message?.refusal || fin === 'content_filter') emptyKind = 'refusal';
+      else if (fin === 'length') emptyKind = 'length';
+      // Пустой content при нормальном завершении — тихий отказ модели. Ретраить бесполезно.
+      else if (fin === 'stop' || fin == null) emptyKind = 'refusal';
     }
     if (emptyKind) break;
 
-    lastErr = data?.error?.message ?? lastErr;
+    // error у OpenRouter приходит и объектом, и строкой — плюс отдельно тянем HTTP-статус,
+    // иначе 429/502 от прокси схлопывались в бесполезное 'unknown'.
+    const e = data?.error;
+    const eMsg = (typeof e === 'string' ? e : e?.message) || (e?.code ? `code ${e.code}` : null);
+    if (eMsg) lastErr = eMsg;
+    else if (status && status !== 200) lastErr = `http ${status}`;
+
     if (attempt < 2) await new Promise(r => setTimeout(r, 700));
   }
   if (!data?.choices?.[0]?.message?.content) {
     if (emptyKind === 'refusal') {
-      return json({ error: 'model', text: 'ИИ не смог разобрать это фото. Попробуйте другое: лицо анфас, хорошее освещение, без фильтров.' });
+      return json({ error: 'model', text: 'ИИ не смог разобрать это фото. Попробуйте другое: лицо крупно и анфас, хорошее освещение, без фильтров и посторонних людей в кадре.' });
     }
     if (emptyKind === 'length') {
       return json({ error: 'model', text: 'Ответ ИИ не поместился в лимит. Попробуйте ещё раз — если повторится, напишите в поддержку.' });
