@@ -801,6 +801,16 @@ async function m1UpsellText(env, tgid, pack, L) {
     ? `👑 Часто берёшь анализы? Безлимит на месяц — всего ${m1.rub}₽ вместо оплаты за каждый анализ по отдельности. Открой бота и жми «Купить».`
     : `👑 Analyzing often? Get unlimited for a month — just ${m1.rub}₽ instead of paying per analysis. Open the bot and tap "Buy".`;
 }
+// Экранирование для сообщений с parse_mode:'HTML'. Имя из Telegram может содержать
+// < > & (популярное «<3») — без этого Telegram отклоняет ВСЁ сообщение целиком.
+// Отдельная функция верхнего уровня: esc() внутри adminStatsPage() — это код
+// HTML-страницы, из обработчиков бота он не виден.
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 function tgApi(env, method, body) {
   return fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/${method}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1778,12 +1788,12 @@ async function txSummaryText(env) {
     // Telegram отклоняет ВСЁ сообщение с can't parse entities, а tgApi раньше
     // глотал эту ошибку — кнопка «крутилась» и ничего не показывала.
     const who = t.name || t.username
-      ? `${esc(t.name || '')}${t.username ? ' @' + esc(t.username) : ''}`
-      : `id${esc(t.tgid)}`;
-    const price = t.method === 'stars' ? `${t.amount}⭐` : t.method === 'crypto' ? `${t.amount} ${esc(t.currency)}` : `${t.amount}₽`;
-    const id = t.id ? ` — ID <code>${esc(t.id)}</code>` : '';
-    const promo = t.promo ? ` — 🎟 ${esc(t.promo)}` : '';
-    return `${dt} — ${who} — ${esc(t.pack)} — ${price} (${esc(t.method)})${id}${promo}`;
+      ? `${escHtml(t.name || '')}${t.username ? ' @' + escHtml(t.username) : ''}`
+      : `id${escHtml(t.tgid)}`;
+    const price = t.method === 'stars' ? `${t.amount}⭐` : t.method === 'crypto' ? `${t.amount} ${escHtml(t.currency)}` : `${t.amount}₽`;
+    const id = t.id ? ` — ID <code>${escHtml(t.id)}</code>` : '';
+    const promo = t.promo ? ` — 🎟 ${escHtml(t.promo)}` : '';
+    return `${dt} — ${who} — ${escHtml(t.pack)} — ${price} (${escHtml(t.method)})${id}${promo}`;
   };
   return `💳 Последние транзакции (${top.length}):\n\n` + top.map(line).join('\n');
 }
@@ -1822,7 +1832,15 @@ Answer briefly (2–4 sentences), in English. For refunds, payment issues, acces
 function supportApi(env, method, body) {
   return fetch(`https://api.telegram.org/bot${env.SUPPORT_BOT_TOKEN}/${method}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  }).then(r => r.json()).catch(e => ({ ok: false, description: e.message }));
+  }).then(r => r.json()).then((r) => {
+    // Без этого отказ Telegram (битая HTML-разметка, слишком длинный текст)
+    // уходил в тишину: кнопка «крутилась», а в логах было ровно «Ok».
+    if (!r.ok) console.log('SUPPORT API FAIL', method, r.error_code, r.description);
+    return r;
+  }).catch((e) => {
+    console.log('SUPPORT API THROW', method, e.message);
+    return { ok: false, description: e.message };
+  });
 }
 
 async function supportAI(env, question, L) {
