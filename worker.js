@@ -805,7 +805,16 @@ function tgApi(env, method, body) {
   return fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/${method}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  }).then(r => r.json()).catch(e => ({ ok: false, description: e.message }));
+  }).then(r => r.json()).then((r) => {
+    // Раньше отказ Telegram (битый HTML, слишком длинный текст) уходил в тишину:
+    // ok:false никто не проверял, воркер возвращал 200, в логах было «Ok».
+    // Теперь он попадёт в логи — observability включена в wrangler.toml.
+    if (!r.ok) console.log('TG API FAIL', method, r.error_code, r.description);
+    return r;
+  }).catch((e) => {
+    console.log('TG API THROW', method, e.message);
+    return { ok: false, description: e.message };
+  });
 }
 // При навигации по кнопкам правим ТО ЖЕ сообщение вместо спама новых — apiFn это tgApi/supportApi/mediaApi,
 // уже забинженный на нужный токен. messageId берётся из cq.message.message_id (навигация внутри callback).
@@ -1765,11 +1774,16 @@ async function txSummaryText(env) {
   const line = (t) => {
     const d = new Date(t.ts);
     const dt = d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const who = t.name || t.username ? `${t.name || ''}${t.username ? ' @' + t.username : ''}` : `id${t.tgid}`;
-    const price = t.method === 'stars' ? `${t.amount}⭐` : t.method === 'crypto' ? `${t.amount} ${t.currency}` : `${t.amount}₽`;
-    const id = t.id ? ` — ID <code>${t.id}</code>` : '';
-    const promo = t.promo ? ` — 🎟 ${t.promo}` : '';
-    return `${dt} — ${who} — ${t.pack} — ${price} (${t.method})${id}${promo}`;
+    // Имя из Telegram может содержать < > & (популярное «<3»). Без экранирования
+    // Telegram отклоняет ВСЁ сообщение с can't parse entities, а tgApi раньше
+    // глотал эту ошибку — кнопка «крутилась» и ничего не показывала.
+    const who = t.name || t.username
+      ? `${esc(t.name || '')}${t.username ? ' @' + esc(t.username) : ''}`
+      : `id${esc(t.tgid)}`;
+    const price = t.method === 'stars' ? `${t.amount}⭐` : t.method === 'crypto' ? `${t.amount} ${esc(t.currency)}` : `${t.amount}₽`;
+    const id = t.id ? ` — ID <code>${esc(t.id)}</code>` : '';
+    const promo = t.promo ? ` — 🎟 ${esc(t.promo)}` : '';
+    return `${dt} — ${who} — ${esc(t.pack)} — ${price} (${esc(t.method)})${id}${promo}`;
   };
   return `💳 Последние транзакции (${top.length}):\n\n` + top.map(line).join('\n');
 }
@@ -2603,7 +2617,14 @@ async function supportWebhook(request, env) {
       const { text: tt, kb } = await showTicketsKb(env);
       await reply(tt, kb);
     } else if (data === 'admtx' && isAdmin) {
-      await reply(await txSummaryText(env), { inline_keyboard: [[{ text: '🔎 Найти по ID', callback_data: 'admfindtx' }], [{ text: '← Admin', callback_data: 'admin' }]] }, { parse_mode: 'HTML' });
+      {
+        const txKb = { inline_keyboard: [[{ text: '🔎 Найти по ID', callback_data: 'admfindtx' }], [{ text: '← Admin', callback_data: 'admin' }]] };
+        const txTxt = await txSummaryText(env);
+        const txRes = await reply(txTxt, txKb, { parse_mode: 'HTML' });
+        // Если Telegram всё же не принял разметку — шлём обычным текстом.
+        // Лучше без моноширинных ID, чем пустой экран.
+        if (!txRes?.ok) await reply(txTxt.replace(/<\/?code>/g, ''), txKb);
+      }
     } else if (data === 'admpromo' && isAdmin) {
       await reply(await promoListText(env), { inline_keyboard: [
         [{ text: '+ Добавить промокод', callback_data: 'admpromoadd' }],
