@@ -3282,10 +3282,21 @@ async function pgLoad(){
 function pgShowLocked(pack){
   document.getElementById('pgLocked').hidden = false;
   document.getElementById('pgUnlocked').hidden = true;
-  if (pack) {
-    const b = document.querySelector('#pgLocked .btn');
-    if (b) b.innerHTML = 'Открыть ведение<span class="btn-price">' +
-      pack.rub + ' ₽ · ' + pack.stars + ' ⭐</span>';
+
+  // Цены берём с сервера, если он их прислал — чтобы не расходились с PACKS.
+  const card = document.getElementById('pgBuyCard');
+  const stars = document.getElementById('pgBuyStars');
+  if (pack && card) card.innerHTML = 'Купить картой<span class="btn-price">' + pack.rub + ' ₽</span>';
+  if (pack && stars) stars.textContent = 'Telegram Stars · ' + pack.stars + ' ⭐';
+
+  // Кнопки в демо были без обработчиков — подключаем к обычной покупке сайта.
+  if (card && !card.dataset.wired) {
+    card.dataset.wired = '1';
+    card.addEventListener('click', function(){ buyPack('guide', card, 'rub'); });
+  }
+  if (stars && !stars.dataset.wired) {
+    stars.dataset.wired = '1';
+    stars.addEventListener('click', function(){ buyPack('guide', stars, 'stars'); });
   }
 }
 
@@ -3438,12 +3449,11 @@ function openShot(){
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShot(); });
 
-// Раздел грузится лениво — только когда человек открыл его в меню.
-// Видимостью управляет renderProgress(), сюда приходим уже показанными.
-window.pgOpen = function(){
+// Раздел грузится лениво — только когда человек открыл вкладку «Ведение».
+function openProgress(){
+  document.getElementById('progressSection').hidden = false;
   if (!pgLoaded) pgLoad();
-  else moveInk(document.querySelector('.tab.on'));
-};
+}
 
 window.addEventListener('resize', () => {
   if (!pgLoaded) return;

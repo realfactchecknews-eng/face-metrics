@@ -2638,3 +2638,43 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 #progressSection ul,#progressSection ol{ list-style:none; }
 
 
+
+/* ─── покупка ─── */
+.pg-buy{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; align-items:center; }
+
+/* ─── ничто не должно распирать раздел по горизонтали ─── */
+#progressSection{ max-width:100%; }
+#progressSection .tabs,
+#progressSection .chips,
+#progressSection .gal,
+#progressSection .shareRow,
+#progressSection .fileRow,
+#progressSection .pickRow{
+  max-width:100%; overflow-x:auto;
+  scrollbar-width:none;              /* Firefox */
+  -ms-overflow-style:none;
+}
+#progressSection .tabs::-webkit-scrollbar,
+#progressSection .chips::-webkit-scrollbar,
+#progressSection .gal::-webkit-scrollbar,
+#progressSection .pickRow::-webkit-scrollbar{ width:0; height:0; display:none; }
+
+#progressSection table,
+#progressSection pre,
+#progressSection canvas{ max-width:100%; }
+#progressSection .card{ overflow-wrap:anywhere; }
+
+/* ─── аккуратный ползунок вместо системного ─── */
+#fsBody{ scrollbar-width:thin; scrollbar-color:rgba(196,164,107,.35) transparent; }
+#fsBody::-webkit-scrollbar{ width:7px; }
+#fsBody::-webkit-scrollbar-track{ background:transparent; }
+#fsBody::-webkit-scrollbar-thumb{
+  background:rgba(196,164,107,.3); border-radius:100px;
+}
+#fsBody::-webkit-scrollbar-thumb:hover{ background:rgba(196,164,107,.55); }
+
+/* ─── десктоп: раздел не должен растягиваться во всю ширину монитора ─── */
+@media (min-width:900px){
+  #progressSection .pg-wrap{ max-width:820px; }
+  #progressSection .phead{ padding:34px 0 26px; }
+}
