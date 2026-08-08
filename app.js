@@ -3403,10 +3403,14 @@ async function doMeasure(forcePay){
       body: JSON.stringify({
         token: (getAccount() || {}).token, measure: true, image: measureFile,
         forcePay: forcePay === true,
-        prompt: '', metrics: window.__lastMetrics || '',
+        metrics: window.__lastMetrics || '',
       }),
     });
-    d = await r.json();
+    // Воркер на часть ошибок отвечает простым текстом, а не JSON — читаем как
+    // текст и разбираем сами, иначе падает JSON.parse и причина теряется.
+    const raw = await r.text();
+    try { d = JSON.parse(raw); }
+    catch { d = { error: 'server', text: raw.slice(0, 200) || ('HTTP ' + r.status) }; }
   } catch (e) {
     host.innerHTML = '<div class="card"><div class="card-s">Запрос не дошёл: ' +
       (e && e.message ? e.message : 'сеть недоступна') +

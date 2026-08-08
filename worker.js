@@ -147,7 +147,9 @@ async function setupWebhook(request, env) {
 async function analyze(request, env) {
   let body;
   try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
-  if (!body.prompt) return cors('Missing prompt', 400);
+  // В режиме замера промпт строит сам воркер (buildMeasurePrompt), клиент его не
+  // присылает — иначе запрос отбивался здесь и фронт получал текст вместо JSON.
+  if (!body.prompt && body.measure !== true) return cors('Missing prompt', 400);
 
   // Страховка по IP (анти-абьюз) — касается всех, включая оплативших.
   const today = new Date().toISOString().slice(0, 10);
