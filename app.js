@@ -3364,7 +3364,17 @@ function pgPickMeasure(input){
   const f = input.files && input.files[0]; if (!f) return;
   const rd = new FileReader();
   rd.onload = () => {
-    measureFile = rd.result.split(',')[1];
+    // Обязательно через oneToBase64: сырой файл с телефона это несколько мегабайт
+    // в base64, запрос не доходил и фронт показывал «Сеть не ответила».
+    // 672px + jpeg .82 — те же параметры, что у обычного анализа.
+    const im = new Image();
+    im.onload = () => {
+      try { measureFile = oneToBase64(im, 672); }
+      catch { measureFile = rd.result.split(',')[1]; }
+      pgSyncGo();
+    };
+    im.src = rd.result;
+
     const prev = document.getElementById('measurePrev');
     if (prev) { prev.src = rd.result; prev.style.display = 'block'; }
     const lbl = input.closest('.filebtn'); if (lbl) lbl.classList.add('set');
@@ -3397,8 +3407,10 @@ async function doMeasure(forcePay){
       }),
     });
     d = await r.json();
-  } catch {
-    host.innerHTML = '<div class="card"><div class="card-s">Сеть не ответила. Попробуй ещё раз.</div></div>';
+  } catch (e) {
+    host.innerHTML = '<div class="card"><div class="card-s">Запрос не дошёл: ' +
+      (e && e.message ? e.message : 'сеть недоступна') +
+      '. Попробуй ещё раз — если повторится, напиши в поддержку.</div></div>';
     return;
   }
 
