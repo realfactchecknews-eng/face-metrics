@@ -400,13 +400,38 @@ async function authTg(request, env) {
 
 // Вход через сообщение боту: сайт открывает t.me/бот?start=КОД, юзер жмёт Start,
 // вебхук привязывает КОД к сессии, сайт забирает её отсюда поллингом.
+//
+// KV кеширует ответ в колокации на 60 секунд — В ТОМ ЧИСЛЕ ответ «ключа нет»,
+// и опустить это ниже 60 нельзя (минимум cacheTtl). Раньше сайт опрашивал один
+// и тот же ключ, первый же промах кешировался, и вход происходил не когда юзер
+// нажал Start, а когда протухал кеш — до минуты ожидания на ровном месте.
+// Поэтому имя ключа меняется каждые AUTH_BUCKET_MS: бот пишет код сразу в
+// несколько будущих корзин, а поллинг всегда спрашивает корзину текущую. Ключ,
+// которого сайт ещё не касался, отдаётся из KV без кеша — то есть сразу.
+// Корзина считается по часам Cloudflare с обеих сторон, так что расхождение
+// времени на устройстве роли не играет.
+const AUTH_BUCKET_MS = 10000;
+const AUTH_BUCKETS = 6; // 6 × 10 c = минута жизни кода
+
+function authBucketKeys(code, from = Date.now(), count = 1) {
+  const b = Math.floor(from / AUTH_BUCKET_MS);
+  const keys = [];
+  for (let i = 0; i < count; i++) keys.push(`authcode:${code}:${b + i}`);
+  return keys;
+}
+
 async function authPoll(request, env) {
   let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
   const code = String(body.code || '');
   if (!/^[a-z0-9-]{10,80}$/i.test(code)) return json({ error: 'code' });
-  const raw = await env.RATE_LIMIT.get(`authcode:${code}`);
+  const key = authBucketKeys(code)[0];
+  const raw = await env.RATE_LIMIT.get(key);
   if (!raw) return json({ pending: true });
-  await env.RATE_LIMIT.delete(`authcode:${code}`);
+  // Гасим все корзины разом, чтобы код не сработал второй раз.
+  await Promise.all(
+    authBucketKeys(code, Date.now() - AUTH_BUCKET_MS * AUTH_BUCKETS, AUTH_BUCKETS * 2)
+      .map((k) => env.RATE_LIMIT.delete(k))
+  );
   const { token, user } = JSON.parse(raw);
   return json(await statusFor(env, user, token));
 }
@@ -1175,7 +1200,14 @@ async function tgWebhook(request, env) {
       const token = crypto.randomUUID() + '-' + crypto.randomUUID();
       const user = { id: tgid, first_name: msg.from.first_name || '', username: msg.from.username || '', photo_url: '' };
       await env.RATE_LIMIT.put(`sess:${token}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 30 });
-      await env.RATE_LIMIT.put(`authcode:${code}`, JSON.stringify({ token, user }), { expirationTtl: 600 });
+      // Пишем код сразу в несколько будущих корзин: сайт спросит ближайшую, имя
+      // которой он ещё не запрашивал, и получит ответ мимо кеша KV. Подробнее —
+      // в комментарии к authPoll.
+      const authVal = JSON.stringify({ token, user });
+      await Promise.all(
+        authBucketKeys(code, Date.now(), AUTH_BUCKETS)
+          .map((k) => env.RATE_LIMIT.put(k, authVal, { expirationTtl: 600 }))
+      );
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.loginOk, reply_markup: menuKb(L) });
     } else if (/^ref_[a-z0-9_-]{1,40}$/i.test(code)) {
       const gotBonus = await attributeReferral(env, tgid, code.slice(4).toUpperCase());

@@ -2183,7 +2183,7 @@ function pollTgLogin(code, btn) {
   var tries = 0;
   function tick() {
     tries++;
-    if (tries > 300) { // ~5 мин — покрывает возврат из встроенного браузера ТГ
+    if (tries > 200) { // ~5 мин — покрывает возврат из встроенного браузера ТГ
       clearInterval(_authPollTimer); _authPollTimer = null;
       localStorage.removeItem(TG_LOGIN_PENDING_KEY);
       if (btn) { btn.disabled = false; btn.style.flexDirection = ""; btn.style.gap = ""; btn.innerHTML = t("loginBtn"); }
@@ -2203,8 +2203,10 @@ function pollTgLogin(code, btn) {
       }
     }).catch(function(){});
   }
-  tick();
-  _authPollTimer = setInterval(tick, 1000);
+  // Первый опрос НЕ делаем сразу: в этот момент юзер только уходит в Telegram,
+  // нажать Start ещё не успел, а промах KV кеширует имя ключа в колокации.
+  // Ждём полторы секунды — за это время переключение обычно уже произошло.
+  _authPollTimer = setInterval(tick, 1500);
 }
 
 // Если страницу пересобрало (вернулись из встроенного браузера ТГ) — докручиваем
