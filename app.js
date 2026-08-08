@@ -55,6 +55,7 @@ var I18N = {
     begin: "START ANALYSIS",
     menuTitle: "Menu",
     tHistory: "Score history", tHistorySub: "Your past results",
+    tProgress: "Coaching", tProgressSub: "Progress checks and plan",
     tGlossary: "Looksmax glossary", tGlossarySub: "Terms explained simply",
     tArticles: "Terms & articles", tArticlesSub: "PSL, fWHR, canthal tilt",
     tHow: "How it works", tHowSub: "Geometry + AI",
@@ -156,6 +157,7 @@ var I18N = {
     begin: "НАЧАТЬ АНАЛИЗ",
     menuTitle: "Меню",
     tHistory: "История оценок", tHistorySub: "Прошлые результаты",
+    tProgress: "Ведение", tProgressSub: "Замеры прогресса и план",
     tGlossary: "Луксмакс-словарь", tGlossarySub: "Термины простыми словами",
     tArticles: "Термины и статьи", tArticlesSub: "PSL, fWHR, canthal tilt",
     tHow: "Как это работает", tHowSub: "Геометрия + AI",
@@ -1955,7 +1957,21 @@ function roundRect(c2, x, y, w, h, r) {
     glossary: { titleKey: "tGlossary", render: renderGlossary },
     articles: { titleKey: "tArticles", render: renderArticles },
     how: { titleKey: "tHow", render: renderHow },
+    progress: { titleKey: "tProgress", render: renderProgress },
   };
+
+  // Раздел «Ведение» живёт скрытым в конце index.html и переезжает сюда целиком,
+  // чтобы не дублировать разметку и не терять состояние между открытиями.
+  // Держим ссылку в замыкании: openView() делает body.innerHTML = "" перед
+  // отрисовкой, и без неё раздел уничтожался бы при втором открытии.
+  var pgSection = null;
+  function renderProgress(box) {
+    if (!pgSection) pgSection = document.getElementById("progressSection");
+    if (!pgSection) { box.innerHTML = "<p class='dm-empty'>Раздел недоступен.</p>"; return; }
+    pgSection.hidden = false;
+    box.appendChild(pgSection);
+    if (window.pgOpen) window.pgOpen();
+  }
 
   function renderHistory(box) {
     var hist = [];
@@ -2796,3 +2812,641 @@ function pwRecheck(silent) {
     });
   });
 })();
+
+
+/* ════════════ ВЕДЕНИЕ ════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   FaceRate · Ведение — фронтенд
+   ---------------------------------------------------------------
+   Дописать в конец app.js. Данные приходят из POST /progress,
+   замер уходит обычным POST / с флагом measure:true.
+   Фото нигде не сохраняются: ни на сервере, ни в браузере.
+   ═══════════════════════════════════════════════════════════════ */
+
+// ─── состояние раздела ───
+let PG = null;              // ответ /progress
+let POINTS = [];            // [{t, overall, cats, quality}]
+let CATS_HIST = {};         // {название: [баллы по замерам]}
+let CURRENT_WEEK = 1;
+let pgLoaded = false;
+
+const CAT_RU = {
+  'СИММЕТРИЯ': 'Симметрия', 'ГЛАЗА_CANTHAL_TILT': 'Глаза',
+  'МИДФЕЙС_MAXILLA': 'Мидфейс', 'ДЖОУЛАЙН_MANDIBLE': 'Джоулайн',
+  'НОС_NOSE': 'Нос', 'ГУБЫ_СКУЛЫ': 'Губы/скулы',
+  'КОЖА': 'Кожа', 'ГРУМИНГ_STYLE': 'Груминг',
+};
+
+const PARAMS = [
+  { k:'СИММЕТРИЯ', n:'Симметрия', v:7.1, prev:7.0,
+    what:'Насколько совпадают половины лица. Считается по 468 точкам, которые ставит анализатор.',
+    ctrl:'Частично. Костная асимметрия не меняется, но заметная часть перекоса - это отёк, привычка спать на одном боку и наклон головы.',
+    todo:['Спать на спине - сон лицом в подушку годами усиливает асимметрию','Убрать соль и алкоголь: односторонний отёк читается как перекос','Проверить осанку и положение головы за компьютером'] },
+  { k:'ГЛАЗА_CANTHAL_TILT', n:'Глаза · canthal tilt', v:6.4, prev:6.0,
+    what:'Наклон линии от внутреннего угла глаза к внешнему. Положительный наклон считается более эстетичным.',
+    ctrl:'Сам наклон - генетика. Но восприятие взгляда сильно зависит от отёка, тёмных кругов и формы бровей.',
+    todo:['7–9 часов сна: недосып даёт отёк верхнего века и «падающий» взгляд','Брови: убрать монобровь, не истончать сверху','Тёмные круги - сначала понять причину (глава 02 гайда)'] },
+  { k:'МИДФЕЙС_MAXILLA', n:'Мидфейс · maxilla', v:5.9, prev:5.9,
+    what:'Длина средней трети лица относительно ширины. Короткий мидфейс воспринимается лучше.',
+    ctrl:'Почти нет - это кость. Визуально работает только через объём волос и процент жира.',
+    todo:['Не гнаться за этим параметром - он самый «генетический» из восьми','Стрижка с объёмом сверху зрительно укорачивает среднюю треть','Снижение жира делает скулы читаемыми, и мидфейс воспринимается компактнее'] },
+  { k:'ДЖОУЛАЙН_MANDIBLE', n:'Джоулайн · mandible', v:6.2, prev:5.5,
+    what:'Читаемость линии челюсти и угла нижней челюсти.',
+    ctrl:'Высоко. Сам угол - кость, но видимость челюсти почти целиком определяется жиром, отёком и осанкой.',
+    todo:['Дефицит 300–500 ккал и белок 1.6–2 г/кг - главный рычаг','Убрать алкоголь: эффект на отёк виден за 3–5 дней','Chin tuck и монитор на уровне глаз','Жвачка и тренажёры - не делать, они расширяют низ лица'] },
+  { k:'НОС_NOSE', n:'Нос', v:6.0, prev:6.1,
+    what:'Пропорции носа относительно остального лица.',
+    ctrl:'Без хирурга - нет. Но на фото параметр очень чувствителен к оптике.',
+    todo:['Снимать основной камерой с 1.5–2 м - селфи увеличивает нос','Поворот на 15–30° вместо строгого анфаса','Если балл скачет между замерами - почти всегда дело в ракурсе'] },
+  { k:'ГУБЫ_СКУЛЫ', n:'Губы и скулы', v:6.6, prev:6.4,
+    what:'Наполненность губ и выраженность скуловой области.',
+    ctrl:'Частично: сухость губ и отёк скул управляемы, форма - нет.',
+    todo:['Бальзам для губ - потрескавшиеся губы это минус балл за неухоженность','Скулы проявляются при снижении жира, отдельно их «накачать» нельзя'] },
+  { k:'КОЖА', n:'Кожа', v:6.8, prev:5.9,
+    what:'Текстура, ровность тона, воспаления, постакне.',
+    ctrl:'Максимально. Самый быстро меняющийся параметр из восьми.',
+    todo:['Очищение → увлажнение → SPF каждое утро','Один актив за раз, оценивать не раньше месяца','Кистозное акне и рубцы - к дерматологу, дома не решается'] },
+  { k:'ГРУМИНГ_STYLE', n:'Груминг и стиль', v:7.0, prev:6.2,
+    what:'Стрижка, борода, брови, общая ухоженность и подача.',
+    ctrl:'Полностью. Самая быстрая отдача во всём гайде.',
+    todo:['Стрижка под форму лица, с референсами - не «как обычно»','Триммер: нос, уши, шея - раз в 2 недели','Одежда по размеру важнее бренда'] },
+];
+
+const WEEKS = [
+  { n:1,  t:'Сон и вода', task:'Фиксированное время отбоя, 7–9 часов, 2–2.5 л воды равномерно за день.', why:'Отёк - самое быстрое, что можно убрать. Эффект виден за 3–5 дней.', check:'Пять ночей подряд лёг в одно и то же время (±30 мин).', tip:'У тебя отмечена отёчность верхнего века - начни именно с этого, эффект на балл за глаза будет заметнее всего.', ch:'04', cht:'Сон, вода, соль, алкоголь', pg:'10' },
+  { n:2,  t:'Кожа: базовая рутина', task:'Очищение утром и вечером, увлажнение, SPF 30+ каждое утро. Активы пока не трогаем.', why:'Без базы активы не работают, а с сожжённым барьером кожа выглядит хуже, чем до начала.', check:'SPF нанесён 7 дней из 7.', tip:'В анализе отмечены расширенные поры в T-зоне - тебе подойдёт гель-крем, а не плотный крем.', ch:'02', cht:'Кожа: фундамент всего', pg:'5' },
+  { n:3,  t:'Питание', task:'Посчитать норму калорий, выставить дефицит 300–500 ккал, белок 1.6–2 г/кг. Убрать алкоголь.', why:'Процент жира - главный рычаг для челюсти и скул.', check:'Взвесился в один и тот же день недели, утром.', tip:'Джоулайн - твой самый управляемый параметр из низких. Именно эта неделя даст по нему больше всего.', ch:'03', cht:'Процент жира и лицо', pg:'8' },
+  { n:4,  t:'Груминг', task:'Стрижка у хорошего мастера с 3–4 референсами. Брови. Триммер. Записаться на гигиену к стоматологу.', why:'Самая быстрая отдача: восприятие меняется за один визит.', check:'Стрижка сделана, референсы показаны мастеру.', tip:'Форма лица определена как ромб - проси объём на лбу и у подбородка, но не на уровне скул.', ch:'05', cht:'Груминг: волосы, борода, брови', pg:'11' },
+  { n:5,  t:'Первый актив', task:'Ниацинамид или ретинол 2 раза в неделю, только на ночь. Наблюдать 2–3 недели.', why:'Кожа обновляется за 28 дней, раньше оценивать бессмысленно.', check:'Ни одного вечера с двумя активами сразу.', tip:'При твоём постакне азелаиновая кислота даст больше, чем ретинол на старте.', ch:'02', cht:'Кожа: активы', pg:'7' },
+  { n:6,  t:'Силовые', task:'3 тренировки в неделю с акцентом на плечи и спину. Плюс 8–10 тыс. шагов ежедневно.', why:'Сохраняет мышцы в дефиците и расширяет силуэт.', check:'3 тренировки и средние 8 тыс. шагов за неделю.', tip:'', ch:'08', cht:'Тело и одежда', pg:'15' },
+  { n:7,  t:'Осанка', task:'Chin tuck ежедневно, растяжка грудных, монитор на уровень глаз.', why:'Поза вперёд головой прячет челюсть и укорачивает шею.', check:'Chin tuck 3 подхода в день, 5 дней из 7.', tip:'У тебя отмечен небольшой наклон головы вправо - он даёт часть штрафа за симметрию.', ch:'07', cht:'Осанка, шея, линия челюсти', pg:'14' },
+  { n:8,  t:'Контрольная точка', task:'Повторить фото в тех же условиях, сделать замер и сравнить с днём 0.', why:'Здесь обычно кажется, что ничего не изменилось - а фото показывает обратное.', check:'Замер сделан, сравнение открыто.', weak:true, tip:'Джоулайн у тебя сейчас самый низкий параметр - 5.2. Держи дефицит 400 ккал, жир на щеках прячет угол челюсти.', ch:'09', cht:'Фотогеничность', pg:'16' },
+  { n:9,  t:'Гардероб', task:'Разбор шкафа: убрать всё не по размеру. Собрать базу из 8–10 однотонных вещей.', why:'Посадка вещей влияет на общее впечатление сильнее большинства деталей лица.', check:'В шкафу не осталось вещей не по размеру.', tip:'', ch:'08', cht:'Тело и одежда', pg:'15' },
+  { n:10, t:'Второй актив', task:'Если кожа приняла первый - добавить кислоту в другие дни. При раздражении - откатиться.', why:'Наслаивать активы можно только по одному и только на спокойной коже.', check:'Нет покраснения и шелушения третий день подряд.', tip:'', ch:'02', cht:'Кожа: активы', pg:'7' },
+  { n:11, t:'Фото-навык', task:'Отработать ракурсы из главы 09. Найти рабочий угол и свет. Обновить аватарки.', why:'Половина «плохой внешности на фото» - это оптика и свет.', check:'Есть серия из 20+ кадров, выбран рабочий ракурс.', tip:'Балл за нос у тебя скачет между замерами - почти наверняка это дистанция съёмки.', ch:'09', cht:'Фотогеничность', pg:'16' },
+  { n:12, t:'Долгосрочное', task:'Консультация ортодонта при вопросах к прикусу. Дерматолог, если акне не ушло.', why:'Через 90 дней есть режим, в который такие истории встраиваются.', check:'Записан хотя бы на одну консультацию.', tip:'', ch:'06', cht:'Зубы и улыбка', pg:'13' },
+  { n:13, t:'Финальный замер', task:'Фото в тех же условиях, вес, замер. Сравнение всех трёх точек.', why:'Сравнение с собой в день 0 - единственная честная метрика.', check:'Три точки сравнены, решение по второму циклу принято.', tip:'', ch:'12', cht:'План на 90 дней', pg:'20' },
+];
+
+const CHAPTERS = [
+  ['01','Словарь луксмаксера','PSL, mogging, canthal tilt, fWHR'],
+  ['02','Кожа: фундамент всего','Рутина из 4 шагов'],
+  ['03','Процент жира и лицо','Главный рычаг софтмаксинга'],
+  ['04','Сон, вода, соль, алкоголь','Отёчность - главный вор внешности'],
+  ['05','Груминг','Волосы, борода, брови'],
+  ['06','Зубы и улыбка','Недооценённый параметр'],
+  ['07','Осанка, шея, челюсть','Что работает, а что фольклор'],
+  ['08','Тело и одежда','Плечи, посадка, силуэт'],
+  ['09','Фотогеничность','Почему селфи врут'],
+  ['10','Мифы и опасные практики','Мьюинг, bone smashing, жвачка'],
+  ['11','Методы из TikTok','Тейп, йохимбин, тэллоу, мочегонки'],
+  ['12','План на 90 дней','Понедельная разбивка'],
+  ['13','Чек-листы и трекер','Ежедневный и еженедельный'],
+  ['14','На чём это основано','Исследования и позиции организаций'],
+];
+
+/* ═══════════ ГРАФИК ═══════════ */
+const DAY = 864e5;
+const fmtD = iso => { const d = new Date(iso); return String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0'); };
+const MON = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+const fmtLong = iso => { const d = new Date(iso); return d.getDate() + ' ' + MON[d.getMonth()]; };
+let chartCat = null;
+let shareA = 0, shareB = 0;
+let confirmed = false;
+const shotImg = [null, null];
+const GOLD = '#c4a46b', GOLD_HI = '#e8d4a0', BG = '#0a0a0a';
+
+function drawChart(){
+  const host = document.getElementById('chart');
+  const W = host.clientWidth || 700, H = 210;
+  const padL = 36, padR = 18, padT = 26, padB = 34;
+
+  const series = chartCat ? CATS_HIST[chartCat] : POINTS.map(p => p.overall);
+  const t0 = new Date(POINTS[0].t).getTime();
+  const tN = new Date(POINTS[POINTS.length-1].t).getTime();
+  const span = Math.max(1, tN - t0);
+
+  const vals = series.slice();
+  let lo = Math.floor(Math.min(...vals) * 2) / 2 - .5;
+  let hi = Math.ceil(Math.max(...vals) * 2) / 2 + .5;
+  if (hi - lo < 1.5) { hi = lo + 1.5; }
+
+  const x = i => padL + (new Date(POINTS[i].t).getTime() - t0) / span * (W - padL - padR);
+  const y = v => padT + (hi - v) / (hi - lo) * (H - padT - padB);
+
+  // горизонтальные линии сетки
+  let grid = '';
+  for (let v = Math.ceil(lo*2)/2; v <= hi; v += .5){
+    const isInt = Math.abs(v - Math.round(v)) < .01;
+    grid += `<line class="grid" x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W-padR}" y2="${y(v).toFixed(1)}"${isInt?'':' opacity=".45"'}/>`;
+    if (isInt) grid += `<text class="lbl" x="4" y="${(y(v)+3.5).toFixed(1)}">${v}</text>`;
+  }
+
+  const pts = series.map((v,i) => [x(i), y(v)]);
+  const d = pts.map((p,i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const area = d + ` L${pts[pts.length-1][0].toFixed(1)} ${H-padB} L${pts[0][0].toFixed(1)} ${H-padB} Z`;
+
+  // подписи дат: первую и последнюю всегда, промежуточные - если не наезжают
+  let marks = '', lastLabelX = -999;
+  pts.forEach((p,i) => {
+    const P = POINTS[i], diff = P.q !== 'СОПОСТАВИМО';
+    marks += `<circle class="dot${diff?' warn':''}" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="animation-delay:${(1+i*.12).toFixed(2)}s"><title>${fmtLong(P.t)} - ${series[i].toFixed(1)}${P.note?' · '+P.note:''}</title></circle>`;
+    marks += `<text class="val" x="${p[0].toFixed(1)}" y="${(p[1]-13).toFixed(1)}" text-anchor="middle">${series[i].toFixed(1)}</text>`;
+    if (i === 0 || i === pts.length-1 || p[0] - lastLabelX > 62){
+      const anch = i === 0 ? 'start' : i === pts.length-1 ? 'end' : 'middle';
+      marks += `<text class="lbl" x="${p[0].toFixed(1)}" y="${H-14}" text-anchor="${anch}">${fmtD(P.t)}</text>`;
+      lastLabelX = p[0];
+    }
+  });
+
+  const totalDays = Math.round((tN - t0) / DAY);
+
+  host.innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">
+       <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+         <stop offset="0%" stop-color="#c4a46b" stop-opacity=".22"/>
+         <stop offset="100%" stop-color="#c4a46b" stop-opacity="0"/>
+       </linearGradient></defs>
+       ${grid}
+       <path class="area" d="${area}"/>
+       <path class="ln" d="${d}" style="--len:${(W*1.8).toFixed(0)}"/>
+       ${marks}
+     </svg>`;
+
+  const dl = series[series.length-1] - series[0];
+  document.getElementById('mCount').textContent = POINTS.length;
+  document.getElementById('mDelta').textContent = (dl >= 0 ? '+' : '') + dl.toFixed(1);
+  document.getElementById('mSpan').textContent = totalDays + ' дн.';
+}
+
+function roundRect(c, x, y, w, h, r){
+  c.beginPath();
+  c.moveTo(x+r, y); c.arcTo(x+w, y, x+w, y+h, r); c.arcTo(x+w, y+h, x, y+h, r);
+  c.arcTo(x, y+h, x, y, r); c.arcTo(x, y, x+w, y, r); c.closePath();
+}
+
+function drawPhoto(c, img, x, y, w, h){
+  c.save(); roundRect(c, x, y, w, h, 20); c.clip();
+  if (img && img.complete && img.naturalWidth){
+    const s = Math.max(w/img.naturalWidth, h/img.naturalHeight);
+    const dw = img.naturalWidth*s, dh = img.naturalHeight*s;
+    c.drawImage(img, x+(w-dw)/2, y+(h-dh)/2, dw, dh);
+  } else {
+    const g = c.createLinearGradient(x, y, x, y+h);
+    g.addColorStop(0, '#1a1a1a'); g.addColorStop(1, '#101010');
+    c.fillStyle = g; c.fillRect(x, y, w, h);
+    c.fillStyle = 'rgba(196,164,107,.35)';
+    c.font = '300 26px "Cormorant Garamond", serif';
+    c.textAlign = 'center';
+    c.fillText('фото', x+w/2, y+h/2);
+  }
+  c.restore();
+  c.strokeStyle = 'rgba(196,164,107,.45)'; c.lineWidth = 2;
+  roundRect(c, x, y, w, h, 20); c.stroke();
+}
+
+function buildShare(){
+  const cv = document.getElementById('shareCanvas');
+  const c = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+
+  const A = POINTS[shareA], B = POINTS[shareB];
+  const dl = +(B.overall - A.overall).toFixed(1);
+  const days = Math.round((new Date(B.t) - new Date(A.t)) / DAY);
+
+  c.fillStyle = BG; c.fillRect(0, 0, W, H);
+
+  // рамка
+  c.strokeStyle = 'rgba(196,164,107,.5)'; c.lineWidth = 3;
+  roundRect(c, 26, 26, W-52, H-52, 28); c.stroke();
+
+  // шапка
+  c.textAlign = 'center';
+  c.fillStyle = GOLD; c.font = '400 24px -apple-system, sans-serif';
+  c.letterSpacing = '10px';
+  c.fillText('F A C E R A T E', W/2, 104);
+  c.letterSpacing = '0px';
+
+  c.fillStyle = '#f0ece6'; c.font = '300 62px "Cormorant Garamond", serif';
+  c.fillText(days + ' дней', W/2, 190);
+
+  // фото
+  const pw = 438, ph = 632, gap = 40;
+  const x0 = (W - pw*2 - gap)/2, y0 = 250;
+  drawPhoto(c, shotImg[0], x0, y0, pw, ph);
+  drawPhoto(c, shotImg[1], x0+pw+gap, y0, pw, ph);
+
+  // разделитель-ромб
+  c.save(); c.translate(W/2, y0+ph/2); c.rotate(Math.PI/4);
+  c.strokeStyle = GOLD; c.lineWidth = 2; c.strokeRect(-11, -11, 22, 22); c.restore();
+
+  // подписи под фото
+  const cap = (cx, p, label) => {
+    c.fillStyle = 'rgba(255,255,255,.42)'; c.font = '400 20px -apple-system, sans-serif';
+    c.letterSpacing = '4px';
+    c.fillText(label.toUpperCase(), cx, y0+ph+48);
+    c.letterSpacing = '0px';
+    c.fillStyle = GOLD_HI; c.font = '300 54px "Cormorant Garamond", serif';
+    c.fillText(p.overall.toFixed(1), cx, y0+ph+112);
+    c.fillStyle = 'rgba(255,255,255,.36)'; c.font = '400 21px -apple-system, sans-serif';
+    c.fillText(fmtLong(p.t), cx, y0+ph+146);
+  };
+  cap(x0+pw/2, A, 'было');
+  cap(x0+pw+gap+pw/2, B, 'стало');
+
+  // дельта
+  const dy = y0+ph+232;
+  const txt = (dl > 0 ? '+' : '') + dl.toFixed(1);
+  c.font = '300 96px "Cormorant Garamond", serif';
+  const tw = c.measureText(txt).width;
+  c.fillStyle = 'rgba(196,164,107,.09)';
+  roundRect(c, W/2-tw/2-52, dy-74, tw+104, 108, 54); c.fill();
+  c.strokeStyle = 'rgba(196,164,107,.4)'; c.lineWidth = 2;
+  roundRect(c, W/2-tw/2-52, dy-74, tw+104, 108, 54); c.stroke();
+  c.fillStyle = dl >= 0 ? GOLD_HI : '#d98d7a';
+  c.fillText(txt, W/2, dy);
+
+  c.fillStyle = 'rgba(255,255,255,.4)'; c.font = '400 22px -apple-system, sans-serif';
+  c.letterSpacing = '5px';
+  c.fillText(Math.abs(dl) === 1 ? 'БАЛЛ' : 'БАЛЛА', W/2, dy+52);
+  c.letterSpacing = '0px';
+
+  // низ
+  c.strokeStyle = 'rgba(196,164,107,.3)'; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(W/2-70, H-136); c.lineTo(W/2+70, H-136); c.stroke();
+  c.fillStyle = GOLD; c.font = '400 25px -apple-system, sans-serif';
+  c.letterSpacing = '4px';
+  c.fillText('facerate.ru', W/2, H-88);
+  c.letterSpacing = '0px';
+  c.fillStyle = 'rgba(255,255,255,.28)'; c.font = '400 19px -apple-system, sans-serif';
+  c.fillText('AI-анализ внешности по фото', W/2, H-56);
+
+  document.getElementById('sharePrev').src = cv.toDataURL('image/png');
+}
+
+function renderPick(){
+  const opts = POINTS.map((p,i) => `<option value="${i}">${fmtLong(p.t)} · ${p.overall.toFixed(1)}</option>`).join('');
+  document.getElementById('pickRow').innerHTML =
+    `<select class="chip" id="selA" onchange="shareA=+this.value;buildShare()">${opts}</select>
+     <select class="chip" id="selB" onchange="shareB=+this.value;buildShare()">${opts}</select>`;
+  document.getElementById('selA').value = shareA;
+  document.getElementById('selB').value = shareB;
+}
+
+function downloadShare(){
+  const a = document.createElement('a');
+  a.download = 'facerate-progress.png';
+  a.href = document.getElementById('shareCanvas').toDataURL('image/png');
+  a.click();
+}
+
+function renderChips(){
+  const host = document.getElementById('chips');
+  const names = ['Общий балл', ...Object.keys(CATS_HIST)];
+  host.innerHTML = names.map(n =>
+    `<button class="chip${(chartCat===null&&n==='Общий балл')||chartCat===n?' on':''}" data-c="${n}">${n}</button>`
+  ).join('');
+}
+
+function renderParams(){
+  document.getElementById('params').innerHTML = PARAMS.map((p,i) => {
+    const d = +(p.v - p.prev).toFixed(1);
+    const cls = d > 0 ? 'up' : d < 0 ? 'down' : 'same';
+    const sign = d > 0 ? '+' + d : d < 0 ? d : '0';
+    return `<details class="par" style="--i:${i}">
+      <summary>
+        <span class="pname">${p.n}</span>
+        <span class="delta ${cls}">${sign}</span>
+        <span class="pscore">${p.v.toFixed(1)}</span>
+        <span class="chev"></span>
+      </summary>
+      <div class="pbody">
+        <div class="pbar"><i data-w="${p.v*10}"></i></div>
+        <div class="psec"><h4>Что это</h4><p>${p.what}</p></div>
+        <div class="psec"><h4>Насколько управляемо</h4><p>${p.ctrl}</p></div>
+        <div class="psec"><h4>Что делать</h4><ul>${p.todo.map(t=>`<li>${t}</li>`).join('')}</ul></div>
+      </div>
+    </details>`;
+  }).join('');
+
+  document.querySelectorAll('.par').forEach(d => {
+    d.addEventListener('toggle', () => {
+      if (!d.open) return;
+      const bar = d.querySelector('.pbar i');
+      requestAnimationFrame(() => { bar.style.width = bar.dataset.w + '%'; });
+    });
+  });
+}
+
+function renderWeeks(){
+  document.getElementById('weeks').innerHTML = WEEKS.map((w,i) => {
+    const st = w.n < CURRENT_WEEK ? 'done' : w.n === CURRENT_WEEK ? 'now' : '';
+    return `<details class="week ${st}" style="--i:${i}" ${w.n===CURRENT_WEEK?'open':''}>
+      <summary>
+        <span class="wnum">${w.n < CURRENT_WEEK ? '✓' : w.n}</span>
+        <span class="wtitle">${w.t}</span>
+        ${w.n===CURRENT_WEEK?'<span class="wtag">Сейчас</span>':''}
+      </summary>
+      <div class="wbody">
+        <div class="wl">Задание</div><p>${w.task}</p>
+        <div class="wl">Зачем</div><p>${w.why}</p>
+        <div class="wl">Как понять, что сделано</div><p>${w.check}</p>
+        <a class="chlink" href="#"><span class="chn2">${w.ch}</span><span>Глава ${w.ch} «${w.cht}» &middot; стр. ${w.pg}</span></a>
+        ${w.tip ? `<div class="tipbox"><div class="tl">${w.weak ? 'Твоё слабое место сейчас' : 'Лично тебе - из твоего анализа'}</div><p>${w.tip}</p></div>` : ''}
+      </div>
+    </details>`;
+  }).join('');
+}
+
+function renderChapters(){
+  document.getElementById('chapters').innerHTML = CHAPTERS.map(([n,t,s],i) =>
+    `<div class="ch" style="--i:${i}"><span class="chn">${n}</span><span class="cht"><b>${t}</b><span>${s}</span></span></div>`
+  ).join('');
+}
+
+function renderWeekNow(){
+  const w = WEEKS[CURRENT_WEEK-1];
+  const badge = document.getElementById('weekBadge');
+  if (badge) badge.textContent = 'Неделя ' + CURRENT_WEEK;
+  document.getElementById('weekNow').innerHTML =
+    `<div class="wl" style="font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0 0 5px">Задание</div>
+     <p style="font-size:13.5px;color:#c4c0b9">${w.task}</p>
+     <div class="wl" style="font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:12px 0 5px">Как понять, что сделано</div>
+     <p style="font-size:13.5px;color:#c4c0b9">${w.check}</p>
+     <a class="chlink" href="#"><span class="chn2">${w.ch}</span><span>Глава ${w.ch} «${w.cht}» &middot; стр. ${w.pg}</span></a>
+     ${w.tip?`<div class="tipbox"><div class="tl">Лично тебе - из твоего анализа</div><p>${w.tip}</p></div>`:''}`;
+}
+
+function moveInk(btn){
+  const ink = document.getElementById('ink');
+  ink.style.left = btn.offsetLeft + 'px';
+  ink.style.width = btn.offsetWidth + 'px';
+}
+
+function toggleConfirm(e){
+  e.preventDefault();
+  confirmed = !confirmed;
+  document.getElementById('confirm').classList.toggle('ok', confirmed);
+  document.getElementById('goBtn').disabled = !confirmed;
+}
+
+function closeShot(){ document.getElementById('mask').classList.remove('on'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeShot(); });
+
+function doMeasure(){
+  closeShot();
+  const host = document.getElementById('dynHost');
+  const rows = [
+    ['Кожа', +0.9, 'меньше воспалений, тон ровнее'],
+    ['Джоулайн', +0.7, 'линия челюсти читается заметно чётче'],
+    ['Груминг', +0.8, 'стрижка и брови в порядке'],
+    ['Глаза', +0.4, 'ушла отёчность верхнего века'],
+    ['Нос', -0.1, 'скорее разница ракурса, чем реальное изменение'],
+  ];
+  host.innerHTML = `<div class="dyn">
+    <h4>Динамика · сравнение с замером 32 дня назад</h4>
+    ${rows.map((r,i) => {
+      const cls = r[1] > 0 ? 'up' : r[1] < 0 ? 'down' : 'same';
+      const sign = r[1] > 0 ? '+' + r[1] : r[1];
+      return `<div class="dline" style="--i:${i}">
+        <span class="delta ${cls}">${sign}</span>
+        <span class="dn"><b style="font-weight:600">${r[0]}</b> - ${r[2]}</span>
+      </div>`;
+    }).join('')}
+    <p style="margin-top:16px;font-size:13.5px;color:#c4c0b9">
+      Основной сдвиг дала кожа и снижение отёка - это ровно те параметры, которые меняются первыми.
+      Костная база не изменилась и не изменится, так что дальше рост будет медленнее.
+      До следующего замера сосредоточься на дефиците калорий: джоулайн у тебя ещё не на потолке.
+    </p>
+    <p style="margin-top:12px;font-size:12px;color:#8a8a8a">
+      Фото снято при том же свете, что и прошлое - сравнение корректное.
+    </p>
+  </div>`;
+  host.scrollIntoView({ behavior:'smooth', block:'center' });
+  document.getElementById('mNext').textContent = 'через 10 дн.';
+}
+
+function loadShot(input, slot){
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const im = new Image();
+  im.onload = () => { shotImg[slot] = im; URL.revokeObjectURL(url); buildShare(); };
+  im.src = url;
+  input.closest('.filebtn').classList.add('set');
+}
+
+/* ═══════════ ЗАГРУЗКА ═══════════ */
+
+async function pgLoad(){
+  const acc = getAccount();               // app.js:2047
+  const tok = acc && acc.token;
+  if (!tok) return pgShowLocked();
+
+  let d;
+  try {
+    const r = await fetch(WORKER_URL + '/progress', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: tok }),
+    });
+    d = await r.json();
+  } catch { return pgShowLocked(); }
+
+  if (d.error || !d.guide) return pgShowLocked(d.pack);
+
+  PG = d;
+  CURRENT_WEEK = d.week || 1;
+
+  // Раскладываем замеры в форму, удобную графику.
+  POINTS = (d.points || []).map((p) => ({
+    t: new Date(p.t).toISOString().slice(0, 10),
+    overall: p.overall, cats: p.cats || {}, q: p.quality || '',
+  }));
+  CATS_HIST = {};
+  for (const [key, ru] of Object.entries(CAT_RU)) {
+    const series = (d.points || []).map((p) => (p.cats || {})[key]);
+    if (series.some((v) => typeof v === 'number')) CATS_HIST[ru] = series;
+  }
+
+  // Баллы последнего замера в справку по параметрам.
+  const last = (d.points || [])[d.points.length - 1];
+  const prev = (d.points || [])[d.points.length - 2];
+  PARAMS.forEach((p) => {
+    p.v = last?.cats?.[p.k];
+    p.prev = prev?.cats?.[p.k];
+  });
+
+  pgShowUnlocked();
+}
+
+function pgShowLocked(pack){
+  document.getElementById('pgLocked').hidden = false;
+  document.getElementById('pgUnlocked').hidden = true;
+  if (pack) {
+    const b = document.querySelector('#pgLocked .btn');
+    if (b) b.innerHTML = 'Открыть ведение<span class="btn-price">' +
+      pack.rub + ' ₽ · ' + pack.stars + ' ⭐</span>';
+  }
+}
+
+function pgShowUnlocked(){
+  document.getElementById('pgLocked').hidden = true;
+  document.getElementById('pgUnlocked').hidden = false;
+
+  // Индексы коллажа выставляем ПОСЛЕ загрузки: по умолчанию первый и последний замер.
+  shareA = 0;
+  shareB = Math.max(0, POINTS.length - 1);
+
+  renderParams(); renderWeeks(); renderChapters(); renderWeekNow();
+  renderChips();
+  if (POINTS.length >= 2) { renderPick(); buildShare(); }
+  else { pgHideShare(); }
+  if (POINTS.length) drawChart(); else pgEmptyChart();
+
+  const left = PG.cooldownLeft || 0;
+  const btn = document.getElementById('measureBtn');
+  if (btn) {
+    btn.disabled = left > 0;
+    btn.textContent = left > 0
+      ? 'Следующий замер через ' + Math.ceil(left / 864e5) + ' дн.'
+      : (POINTS.length ? 'Сделать замер' : 'Сделать первый замер');
+  }
+  const nx = document.getElementById('mNext');
+  if (nx) nx.textContent = left > 0 ? 'через ' + Math.ceil(left / 864e5) + ' дн.' : 'доступен';
+
+  moveInk(document.querySelector('.tab.on'));
+  pgLoaded = true;
+}
+
+// Коллаж нужен минимум двум замерам: сравнивать одно фото с собой бессмысленно.
+function pgHideShare(){
+  const c = document.getElementById('shareCard');
+  if (!c) return;
+  c.innerHTML = '<div class="card-t">Коллаж до и после</div>' +
+    '<div class="card-s">Появится после второго замера — сравнивать пока не с чем.</div>';
+}
+
+function pgEmptyChart(){
+  document.getElementById('chart').innerHTML =
+    '<div class="empty"><div class="ei"><svg viewBox="0 0 24 24">' +
+    '<path d="M3 17l6-6 4 4 8-8"/></svg></div>' +
+    'Замеров пока нет. Сделай первый — он станет точкой отсчёта.</div>';
+  ['mCount','mSpan','mDelta'].forEach((id) => {
+    const e = document.getElementById(id); if (e) e.textContent = '—';
+  });
+}
+
+/* ═══════════ ЗАМЕР ═══════════ */
+
+let measureFile = null;
+
+function pgPickMeasure(input){
+  const f = input.files && input.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    measureFile = rd.result.split(',')[1];
+    const prev = document.getElementById('measurePrev');
+    if (prev) { prev.src = rd.result; prev.style.display = 'block'; }
+    document.getElementById('goBtn').disabled = !confirmed;
+  };
+  rd.readAsDataURL(f);
+}
+
+async function doMeasure(forcePay){
+  if (!measureFile) { alert('Сначала выбери фото'); return; }
+  if (!forcePay) closeShot();
+
+  const host = document.getElementById('dynHost');
+  host.innerHTML = '<div class="card"><div class="card-s">Замер идёт, это 20-40 секунд…</div></div>';
+
+  let d;
+  try {
+    const r = await fetch(WORKER_URL + '/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: (getAccount() || {}).token, measure: true, image: measureFile,
+        forcePay: forcePay === true,
+        prompt: '', metrics: window.__lastMetrics || '',
+      }),
+    });
+    d = await r.json();
+  } catch {
+    host.innerHTML = '<div class="card"><div class="card-s">Сеть не ответила. Попробуй ещё раз.</div></div>';
+    return;
+  }
+
+  // Досрочный замер: сервер предлагает сделать его за 1 анализ.
+  if (d.error === 'progwait' && d.canPay) {
+    host.innerHTML =
+      '<div class="card"><div class="card-t">Ещё рано</div>' +
+      '<div class="card-s">' + (d.text || '').replace(/\n/g, '<br>') + '</div>' +
+      '<button class="btn" onclick="doMeasure(true)">Сделать сейчас за 1 анализ</button>' +
+      '<div class="privnote" style="margin-top:12px">На счету ' + d.creditsLeft +
+      '. Замер по расписанию, через ' + d.daysLeft + ' дн., останется бесплатным.</div></div>';
+    return;
+  }
+
+  if (d.error) {
+    host.innerHTML = '<div class="card"><div class="card-s">' + (d.text || d.error) + '</div></div>';
+    return;
+  }
+
+  measureFile = null;
+  renderMeasure(d.text || '');
+  pgLoad();                                  // перечитываем историю и график
+}
+
+// Разбираем отчёт и показываем ДИНАМИКУ отдельным блоком.
+function renderMeasure(text){
+  const host = document.getElementById('dynHost');
+  const sec = (name) => {
+    const re = new RegExp(name + '\\s*:\\s*([\\s\\S]*?)(?=\\n[А-ЯЁ_]{4,}\\s*:|$)');
+    const m = text.match(re); return m ? m[1].trim() : '';
+  };
+  const shot = sec('СПОСОБ_СЪЁМКИ');
+  const dyn  = sec('ДИНАМИКА');
+  const recs = sec('РЕКОМЕНДАЦИИ').split('\n')
+    .map((l) => l.replace(/^\s*\d+[.)]\s*/, '').replace(/^\[([А-ЯЁA-Z_]+)\]\s*/, ''))
+    .filter((l) => l.length > 8);
+
+  host.innerHTML =
+    '<div class="dyn"><h4>Динамика</h4>' +
+    '<p style="font-size:13.5px;color:#c4c0b9;white-space:pre-line">' + dyn + '</p>' +
+    (shot ? '<p style="margin-top:12px;font-size:12px;color:#8a8a8a;white-space:pre-line">' +
+            shot + '</p>' : '') +
+    (recs.length ? '<h4 style="margin-top:18px">Что делать до следующего замера</h4>' +
+      recs.map((r, i) => '<div class="dline" style="--i:' + i + '"><span class="dn">' + r + '</span></div>').join('')
+      : '') +
+    '</div>';
+  host.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/* ═══════════ ВКЛАДКИ ═══════════ */
+
+document.getElementById('tabs')?.addEventListener('click', (e) => {
+  const b = e.target.closest('.tab'); if (!b) return;
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t === b));
+  document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === b.dataset.p));
+  moveInk(b);
+});
+
+function openShot(){
+  confirmed = false;
+  document.getElementById('confirm').classList.remove('ok');
+  document.getElementById('goBtn').disabled = true;
+  document.getElementById('mask').classList.add('on');
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShot(); });
+
+// Раздел грузится лениво — только когда человек открыл его в меню.
+// Видимостью управляет renderProgress(), сюда приходим уже показанными.
+window.pgOpen = function(){
+  if (!pgLoaded) pgLoad();
+  else moveInk(document.querySelector('.tab.on'));
+};
+
+window.addEventListener('resize', () => {
+  if (!pgLoaded) return;
+  if (POINTS.length) drawChart();
+  moveInk(document.querySelector('.tab.on'));
+});

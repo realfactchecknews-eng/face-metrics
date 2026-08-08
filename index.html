@@ -166,6 +166,7 @@
       <button class="menu-tile" data-view="glossary"><span class="mt-ic">❡</span><span class="mt-tx"><b>Луксмакс-словарь</b><i>Термины простыми словами</i></span></button>
       <button class="menu-tile" data-view="articles"><span class="mt-ic">❦</span><span class="mt-tx"><b>Термины и статьи</b><i>PSL, fWHR, canthal tilt</i></span></button>
       <button class="menu-tile" data-view="how"><span class="mt-ic">◎</span><span class="mt-tx"><b>Как это работает</b><i>Геометрия + AI</i></span></button>
+      <button class="menu-tile" data-view="progress"><span class="mt-ic">◈</span><span class="mt-tx"><b>Ведение</b><i>Замеры прогресса и план</i></span></button>
       <button class="menu-tile" data-view="feedback"><span class="mt-ic">✎</span><span class="mt-tx"><b>Обратная связь</b><i>Пожелания и идеи</i></span></button>
     </div>
     <div class="menu-go-row">
@@ -555,5 +556,178 @@
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 <script src="app.js?v=46"></script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Ведение. Лежит здесь скрытым, а при открытии из меню переезжает
+     в #fsBody (см. renderProgress в app.js). Данные — POST /progress.
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="progressSection" hidden>
+<div class="pg-wrap">
+
+  <div class="phead">
+    <div class="kicker">Личный раздел</div>
+    <h1>Ведение</h1>
+    <p>90 дней по плану из гайда: замеры прогресса, разбор каждого параметра и задания по неделям.</p>
+    <div class="rule"></div>
+  </div>
+
+  <!-- ═══════════ ЗАКРЫТО ═══════════ -->
+  <div class="lock" id="pgLocked" hidden>
+    <div class="lock-blur">
+      <div class="fake">
+        <div class="bar" style="width:62%"></div><div class="bar" style="width:88%"></div>
+        <div class="bar" style="width:44%"></div><div class="bar" style="width:76%"></div>
+        <div class="bar" style="width:55%"></div><div class="bar" style="width:80%"></div>
+      </div>
+    </div>
+    <div class="lock-veil">
+      <div class="lock-icon">
+        <svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      </div>
+      <h2>Раздел откроется после покупки</h2>
+      <p>Ведение идёт в комплекте с гайдом - по нему и построен весь план на 90 дней.</p>
+      <ul class="lock-list">
+        <li style="--i:0">Гайд на 25 страниц - PDF в боте и веб-версия здесь</li>
+        <li style="--i:1">Замеры прогресса: ИИ помнит прошлые оценки и сравнивает</li>
+        <li style="--i:2">Разбор всех 8 параметров: что с каждым делать</li>
+        <li style="--i:3">План на 13 недель + задания от бота</li>
+        <li style="--i:4">5 обычных анализов на счёт</li>
+      </ul>
+      <button class="btn">Открыть ведение<span class="btn-price">499 ₽ · 349 ⭐</span></button>
+    </div>
+  </div>
+
+  <!-- ═══════════ ОТКРЫТО ═══════════ -->
+  <div id="pgUnlocked" hidden>
+
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-p="p1">Замеры</button>
+      <button class="tab" data-p="p2">Параметры</button>
+      <button class="tab" data-p="p3">План</button>
+      <button class="tab" data-p="p4">Гайд</button>
+      <span class="tab-ink" id="ink"></span>
+    </div>
+
+    <!-- ─── ЗАМЕРЫ ─── -->
+    <div class="panel on" id="p1">
+      <div class="card">
+        <div class="card-t">Динамика общего балла</div>
+        <div class="card-s">Ось времени - реальная: паузы между замерами видны как есть. Переключай параметр, чтобы посмотреть его отдельно.</div>
+        <div class="chips" id="chips"></div>
+        <div class="chart" id="chart"></div>
+        <div class="meta">
+          <span>Замеров: <b id="mCount">5</b></span>
+          <span>Период: <b id="mSpan">97 дн.</b></span>
+          <span>С начала: <b id="mDelta">+0.9</b></span>
+          <span>Следующий: <b id="mNext">через 4 дн.</b></span>
+        </div>
+        <div class="privnote">Светлая точка на графике - замер, где ИИ отметил различия в съёмке. Такой результат стоит считать менее надёжным.</div>
+      </div>
+
+      <div class="card shareCard" id="shareCard">
+        <div class="card-t">Коллаж до и после</div>
+        <div class="card-s">Выбери два своих снимка - картинка соберётся прямо в браузере. Ни на сервер, ни в память браузера ничего не записывается.</div>
+        <div class="pickRow" id="pickRow"></div>
+        <div class="fileRow">
+          <label class="filebtn">Фото «было»<input type="file" accept="image/*" onchange="loadShot(this,0)"></label>
+          <label class="filebtn">Фото «стало»<input type="file" accept="image/*" onchange="loadShot(this,1)"></label>
+        </div>
+        <canvas id="shareCanvas" width="1080" height="1350" style="display:none"></canvas>
+        <img id="sharePrev" class="shareprev" alt="Коллаж до и после">
+        <div class="shareRow">
+          <button class="btn" onclick="downloadShare()">Сохранить картинку</button>
+        </div>
+      </div>
+
+      <div class="card" id="weekCard">
+        <div class="card-t">Задание недели <span class="wbadge" id="weekBadge"></span></div>
+        <div class="card-s">Это же сообщение бот прислал в Telegram в понедельник.</div>
+        <div id="weekNow"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-t">Новый замер</div>
+        <div class="card-s">Один замер в 10 дней. Чаще нет смысла: за меньший срок разница между фото - это шум, а не ты. Бот напомнит, когда придёт время.</div>
+        <button class="btn" onclick="openShot()">Сделать замер</button>
+      </div>
+
+      <div id="dynHost"></div>
+    </div>
+
+    <!-- ─── ПАРАМЕТРЫ ─── -->
+    <div class="panel" id="p2">
+      <div class="card" style="padding-bottom:18px">
+        <div class="card-t">Твои параметры</div>
+        <div class="card-s">Баллы из последнего замера. Раскрой любой - там что это значит, что управляемо и что делать.</div>
+      </div>
+      <div id="params" class="stagger"></div>
+    </div>
+
+    <!-- ─── ПЛАН ─── -->
+    <div class="panel" id="p3">
+      <div class="card" style="padding-bottom:18px">
+        <div class="card-t">План на 90 дней</div>
+        <div class="card-s">Одна-две привычки в неделю. Бот присылает задание каждый понедельник - здесь то же самое, плюс личный совет из твоего анализа.</div>
+      </div>
+      <div id="weeks" class="stagger"></div>
+    </div>
+
+    <!-- ─── ГАЙД ─── -->
+    <div class="panel" id="p4">
+      <div class="card" style="padding-bottom:18px">
+        <div class="card-t">Гайд · веб-версия</div>
+        <div class="card-s">Тот же текст, что в PDF, но с поиском и без скачивания. PDF лежит в боте.</div>
+      </div>
+      <div class="card stagger" id="chapters"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ МОДАЛКА ═══════════ -->
+<div class="mask" id="mask" onclick="if(event.target===this)closeShot()">
+  <div class="modal">
+    <button class="mclose" onclick="closeShot()">×</button>
+    <h3>Как снять фото для замера</h3>
+    <div class="msub">Пять условий. Нарушишь одно - сравнение станет бессмысленным.</div>
+
+    <div class="mstep" style="--i:0">
+      <div class="mico" style="--i:0"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3.5"/></svg></div>
+      <div><b>Основная камера, 1.5–2 метра</b><p>Не селфи. Фронталка искажает нос и центр лица, и искажает каждый раз по-разному.</p></div>
+    </div>
+    <div class="mstep" style="--i:1">
+      <div class="mico" style="--i:1"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg></div>
+      <div><b>Мягкий дневной свет</b><p>У окна, лицом к нему. Никаких потолочных ламп - они дают тени, которые читаются как рельеф.</p></div>
+    </div>
+    <div class="mstep" style="--i:2">
+      <div class="mico" style="--i:2"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M9 15h6"/></svg></div>
+      <div><b>Нейтральное лицо, строго анфас</b><p>Не улыбаться, не поджимать губы, не тянуть подбородок. Голова прямо, взгляд в камеру.</p></div>
+    </div>
+    <div class="mstep" style="--i:3">
+      <div class="mico" style="--i:3"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 5 3 8 0s5 3 8 0"/><path d="M4 13c3-3 5 3 8 0s5 3 8 0"/><path d="M4 19c3-3 5 3 8 0s5 3 8 0"/></svg></div>
+      <div><b>Лоб и уши открыты</b><p>Волосы убрать. Они прячут форму лица, и алгоритм считает пропорции неверно.</p></div>
+    </div>
+    <div class="mstep" style="--i:4">
+      <div class="mico" style="--i:4"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div>
+      <div><b>Те же условия, что в прошлый раз</b><p>Одно место, одно время суток, тот же телефон. Именно это делает сравнение честным.</p></div>
+    </div>
+
+    <div class="mwarn">
+      Без фильтров, бьюти-режима и ретуши. Многие телефоны сглаживают кожу автоматически - проверь настройки камеры, иначе замер покажет работу алгоритма, а не твою кожу.
+    </div>
+
+    <label class="confirm" id="confirm" onclick="toggleConfirm(event)">
+      <span class="box"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+      <span>Я снял по всем пяти пунктам и понимаю: если условия отличаются от прошлого раза, сравнение покажет разницу фото, а не мой прогресс.</span>
+    </label>
+
+    <div class="mact">
+      <button class="btn-ghost" onclick="closeShot()">Позже</button>
+      <button class="btn" id="goBtn" disabled onclick="doMeasure()">Загрузить фото</button>
+    </div>
+  </div>
+</div>
+</section>
+
 </body>
 </html>
