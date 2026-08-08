@@ -3288,21 +3288,10 @@ function pgShowLocked(pack){
   document.getElementById('pgLocked').hidden = false;
   document.getElementById('pgUnlocked').hidden = true;
 
-  // Цены берём с сервера, если он их прислал — чтобы не расходились с PACKS.
-  const card = document.getElementById('pgBuyCard');
-  const stars = document.getElementById('pgBuyStars');
-  if (pack && card) card.innerHTML = 'Купить картой<span class="btn-price">' + pack.rub + ' ₽</span>';
-  if (pack && stars) stars.textContent = 'Telegram Stars · ' + pack.stars + ' ⭐';
-
-  // Кнопки в демо были без обработчиков — подключаем к обычной покупке сайта.
-  if (card && !card.dataset.wired) {
-    card.dataset.wired = '1';
-    card.addEventListener('click', function(){ buyPack('guide', card, 'rub'); });
-  }
-  if (stars && !stars.dataset.wired) {
-    stars.dataset.wired = '1';
-    stars.addEventListener('click', function(){ buyPack('guide', stars, 'stars'); });
-  }
+  // Покупка с сайта пока выключена: раздел на обкатке, и пак в боте тоже
+  // показывается только админам. Когда откроем — вернуть сюда две кнопки,
+  // buyPack('guide', btn, 'rub') и buyPack('guide', btn, 'stars'),
+  // и снять ограничение в packsKb() на стороне воркера.
 }
 
 function pgShowUnlocked(){
