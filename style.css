@@ -2633,9 +2633,10 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   font-size:15px; line-height:1.6;
   text-align:left;
 }
-#progressSection h1,#progressSection h2,#progressSection h3,#progressSection h4,
-#progressSection p,#progressSection ul,#progressSection ol,#progressSection figure{ margin:0; padding:0; }
-#progressSection ul,#progressSection ol{ list-style:none; }
+/* :where() даёт нулевую специфичность — иначе сброс через #progressSection (100)
+   перебивал .phead p{margin:14px auto 0} и подзаголовок терял центрирование. */
+:where(#progressSection) :where(h1,h2,h3,h4,p,ul,ol,figure){ margin:0; padding:0; }
+:where(#progressSection) :where(ul,ol){ list-style:none; }
 
 
 
