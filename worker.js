@@ -63,7 +63,11 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   m1: { type: 'unlim',  hours: 720,  stars: 749,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 749, oldRub: 999, oldLavaRub: 999 },
   // Гайд + ведение 90 дней. Цена в дыре между d1 (299) и m1 (999), чтобы не
   // конкурировать с месячным безлимитом.
-  guide: { type: 'guide', credits: 5, stars: 349, rub: 499, lavaRub: 499,
+  // launch:true — цена запуска, зачёркнутая старая показывается независимо от
+  // недельной акции (SALE_ENDS_AT). Поднять до 499/349 = убрать launch и вернуть
+  // rub/stars/lavaRub к значениям old*. В Lava.top оффер гайда должен быть
+  // isDynamicPrice, иначе там цена останется прежней — воркер шлёт сумму сам.
+  guide: { type: 'guide', credits: 5, stars: 199, rub: 299, lavaRub: 299, launch: true,
            label: 'Гайд + ведение 90 дней', labelEn: 'Guide + 90-day coaching',
            oldStars: 349, oldRub: 499, oldLavaRub: 499 },
 };
@@ -1084,10 +1088,7 @@ function saleCountdown(L) {
   const mins = Math.floor((ms % 3600000) / 60000);
   return L === 'ru' ? `${hours} ч ${mins} мин` : `${hours}h ${mins}m`;
 }
-// showGuide — пак «Гайд + ведение» пока показываем ТОЛЬКО админам: раздел ведения
-// на сайте ещё не выкачен, а сообщение после покупки обещает, что он там есть.
-// Снять ограничение, когда раздел появится на facerate.ru.
-function packsKb(method, L, discPct, showGuide) {
+function packsKb(method, L, discPct) {
   const raw = (p) => method === 'stars' ? p.stars : (method === 'rub' || method === 'sbp') ? (p.lavaRub || p.rub) : p.rub;
   const rawOld = (p) => method === 'stars' ? p.oldStars : (method === 'rub' || method === 'sbp') ? (p.oldLavaRub || p.oldRub) : p.oldRub;
   const unit = (p) => method === 'stars' ? '⭐' : '₽';
@@ -1100,7 +1101,7 @@ function packsKb(method, L, discPct, showGuide) {
     // Если активна персональная скидка — зачёркиваем ТЕКУЩУЮ базовую цену (base), а не старую
     // цену до недельного повышения (rawOld). Иначе два разных "было" сливаются в одно число и
     // выглядит как "подешевело с 39 до 38", хотя на самом деле "было 45 (база), стало 38 (со скидкой)".
-    const old = discPct ? base : (saleActive() ? rawOld(p) : null);
+    const old = discPct ? base : ((saleActive() || p.launch) ? rawOld(p) : null);
     const oldTxt = old && old > cur ? `${strike(old + unit(p))} ` : '';
     return `${oldTxt}${cur}${unit(p)}`;
   };
@@ -1110,7 +1111,7 @@ function packsKb(method, L, discPct, showGuide) {
     return [{ text: label, callback_data: `pay:${id}:${method}` }];
   };
   const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : '')];
-  if (showGuide) rows.push(row('guide', '📕 ', ' НОВОЕ'));
+  rows.push(row('guide', '📕 ', PACKS.guide.launch ? ' 🔥 ЦЕНА ЗАПУСКА' : ' НОВОЕ'));
   const cd = saleActive() ? saleCountdown(L) : null;
   if (cd) rows.unshift([{ text: (L === 'ru' ? `🔥 Цены недели! До повышения: ${cd}` : `🔥 Weekly prices! Ends in: ${cd}`), callback_data: 'noop' }]);
   if (discPct) rows.unshift([{ text: `🎁 Промо-скидка ${discPct}% уже применена`, callback_data: 'noop' }]);
@@ -1459,16 +1460,10 @@ async function handleCallback(env, cq) {
     // Шаг 2: тарифы под выбранный способ.
     const method = data.slice(4);
     const listDiscPct = await buyerDiscountPct(env, tgid, null);
-    await reply(b.shopTitle, packsKb(method, L, listDiscPct, isAdminId(env, tgid)));
+    await reply(b.shopTitle, packsKb(method, L, listDiscPct));
   } else if (data.startsWith('pay:')) {
     // Шаг 2: выставление счёта выбранным способом.
     const [, packId, method] = data.split(':');
-    // Пока раздел ведения не выкачен — гайд доступен только админам, даже если
-    // кто-то подобрал callback_data вручную.
-    if (packId === 'guide' && !isAdminId(env, tgid)) {
-      await reply('Этот тариф скоро появится.', { inline_keyboard: [[{ text: BL[L].kbBack, callback_data: 'shop' }]] });
-      return new Response('ok');
-    }
     const pack = PACKS[packId];
     if (!pack) return;
     const discPct = await buyerDiscountPct(env, tgid, packId);

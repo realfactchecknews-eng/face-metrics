@@ -3290,10 +3290,42 @@ function pgShowLocked(pack){
   document.getElementById('pgLocked').hidden = false;
   document.getElementById('pgUnlocked').hidden = true;
 
-  // Покупка с сайта пока выключена: раздел на обкатке, и пак в боте тоже
-  // показывается только админам. Когда откроем — вернуть сюда две кнопки,
-  // buyPack('guide', btn, 'rub') и buyPack('guide', btn, 'stars'),
-  // и снять ограничение в packsKb() на стороне воркера.
+  const box = document.getElementById('pgSoon');
+  if (!box) return;
+  box.className = 'pg-buy';
+  box.innerHTML = '';
+
+  // Счёт выставляется на Telegram-профиль, поэтому без входа покупать некуда.
+  if (!getAccount()) {
+    const hint = document.createElement('p');
+    hint.className = 'pg-buy-hint';
+    hint.textContent = 'Войди через Telegram вверху страницы - счёт придёт в бота.';
+    box.appendChild(hint);
+    return;
+  }
+
+  // Цены приходят из воркера (PACKS.guide), чтобы не разъезжались с ботом.
+  const p = pack || {};
+  const rub = p.rub || 299, stars = p.stars || 199;
+  const tag = (cur, old, unit) =>
+    (old && old > cur ? '<s>' + old + unit + '</s> ' : '') + cur + unit;
+
+  if (p.launch) {
+    const note = document.createElement('div');
+    note.className = 'pg-buy-note';
+    note.textContent = 'Цена запуска';
+    box.appendChild(note);
+  }
+
+  const mk = (cls, label, method) => {
+    const b = document.createElement('button');
+    b.className = cls;
+    b.innerHTML = label;
+    b.addEventListener('click', () => buyPack('guide', b, method));
+    box.appendChild(b);
+  };
+  mk('pg-buy-btn', 'Купить картой - ' + tag(rub, p.oldRub, '₽'), 'rub');
+  mk('pg-buy-btn ghost', 'Telegram Stars - ' + tag(stars, p.oldStars, '⭐'), 'stars');
 }
 
 function pgShowUnlocked(){
