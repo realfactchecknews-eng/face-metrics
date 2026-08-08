@@ -3472,11 +3472,15 @@ function openShot(){
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShot(); });
 
-// Раздел грузится лениво — только когда человек открыл вкладку «Ведение».
-function openProgress(){
-  document.getElementById('progressSection').hidden = false;
+// Раздел грузится лениво — только когда человек открыл его в меню.
+// Видимостью управляет renderProgress(), сюда приходим уже показанными.
+// Имя именно window.pgOpen: renderProgress зовёт его через window, и когда
+// функция называлась openProgress, вызов молча пропускался, pgLoad не стартовал
+// и обе карточки оставались скрытыми — раздел выглядел пустым.
+window.pgOpen = function(){
   if (!pgLoaded) pgLoad();
-}
+  else moveInk(document.querySelector('#progressSection .tab.on'));
+};
 
 window.addEventListener('resize', () => {
   if (!pgLoaded) return;
