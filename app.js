@@ -3110,18 +3110,23 @@ function renderChips(){
 
 function renderParams(){
   document.getElementById('params').innerHTML = PARAMS.map((p,i) => {
-    const d = +(p.v - p.prev).toFixed(1);
-    const cls = d > 0 ? 'up' : d < 0 ? 'down' : 'same';
-    const sign = d > 0 ? '+' + d : d < 0 ? d : '0';
+    // До первого замера баллов ещё нет — а это состояние КАЖДОГО нового покупателя.
+    // Раньше здесь падало на p.v.toFixed(), и исключение убивало все следующие
+    // отрисовки: вкладки «Параметры», «План» и «Гайд» оставались пустыми.
+    const has = typeof p.v === 'number';
+    const hasPrev = typeof p.prev === 'number';
+    const d = has && hasPrev ? +(p.v - p.prev).toFixed(1) : null;
+    const cls = d === null ? 'same' : d > 0 ? 'up' : d < 0 ? 'down' : 'same';
+    const sign = d === null ? '' : d > 0 ? '+' + d : d < 0 ? String(d) : '0';
     return `<details class="par" style="--i:${i}">
       <summary>
         <span class="pname">${p.n}</span>
-        <span class="delta ${cls}">${sign}</span>
-        <span class="pscore">${p.v.toFixed(1)}</span>
+        ${sign ? `<span class="delta ${cls}">${sign}</span>` : ''}
+        <span class="pscore">${has ? p.v.toFixed(1) : '—'}</span>
         <span class="chev"></span>
       </summary>
       <div class="pbody">
-        <div class="pbar"><i data-w="${p.v*10}"></i></div>
+        ${has ? `<div class="pbar"><i data-w="${p.v * 10}"></i></div>` : ''}
         <div class="psec"><h4>Что это</h4><p>${p.what}</p></div>
         <div class="psec"><h4>Насколько управляемо</h4><p>${p.ctrl}</p></div>
         <div class="psec"><h4>Что делать</h4><ul>${p.todo.map(t=>`<li>${t}</li>`).join('')}</ul></div>
@@ -3308,8 +3313,12 @@ function pgShowUnlocked(){
   shareA = 0;
   shareB = Math.max(0, POINTS.length - 1);
 
-  renderParams(); renderWeeks(); renderChapters(); renderWeekNow();
-  renderChips();
+  // Каждую отрисовку зовём отдельно: раньше исключение в первой (нет баллов до
+  // первого замера) убивало все следующие, и три вкладки оставались пустыми.
+  const safe = (name, fn) => { try { fn(); } catch (e) { console.log('progress render ' + name, e.message); } };
+  safe('params', renderParams); safe('weeks', renderWeeks);
+  safe('chapters', renderChapters); safe('weekNow', renderWeekNow);
+  safe('chips', renderChips);
   if (POINTS.length >= 2) { renderPick(); buildShare(); }
   else { pgHideShare(); }
   if (POINTS.length) drawChart(); else pgEmptyChart();
