@@ -175,14 +175,32 @@ async function analyze(request, env) {
   // ── ВЕДЕНИЕ: режим замера. Идёт мимо квоты и кредитов, лимит отдельный. ──
   const hasGuide = (await env.RATE_LIMIT.get(`guide:${tgid}`)) === '1';
   const isMeasure = body.measure === true;
+  let earlyPaid = false;          // досрочный замер, оплаченный кредитом
   if (isMeasure) {
     if (!hasGuide) return json({ error: 'guide', text: 'Замеры прогресса доступны после покупки гайда.', packs: { guide: PACKS.guide } });
     const plist = await progList(env, tgid);
     if (plist.length >= PROG_MAX) return json({ error: 'progmax', text: 'Достигнут лимит замеров. Напиши в поддержку.' });
     const plast = plist[plist.length - 1];
     if (plast && Date.now() - plast.t < PROG_COOLDOWN) {
+      // Замер по расписанию бесплатный — это то, за что человек заплатил при покупке.
+      // А замер РАНЬШЕ СРОКА стоит один кредит: платит тот, кому не терпится, а
+      // обещанный план работает без доплат.
       const leftH = Math.ceil((PROG_COOLDOWN - (Date.now() - plast.t)) / 3600e3);
-      return json({ error: 'progwait', text: `Следующий замер через ${Math.ceil(leftH / 24)} дн. Чаще нет смысла: за меньший срок разница между фото это шум, а не ты.`, hoursLeft: leftH });
+      const leftD = Math.ceil(leftH / 24);
+      if (body.forcePay !== true) {
+        return json({
+          error: 'progwait',
+          text: `Следующий бесплатный замер через ${leftD} дн. Чаще нет смысла: за меньший срок разница между фото это шум, а не ты.`
+              + (credits > 0 ? '\n\nЕсли всё же хочешь сейчас — можно за 1 анализ.' : ''),
+          hoursLeft: leftH, daysLeft: leftD,
+          canPay: credits > 0, cost: 1, creditsLeft: credits,
+        });
+      }
+      if (credits < 1) {
+        return json({ error: 'pay', text: 'Для досрочного замера нужен 1 анализ на счету.', packs: PACKS, methods: enabledMethods(env) });
+      }
+      await env.RATE_LIMIT.put(`credits:${tgid}`, String(credits - 1));
+      earlyPaid = true;
     }
   }
   const freeAvail = subscribed && await freeQuotaAvailable(env, tgid, buyer);
@@ -345,7 +363,10 @@ async function analyze(request, env) {
   const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
   await env.RATE_LIMIT.put(`g:${today}`, String(g + 1), { expirationTtl: 93600 });
 
-  if (isMeasure) await progSave(env, tgid, data.choices[0].message.content);
+  if (isMeasure) {
+    await progSave(env, tgid, data.choices[0].message.content);
+    if (earlyPaid) creditsLeft = credits - 1;
+  }
 
   return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback });
 }
@@ -1036,7 +1057,10 @@ function saleCountdown(L) {
   const mins = Math.floor((ms % 3600000) / 60000);
   return L === 'ru' ? `${hours} ч ${mins} мин` : `${hours}h ${mins}m`;
 }
-function packsKb(method, L, discPct) {
+// showGuide — пак «Гайд + ведение» пока показываем ТОЛЬКО админам: раздел ведения
+// на сайте ещё не выкачен, а сообщение после покупки обещает, что он там есть.
+// Снять ограничение, когда раздел появится на facerate.ru.
+function packsKb(method, L, discPct, showGuide) {
   const raw = (p) => method === 'stars' ? p.stars : (method === 'rub' || method === 'sbp') ? (p.lavaRub || p.rub) : p.rub;
   const rawOld = (p) => method === 'stars' ? p.oldStars : (method === 'rub' || method === 'sbp') ? (p.oldLavaRub || p.oldRub) : p.oldRub;
   const unit = (p) => method === 'stars' ? '⭐' : '₽';
@@ -1058,7 +1082,8 @@ function packsKb(method, L, discPct) {
     if (note) label += note;
     return [{ text: label, callback_data: `pay:${id}:${method}` }];
   };
-  const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : ''), row('guide', '📕 ', ' НОВОЕ')];
+  const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : '')];
+  if (showGuide) rows.push(row('guide', '📕 ', ' НОВОЕ'));
   const cd = saleActive() ? saleCountdown(L) : null;
   if (cd) rows.unshift([{ text: (L === 'ru' ? `🔥 Цены недели! До повышения: ${cd}` : `🔥 Weekly prices! Ends in: ${cd}`), callback_data: 'noop' }]);
   if (discPct) rows.unshift([{ text: `🎁 Промо-скидка ${discPct}% уже применена`, callback_data: 'noop' }]);
@@ -1188,6 +1213,26 @@ async function tgWebhook(request, env) {
       promo[m[3].toLowerCase()] = parseInt(m[4], 10);
       await env.RATE_LIMIT.put(`promo:${m[1].toUpperCase()}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
       await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Промокод ${m[1].toUpperCase()} создан: ${m[2]} активаций, ${m[3]}=${m[4]}.\nКидай его в канал — это и есть розыгрыш.` });
+    }
+    return new Response('ok');
+  }
+
+  // ── Админ: /testgrant ПАК — выдать пак себе без оплаты.
+  // Зовёт ТУ ЖЕ grantPack(), что и настоящий платёж, поэтому проверяет всю выдачу
+  // целиком: отправку PDF, начисление анализов, открытие ведения, старт плана.
+  // Не проверяется только сам приём денег (Stars/Lava/CryptoBot).
+  if (text.startsWith('/testgrant') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const id = (text.split(/\s+/)[1] || '').trim();
+    const pack = PACKS[id];
+    if (!pack) {
+      await tgApi(env, 'sendMessage', { chat_id: chat,
+        text: 'Формат: /testgrant guide\n\nДоступные паки: ' + Object.keys(PACKS).join(', ') });
+    } else {
+      const lang = await userLang(env, msg.from.id);
+      const note = await grantPack(env, msg.from.id, pack, lang, null);
+      await tgApi(env, 'sendMessage', { chat_id: chat, parse_mode: 'HTML',
+        text: `🧪 <b>Выдано без оплаты:</b> ${escHtml(pack.label)}\n\n${note}\n\n`
+            + `<i>Это тестовая выдача. В translog она не пишется, выручку не портит.</i>` });
     }
     return new Response('ok');
   }
@@ -1380,10 +1425,16 @@ async function handleCallback(env, cq) {
     // Шаг 2: тарифы под выбранный способ.
     const method = data.slice(4);
     const listDiscPct = await buyerDiscountPct(env, tgid, null);
-    await reply(b.shopTitle, packsKb(method, L, listDiscPct));
+    await reply(b.shopTitle, packsKb(method, L, listDiscPct, isAdminId(env, tgid)));
   } else if (data.startsWith('pay:')) {
     // Шаг 2: выставление счёта выбранным способом.
     const [, packId, method] = data.split(':');
+    // Пока раздел ведения не выкачен — гайд доступен только админам, даже если
+    // кто-то подобрал callback_data вручную.
+    if (packId === 'guide' && !isAdminId(env, tgid)) {
+      await reply('Этот тариф скоро появится.', { inline_keyboard: [[{ text: BL[L].kbBack, callback_data: 'shop' }]] });
+      return new Response('ok');
+    }
     const pack = PACKS[packId];
     if (!pack) return;
     const discPct = await buyerDiscountPct(env, tgid, packId);
