@@ -61,6 +61,11 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
   m1: { type: 'unlim',  hours: 720,  stars: 749,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 749, oldRub: 999, oldLavaRub: 999 },
+  // Гайд + ведение 90 дней. Цена в дыре между d1 (299) и m1 (999), чтобы не
+  // конкурировать с месячным безлимитом.
+  guide: { type: 'guide', credits: 5, stars: 349, rub: 499, lavaRub: 499,
+           label: 'Гайд + ведение 90 дней', labelEn: 'Guide + 90-day coaching',
+           oldStars: 349, oldRub: 499, oldLavaRub: 499 },
 };
 // Недельная акция на новые цены выше — по истечении можно вернуть old*-значения в основные
 // поля (или оставить как есть, тогда акция станет постоянной ценой). Таймер на сайте/в боте
@@ -109,6 +114,8 @@ export default {
       if (path === '/partner-data')  return await partnerData(request, env);
       if (path === '/partner-admin') return await partnerAdmin(request, env);
       if (path === '/bulk-discount-once') return await bulkDiscountStart(request, env, ctx);
+      if (path === '/progress')     return await progressGet(request, env);
+      if (path === '/progress-tip') return await progressTip(request, env);
       return await analyze(request, env);
     } catch (e) {
       return json({ error: 'server', text: 'Внутренняя ошибка: ' + e.message });
@@ -117,6 +124,7 @@ export default {
   // Cron Trigger (см. [triggers] в wrangler.toml) — раз в час проверяет истёкшие розыгрыши.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(checkGiveawayDraw(env));
+    ctx.waitUntil(progressCron(env));
     ctx.waitUntil(checkOpenRouterBalance(env));
   },
 };
@@ -163,13 +171,28 @@ async function analyze(request, env) {
   const freeUsed = parseInt(await env.RATE_LIMIT.get(freeKey) || '0', 10);
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
   const buyer = await isBuyer(env, tgid);
+
+  // ── ВЕДЕНИЕ: режим замера. Идёт мимо квоты и кредитов, лимит отдельный. ──
+  const hasGuide = (await env.RATE_LIMIT.get(`guide:${tgid}`)) === '1';
+  const isMeasure = body.measure === true;
+  if (isMeasure) {
+    if (!hasGuide) return json({ error: 'guide', text: 'Замеры прогресса доступны после покупки гайда.', packs: { guide: PACKS.guide } });
+    const plist = await progList(env, tgid);
+    if (plist.length >= PROG_MAX) return json({ error: 'progmax', text: 'Достигнут лимит замеров. Напиши в поддержку.' });
+    const plast = plist[plist.length - 1];
+    if (plast && Date.now() - plast.t < PROG_COOLDOWN) {
+      const leftH = Math.ceil((PROG_COOLDOWN - (Date.now() - plast.t)) / 3600e3);
+      return json({ error: 'progwait', text: `Следующий замер через ${Math.ceil(leftH / 24)} дн. Чаще нет смысла: за меньший срок разница между фото это шум, а не ты.`, hoursLeft: leftH });
+    }
+  }
   const freeAvail = subscribed && await freeQuotaAvailable(env, tgid, buyer);
 
   // Who Moggs (сравнение двух лиц) НЕ входит в бесплатную квоту — только безлимит или платные кредиты.
   const freeUsable = freeAvail && !body.compare;
 
   let mode = null;
-  if (unlimUntil > Date.now()) mode = 'unlim';
+  if (isMeasure) mode = 'measure';
+  else if (unlimUntil > Date.now()) mode = 'unlim';
   else if (freeUsable) mode = 'free';
   else if (credits > 0) mode = 'paid';
   else if (!subscribed) {
@@ -195,7 +218,9 @@ async function analyze(request, env) {
   // без остальных 5 и без рекомендаций — экономит токены (меньше вывода) и мотивирует купить
   // полный разбор. Промпт после этого суффикса не меняем, просто просим модель не выводить лишнее.
   const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: ОБЩИЙ_БАЛЛ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
-  const promptText = isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt;
+  const promptText = isMeasure
+    ? buildMeasurePrompt(body, await progTexts(env, tgid))
+    : (isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt);
 
   const imgs = Array.isArray(body.images) && body.images.length
     ? body.images
@@ -319,6 +344,8 @@ async function analyze(request, env) {
   }
   const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
   await env.RATE_LIMIT.put(`g:${today}`, String(g + 1), { expirationTtl: 93600 });
+
+  if (isMeasure) await progSave(env, tgid, data.choices[0].message.content);
 
   return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback });
 }
@@ -1031,7 +1058,7 @@ function packsKb(method, L, discPct) {
     if (note) label += note;
     return [{ text: label, callback_data: `pay:${id}:${method}` }];
   };
-  const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : '')];
+  const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : ''), row('guide', '📕 ', ' НОВОЕ')];
   const cd = saleActive() ? saleCountdown(L) : null;
   if (cd) rows.unshift([{ text: (L === 'ru' ? `🔥 Цены недели! До повышения: ${cd}` : `🔥 Weekly prices! Ends in: ${cd}`), callback_data: 'noop' }]);
   if (discPct) rows.unshift([{ text: `🎁 Промо-скидка ${discPct}% уже применена`, callback_data: 'noop' }]);
@@ -1045,6 +1072,21 @@ async function tgWebhook(request, env) {
     return new Response('forbidden', { status: 403 });
   }
   let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
+
+  // Админ прислал файл боту - отвечаем его file_id. Нужно, чтобы забрать id гайда:
+  // getUpdates при активном вебхуке недоступен, а отключать вебхук на боевом боте
+  // ради одной операции - лишний риск потерять сообщения.
+  if (upd.message?.document && isAdminId(env, upd.message.from?.id)) {
+    const d = upd.message.document;
+    await tgApi(env, 'sendMessage', {
+      chat_id: upd.message.chat.id, parse_mode: 'HTML',
+      text: `📎 <b>${escHtml(d.file_name || 'файл')}</b>\n`
+          + `${Math.round((d.file_size || 0) / 1024)} КБ\n\n`
+          + `<code>${escHtml(d.file_id)}</code>\n\n`
+          + `Нажми на строку выше, чтобы скопировать.`,
+    });
+    return new Response('ok');
+  }
 
   // Подтверждаем оплату (в т.ч. продления подписки).
   if (upd.pre_checkout_query) {
@@ -1302,6 +1344,7 @@ async function tgWebhook(request, env) {
 }
 
 async function handleCallback(env, cq) {
+  if ((cq.data || '').startsWith('wk:')) return await progressCallback(env, cq);
   const chat = cq.message.chat.id, tgid = cq.from.id, data = cq.data || '';
   const mid = cq.message.message_id;
   const reply = (text, kb, extra) => editOrSend((m, bd) => tgApi(env, m, bd), chat, mid, text, kb, extra);
@@ -1569,6 +1612,19 @@ async function grantPack(env, tgid, pack, L, sp) {
     const until = Math.max(cur, Date.now()) + pack.hours * 3600 * 1000;
     await env.RATE_LIMIT.put(`unlim:${tgid}`, String(until));
     return b.payUnlim(fmtDate(until, L || 'en'));
+  }
+  if (pack?.type === 'guide') {
+    await env.RATE_LIMIT.put(`guide:${tgid}`, '1');
+    const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+    await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + pack.credits));
+    await env.RATE_LIMIT.put(`gstart:${tgid}`, String(Date.now()));
+    const gl = await guideMembers(env);
+    if (!gl.includes(String(tgid))) { gl.push(String(tgid)); await env.RATE_LIMIT.put('guidelist', JSON.stringify(gl)); }
+    if (env.GUIDE_FILE_ID) {
+      await tgApi(env, 'sendDocument', { chat_id: tgid, document: env.GUIDE_FILE_ID,
+        caption: '📕 Твой гайд на 25 страниц.\n\nВедение уже открыто на facerate.ru - вкладка «Ведение». Там замеры прогресса, разбор всех параметров и план на 90 дней.\n\nЗадания буду присылать сюда раз в неделю.' }).catch(() => {});
+    }
+    return `✅ Гайд отправлен файлом выше, ведение открыто на сайте. Плюс ${pack.credits} анализов на счёт.`;
   }
   if (pack?.type === 'sub') {
     const until = (sp?.subscription_expiration_date ? sp.subscription_expiration_date * 1000 : Date.now() + 30 * 24 * 3600 * 1000);
@@ -3291,3 +3347,571 @@ function cors(body, status = 200, contentType = 'text/plain') {
 }
 
 // ci-trigger
+
+
+/* ════════════ ВЕДЕНИЕ (гайд + 90 дней) ════════════ */
+// Восемь категорий отчёта - порядок фиксирован, по нему строятся графики.
+const PROG_CATS = [
+  'СИММЕТРИЯ', 'ГЛАЗА_CANTHAL_TILT', 'МИДФЕЙС_MAXILLA', 'ДЖОУЛАЙН_MANDIBLE',
+  'НОС_NOSE', 'ГУБЫ_СКУЛЫ', 'КОЖА', 'ГРУМИНГ_STYLE',
+];
+const PROG_MAX       = 60;                  // потолок замеров на юзера
+const PROG_TXT_MAX   = 3;                   // сколько полных текстов храним для сравнения
+const PROG_COOLDOWN  = 10 * 24 * 3600e3;    // ровно один замер в 10 дней
+const PLAN_WEEKS     = 13;
+
+// ВАЖНО ПРО ФОТО.
+// Мы НЕ храним фотографии замеров на сервере - это прямо обещано в privacy.html
+// («не ведёт постоянного хранилища загруженных фотографий») и это биометрические
+// персональные данные по 152-ФЗ, для хранения которых нужно отдельное письменное
+// согласие. Поэтому в KV лежат только: дата замера, баллы и ТЕКСТ описания от ИИ.
+// Фото нигде не сохраняются вообще: ни у нас, ни в браузере. Для коллажа
+// «до/после» человек выбирает два снимка вручную в момент сборки, картинка
+// рисуется на canvas и сразу скачивается. Менять пользовательское соглашение
+// под это не нужно - мы ничего не собираем и не храним.
+
+
+/* ---------- хранилище замеров ---------- */
+
+async function progList(env, tgid) {
+  try { return JSON.parse(await env.RATE_LIMIT.get(`prog:${tgid}`) || '[]'); }
+  catch { return []; }
+}
+
+async function progTexts(env, tgid) {
+  try { return JSON.parse(await env.RATE_LIMIT.get(`progtxt:${tgid}`) || '[]'); }
+  catch { return []; }
+}
+
+// Достаём баллы из отчёта: «ОБЩИЙ_БАЛЛ: 6.5/10» и восемь категорий.
+function parseScores(text) {
+  const num = (label) => {
+    const re = new RegExp(label + '\\s*:\\s*([0-9]+(?:[.,][0-9])?)\\s*/\\s*10', 'i');
+    const m = text.match(re);
+    return m ? parseFloat(m[1].replace(',', '.')) : null;
+  };
+  const cats = {};
+  for (const c of PROG_CATS) {
+    const v = num(c);
+    if (v !== null) cats[c] = v;
+  }
+  // Оценка сопоставимости съёмки - по ней на сайте помечаем «замер под вопросом».
+  const q = text.match(/КАЧЕСТВО_СЪЁМКИ\s*:\s*([А-ЯЁ ]+)/i);
+  const quality = q ? q[1].trim().toUpperCase() : '';
+  return { overall: num('ОБЩИЙ_БАЛЛ'), cats, quality };
+}
+
+async function progSave(env, tgid, text) {
+  const { overall, cats, quality } = parseScores(text);
+  if (overall === null && !Object.keys(cats).length) return;   // мусор не пишем
+
+  const list = await progList(env, tgid);
+  // t - дата замера. Именно она рисует ось времени на графике и по ней же
+  // считается кулдаун и напоминания бота.
+  list.push({ t: Date.now(), overall, cats, quality });
+  await env.RATE_LIMIT.put(`prog:${tgid}`, JSON.stringify(list.slice(-PROG_MAX)));
+
+  // Полные тексты - только последние N, чтобы влезать в лимит значения KV.
+  const texts = await progTexts(env, tgid);
+  texts.push({ t: Date.now(), text: text.slice(0, 4000) });
+  await env.RATE_LIMIT.put(`progtxt:${tgid}`, JSON.stringify(texts.slice(-PROG_TXT_MAX)));
+
+  // Персональные советы для заданий бота.
+  const tips = extractTips(text);
+  if (Object.keys(tips).length) {
+    await env.RATE_LIMIT.put(`tips:${tgid}`, JSON.stringify(tips));
+  }
+}
+
+/* ---------- ПРОМПТ ЗАМЕРА (отдельный от обычного анализа) ---------- */
+
+// Задача здесь другая, чем в обычном анализе. Обычный промпт откалиброван под
+// «оценить лицо и заинтересовать». Замер - это измерительный инструмент: главный
+// риск не в том, что модель занизит, а в том, что она НАРИСУЕТ ПРОГРЕСС, которого
+// нет, потому что второе фото просто удачнее. Поэтому весь промпт построен вокруг
+// отделения реального изменения от артефакта съёмки.
+
+const MEASURE_BASE = `Ты - измерительный инструмент для отслеживания изменений внешности во времени.
+Это НЕ развлекательная оценка и НЕ отчёт для продажи. Твоя задача - точность, а не мотивация.
+
+ЯЗЫК И ОБРАЩЕНИЕ.
+Обращайся к человеку на «ты», как в остальном сервисе: «спи», «убери», «наноси».
+Никакого «вы» и никакого «Вам». Пиши просто и по делу, без канцелярита.
+
+ЖЁСТКИЕ ПРАВИЛА:
+1. Оценивай ТОЛЬКО то, что видно. Не додумывай и не льсти.
+2. НИКОГДА не завышай баллы, чтобы человек увидел прогресс. Отсутствие изменений - нормальный,
+   ожидаемый и полезный результат. Выдуманный прогресс обесценивает весь инструмент.
+3. Если стало хуже - так и пиши прямо, без смягчения.
+4. Разница в съёмке (свет, ракурс, дистанция, качество камеры, бьюти-режим) даёт сдвиг
+   до 1.5 балла на ровном месте. Всегда проверяй эту гипотезу ПЕРВОЙ, прежде чем
+   объявить изменение реальным.
+5. Костная структура (мидфейс, форма носа, gonial angle, canthal tilt) у взрослого
+   человека не меняется. Если по этим параметрам «изменение» - это почти наверняка ракурс.
+   Так и пиши.
+6. Реально и быстро меняются: кожа, отёк, вес и жир, груминг. Изменения там правдоподобны.
+7. ВСЕГДА определяй способ съёмки, это критично. Признаки селфи с вытянутой руки:
+   близкая дистанция, зеркальное изображение (надписи на одежде читаются наоборот),
+   вытянутая к камере рука или её тень, ракурс сверху, край телефона или зеркало в кадре.
+   Фронтальная камера широкоугольная: с близкого расстояния она увеличивает нос и центр
+   лица и сужает всё остальное. Это искажение оптики, а не внешность человека.
+8. Если кадр СЕЛФИ - баллы за НОС_NOSE, МИДФЕЙС_MAXILLA и ДЖОУЛАЙН_MANDIBLE недостоверны.
+   Всё равно поставь их, но предупреждение об этом обязано стоять прямо в секции
+   СПОСОБ_СЪЁМКИ, второй строкой (см. формат выше).
+   При сравнении двух замеров, снятых РАЗНЫМИ способами, изменения по этим трём параметрам
+   объявляй артефактом съёмки, а не прогрессом - даже если разница большая.
+9. Опущенный или задранный подбородок и наклон головы меняют видимую линию челюсти
+   и симметрию. Заметил - скажи об этом и не записывай разницу в прогресс.
+
+ФОРМАТ ОТВЕТА - простой текст, без markdown, строго в этом порядке:
+
+ОБЩИЙ_БАЛЛ: X/10
+[2-3 предложения о текущем состоянии]
+
+СИММЕТРИЯ: X/10
+ГЛАЗА_CANTHAL_TILT: X/10
+МИДФЕЙС_MAXILLA: X/10
+ДЖОУЛАЙН_MANDIBLE: X/10
+НОС_NOSE: X/10
+ГУБЫ_СКУЛЫ: X/10
+КОЖА: X/10
+ГРУМИНГ_STYLE: X/10
+
+СПОСОБ_СЪЁМКИ: [одно из: ОСНОВНАЯ КАМЕРА / СЕЛФИ / НЕ ОПРЕДЕЛЁН]
+[по каким признакам определил, есть ли наклон или поворот головы.
+ЕСЛИ СЕЛФИ - здесь же обязательна вторая строка ровно такого смысла: «баллам за нос,
+мидфейс и джоулайн с этого кадра доверять нельзя, близкая дистанция их искажает;
+следующий замер сними основной камерой с 1.5-2 метров». Без неё отчёт неполный.]
+
+КАЧЕСТВО_СЪЁМКИ: [одно из: СОПОСТАВИМО / ЕСТЬ РАЗЛИЧИЯ / НЕСОПОСТАВИМО]
+[одна строка: что именно отличается от прошлого фото - свет, ракурс, дистанция, обработка.
+Если это первый замер - оцени пригодность фото как точки отсчёта.]
+
+ДИНАМИКА:
+[см. инструкцию ниже]
+
+РЕКОМЕНДАЦИИ:
+1. [КАТЕГОРИЯ] текст рекомендации
+2. [КАТЕГОРИЯ] текст рекомендации
+...
+
+ЗАПРЕЩЁННЫЕ РЕКОМЕНДАЦИИ.
+Этот сервис продаётся вместе с гайдом, где перечисленное ниже разобрано как вредное или
+бесполезное. Советовать это нельзя ни при каких условиях - продукт будет противоречить сам себе,
+а человек получит вред:
+- жевательная резинка, жевательные тренажёры, любая "тренировка челюсти". Расширяет нижнюю
+  треть лица, даёт риск для височно-нижнечелюстного сустава, а форма лица от неё не меняется;
+- мьюинг и любые обещания изменить кости у взрослого;
+- bone smashing, удары, давление на кости - категорически;
+- заклейка рта на ночь - риск удушья при нераспознанном апноэ;
+- мочегонные, "жиросжигающие стеки", йохимбин и прочая фармакология;
+- солярий, сода и уголь для зубов, дермароллер дома;
+- голодание и дефицит жёстче 500 ккал, цель по жиру ниже 12% у мужчин;
+- назначение конкретных аптечных и рецептурных препаратов;
+- кислоты или ретиноиды ДВАЖДЫ В ДЕНЬ, утром, либо "на всё лицо" по умолчанию. Это сожжённый
+  барьер, после которого кожа выглядит хуже, чем до начала. Кислоты и ретиноиды - только
+  на ночь и точечно либо на проблемную зону;
+- два и более активных компонента одновременно. Строго один за раз, следующий не раньше
+  чем через 2-3 недели;
+- скрабы и агрессивное очищение "до скрипа".
+
+ОБЯЗАТЕЛЬНО ПРИ СОВЕТАХ ПО КОЖЕ:
+- если советуешь любой актив, в том же или соседнем пункте упомяни SPF утром;
+- при выраженном акне, куперозе, рубцах или сомнениях - отправляй к дерматологу,
+  а не расписывай схему;
+- средство называй по типу (ниацинамид, азелаиновая кислота), без марок, дозировок
+  курсами и схем лечения.
+
+ПРО «НЕУПРАВЛЯЕМЫЕ» ПАРАМЕТРЫ - ВАЖНО.
+Не скатывайся в «параметр не управляем, действий не требуется». Это отписка, за которую
+человек заплатил. Костная база действительно не меняется, но почти у каждого параметра
+есть управляемая часть, и советовать надо именно её:
+- ГЛАЗА_CANTHAL_TILT: сам наклон врождённый, но восприятие взгляда меняют сон, снятие
+  отёка и форма бровей (убрать монобровь, не истончать сверху);
+- ДЖОУЛАЙН_MANDIBLE: угол челюсти костный, но видимость линии почти целиком определяется
+  процентом жира, отёком и осанкой;
+- МИДФЕЙС_MAXILLA: не меняется, но объём волос сверху и снижение жира меняют восприятие;
+- ГУБЫ_СКУЛЫ: форма врождённая, но сухие потрескавшиеся губы читаются как неухоженность
+  и лечатся бальзамом за пару дней; скулы проявляются при снижении жира;
+- НОС_NOSE: не меняется без хирурга, зато сильно зависит от дистанции съёмки и ракурса;
+- СИММЕТРИЯ: костная асимметрия остаётся, но часть перекоса даёт сон лицом в подушку,
+  односторонний отёк и наклон головы. Правильный совет тут - спать НА СПИНЕ (чередовать
+  бока НЕЛЬЗЯ советовать, это не убирает причину), убрать соль и алкоголь, следить за
+  положением головы за компьютером.
+Формулируй так: сначала честно скажи, что именно не изменится, потом дай то, что реально
+можно сделать. Пункт без действия допустим только если управляемой части правда нет.
+И не выдумывай упражнений ради заполнения - смотри список запрещённого выше.
+
+Про формат рекомендаций: ровно 8 пунктов, по одному на каждую категорию, каждый начинается с метки категории в квадратных
+скобках. Допустимы только эти метки, ровно в таком написании:
+СИММЕТРИЯ, ГЛАЗА_CANTHAL_TILT, МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE,
+ГУБЫ_СКУЛЫ, КОЖА, ГРУМИНГ_STYLE.
+Дай хотя бы по одному пункту на каждую категорию, где балл ниже 6.5 - эти рекомендации
+потом раскладываются по неделям плана, и без метки пункт потеряется.
+Каждый пункт конкретный и выполнимый, без общих слов вроде «следи за питанием».
+Текст пункта начинай с заглавной буквы и заканчивай точкой.`;
+
+function buildMeasurePrompt(body, prev) {
+  const metrics = body.metrics ? `\n\nИЗМЕРЕННЫЕ ГЕОМЕТРИЧЕСКИЕ ДАННЫЕ (с устройства, объективны):\n${body.metrics}` : '';
+
+  if (!prev.length) {
+    return MEASURE_BASE + metrics + `
+
+ЭТО ПЕРВЫЙ ЗАМЕР - точка отсчёта, сравнивать не с чем.
+
+В секции ДИНАМИКА напиши:
+- что это точка отсчёта;
+- 2-3 параметра, которые у ЭТОГО лица наиболее управляемы и где реально ждать сдвига за 10 дней;
+- 1-2 параметра, которые не изменятся никогда, чтобы человек на них не тратил силы.
+В КАЧЕСТВО_СЪЁМКИ оцени, годится ли фото как эталон: если свет плохой или есть обработка,
+прямо скажи переснять - иначе все последующие сравнения будут испорчены.`;
+  }
+
+  // Из прошлого отчёта берём ТОЛЬКО баллы и описание. Рекомендации вырезаем:
+  // если оставить, модель видит свежий пример собственного ответа последним
+  // и копирует его дословно, игнорируя новые правила формата.
+  const strip = (t) => {
+    const i = t.search(/РЕКОМЕНДАЦИИ\s*:/i);
+    return (i < 0 ? t : t.slice(0, i)).trim();
+  };
+  const last = prev[prev.length - 1];
+  const days = Math.max(1, Math.round((Date.now() - last.t) / 864e5));
+  const dw = days % 10 === 1 && days % 100 !== 11 ? 'день' : 'дн.';
+  const history = prev.length > 1
+    ? `\n\nБолее ранние замеры (только баллы, для понимания тренда):\n` +
+      prev.slice(0, -1).map((p) => `- ${Math.max(1, Math.round((Date.now() - p.t) / 864e5))} дн. назад:\n${strip(p.text).slice(0, 700)}`).join('\n')
+    : '';
+
+  return MEASURE_BASE + metrics + `
+
+ЭТО ПОВТОРНЫЙ ЗАМЕР. Прошлый разбор ЭТОГО ЖЕ человека, ${days} ${dw} назад.
+Это СПРАВКА ДЛЯ СРАВНЕНИЯ, а не образец ответа. Рекомендации из него намеренно вырезаны:
+не копируй прошлые формулировки, пиши новые под то, что видишь сейчас.
+"""
+${strip(last.text)}
+"""${history}
+
+Сначала оцени НОВОЕ фото независимо - не подглядывай в прошлые баллы, чтобы не якориться.
+Только потом сравнивай.
+
+В секции ДИНАМИКА:
+- по каждому изменившемуся на 0.3+ балла параметру: что именно изменилось визуально;
+- для КАЖДОГО изменения укажи в скобках причину: (реальное изменение) или (вероятно, съёмка);
+- если параметр костный, а балл изменился - это (съёмка), других вариантов нет;
+- отдельной строкой: что НЕ изменилось, хотя человек над этим работал;
+- в конце 1-2 предложения: на чём сосредоточиться следующие 10 дней.
+
+За ${days} ${dw} реалистичный сдвиг - 0.2-0.5 балла по управляемым параметрам.
+Если ты видишь +1.5 и больше, это почти наверняка разница фото, а не человека - так и скажи.
+Если изменений нет - напиши, что за такой срок это нормально, и не выдумывай прогресс.
+
+НАПОСЛЕДОК, ЭТО ВАЖНЕЕ ВСЕГО ОСТАЛЬНОГО:
+Секции выводи ровно в том порядке, что задан выше, включая СПОСОБ_СЪЁМКИ и КАЧЕСТВО_СЪЁМКИ.
+Рекомендации пиши заново, с метками категорий, соблюдая список запрещённого.
+Прошлый разбор выше - это данные для сравнения, а не шаблон для копирования.`;
+}
+
+/* ---------- персональные советы → задания недели ---------- */
+
+// Раскладываем строки блока РЕКОМЕНДАЦИИ по восьми категориям.
+// Грубо, по ключевым словам - зато не трогает основной откалиброванный промпт.
+const TIP_KEYS = {
+  'КОЖА':               ['кож', 'акне', 'spf', 'ретино', 'ниацин', 'пор', 'высыпан', 'постакне', 'увлажн', 'умыв'],
+  'ГРУМИНГ_STYLE':      ['стрижк', 'волос', 'бород', 'бров', 'груминг', 'одежд', 'стил', 'триммер', 'ногт'],
+  'ДЖОУЛАЙН_MANDIBLE':  ['челюст', 'jawline', 'подбородок', 'осанк', 'шея', 'жир', 'отёк', 'отек'],
+  'ГЛАЗА_CANTHAL_TILT': ['глаз', 'взгляд', 'круг', 'веко', 'сон', 'выспа'],
+  'СИММЕТРИЯ':          ['симметр', 'асимметр', 'перекос', 'наклон голов'],
+  'МИДФЕЙС_MAXILLA':    ['мидфейс', 'midface', 'средняя треть', 'скул'],
+  'НОС_NOSE':           ['нос', 'профил'],
+  'ГУБЫ_СКУЛЫ':         ['губ', 'бальзам', 'улыбк', 'зуб'],
+};
+
+function extractTips(text) {
+  const i = text.search(/РЕКОМЕНДАЦИИ\s*:/i);
+  if (i < 0) return {};
+  const lines = text.slice(i).split('\n')
+    .map((s) => s.replace(/^\s*\d+[.)]\s*/, '').trim())
+    .filter((s) => s.length > 12 && !/^РЕКОМЕНДАЦИИ/i.test(s));
+
+  const out = {};
+  const push = (cat, line) => { (out[cat] = out[cat] || []).push(line.slice(0, 220)); };
+
+  for (const line of lines) {
+    // Основной путь: модель сама поставила метку в промпте замера.
+    const tag = line.match(/^\[([А-ЯЁA-Z_]+)\]\s*(.+)$/);
+    if (tag && PROG_CATS.includes(tag[1])) { push(tag[1], tag[2].trim()); continue; }
+
+    // Запасной путь: рекомендации из ОБЫЧНОГО анализа, где меток нет
+    // (главный промпт мы намеренно не трогаем). Раскладываем по ключевым словам.
+    const low = line.toLowerCase();
+    for (const [cat, keys] of Object.entries(TIP_KEYS)) {
+      if (keys.some((k) => low.includes(k))) { push(cat, line); break; }
+    }
+  }
+  return out;
+}
+
+// Какая категория «ведущая» на каждой неделе плана - к ней и цепляем личный совет.
+const WEEK_CAT = {
+  1: 'ГЛАЗА_CANTHAL_TILT',   // сон и вода
+  2: 'КОЖА',
+  3: 'ДЖОУЛАЙН_MANDIBLE',    // питание, жир
+  4: 'ГРУМИНГ_STYLE',
+  5: 'КОЖА',
+  6: 'ДЖОУЛАЙН_MANDIBLE',
+  7: 'СИММЕТРИЯ',            // осанка
+  8: null,                   // контрольная точка - совет по слабейшему параметру
+  9: 'ГРУМИНГ_STYLE',
+  10: 'КОЖА',
+  11: 'НОС_NOSE',            // фото и ракурс
+  12: 'ГУБЫ_СКУЛЫ',          // зубы, врачи
+  13: null,                  // финал - совет по слабейшему параметру
+};
+
+
+/* ---------- стрик выполнения ---------- */
+
+function plural(n, one, few, many) {
+  const a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b > 1 && b < 5) return few;
+  if (b === 1) return one;
+  return many;
+}
+
+// Вызывать из обработчика callback_query в tgWebhook:
+//   if (cq.data?.startsWith('wk:')) return await progressCallback(env, cq);
+async function progressCallback(env, cq) {
+  const [, done, week] = cq.data.split(':');
+  const tgid = cq.from.id;
+
+  let streak = parseInt(await env.RATE_LIMIT.get(`streak:${tgid}`) || '0', 10);
+  let best   = parseInt(await env.RATE_LIMIT.get(`best:${tgid}`) || '0', 10);
+
+  let text;
+  if (done === '1') {
+    streak += 1;
+    if (streak > best) { best = streak; await env.RATE_LIMIT.put(`best:${tgid}`, String(best)); }
+    await env.RATE_LIMIT.put(`streak:${tgid}`, String(streak));
+    text = streak >= 4
+      ? `🔥 ${streak} ${plural(streak, 'неделя', 'недели', 'недель')} подряд. На этом этапе большинство уже бросает - ты нет.`
+      : `Записал. Серия: ${streak} ${plural(streak, 'неделя', 'недели', 'недель')} подряд.`;
+  } else {
+    // Серию обнуляем, но без нравоучений: пристыдить = потерять человека.
+    await env.RATE_LIMIT.put(`streak:${tgid}`, '0');
+    text = best > 1
+      ? `Бывает. Серия обнулилась, твой рекорд - ${best} ${plural(best, 'неделя', 'недели', 'недель')}. Начинаем заново со следующей.`
+      : `Бывает. Неделя не обязана быть идеальной, пропуск одной ничего не ломает - главное не бросать совсем.`;
+  }
+
+  await tgApi(env, 'answerCallbackQuery', { callback_query_id: cq.id }).catch(() => {});
+  await tgApi(env, 'sendMessage', { chat_id: tgid, text }).catch(() => {});
+  // Лог для админ-статистики: видно, на какой неделе люди отваливаются.
+  await env.RATE_LIMIT.put(`wdone:${tgid}:${week}`, done, { expirationTtl: 180 * 86400 });
+  return new Response('ok');
+}
+
+/* ---------- выбор персонального совета ---------- */
+
+// Порядок такой: сначала категория недели (совет по теме задания), а если по ней
+// модель ничего не написала - берём самый слабый параметр человека. Так неделя без
+// своей категории (контрольные точки, гардероб) всё равно получает личный совет,
+// а не общий текст для всех.
+async function pickTip(env, tgid, week) {
+  let tips = {};
+  try { tips = JSON.parse(await env.RATE_LIMIT.get(`tips:${tgid}`) || '{}'); } catch {}
+  if (!Object.keys(tips).length) return null;
+
+  const cat = WEEK_CAT[week];
+  if (cat && tips[cat]?.length) return { cat, tip: tips[cat][0], onTopic: true };
+
+  // запасной путь: самая низкая категория последнего замера
+  const list = await progList(env, tgid);
+  const last = list[list.length - 1];
+  if (last?.cats) {
+    const weakest = Object.entries(last.cats)
+      .filter(([c]) => tips[c]?.length)
+      .sort((a, b) => a[1] - b[1])[0];
+    if (weakest) return { cat: weakest[0], tip: tips[weakest[0]][0], onTopic: false };
+  }
+
+  // совсем запасной: любой непустой совет
+  const any = Object.entries(tips).find(([, v]) => v.length);
+  return any ? { cat: any[0], tip: any[1][0], onTopic: false } : null;
+}
+
+// Человекочитаемые названия категорий - для подписи совета.
+const CAT_RU = {
+  'СИММЕТРИЯ': 'симметрия', 'ГЛАЗА_CANTHAL_TILT': 'глаза',
+  'МИДФЕЙС_MAXILLA': 'мидфейс', 'ДЖОУЛАЙН_MANDIBLE': 'линия челюсти',
+  'НОС_NOSE': 'нос', 'ГУБЫ_СКУЛЫ': 'губы и скулы',
+  'КОЖА': 'кожа', 'ГРУМИНГ_STYLE': 'груминг',
+};
+
+/* ---------- API для сайта ---------- */
+
+async function progressGet(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const sess = await getSession(env, body.token);
+  if (!sess) return json({ error: 'auth' });
+  const tgid = sess.id;
+
+  const hasGuide = (await env.RATE_LIMIT.get(`guide:${tgid}`)) === '1';
+  if (!hasGuide) return json({ guide: false, pack: PACKS.guide });
+
+  const list = await progList(env, tgid);
+  const texts = await progTexts(env, tgid);
+  const week = parseInt(await env.RATE_LIMIT.get(`planw:${tgid}`) || '1', 10);
+  const last = list[list.length - 1];
+  const cooldownLeft = last ? Math.max(0, PROG_COOLDOWN - (Date.now() - last.t)) : 0;
+
+  const streak = parseInt(await env.RATE_LIMIT.get(`streak:${tgid}`) || '0', 10);
+  const best   = parseInt(await env.RATE_LIMIT.get(`best:${tgid}`) || '0', 10);
+
+  return json({
+    guide: true,
+    streak, best,
+    week: Math.min(week, PLAN_WEEKS),
+    points: list,
+    lastText: texts.length ? texts[texts.length - 1].text : '',
+    cooldownLeft,
+    left: Math.max(0, PROG_MAX - list.length),
+  });
+}
+
+// Персональный текст задания недели: базовый пункт плана + личный совет из анализа.
+async function progressTip(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const sess = await getSession(env, body.token);
+  if (!sess) return json({ error: 'auth' });
+
+  const week = Math.min(Math.max(parseInt(body.week, 10) || 1, 1), PLAN_WEEKS);
+  const picked = await pickTip(env, sess.id, week);
+  if (!picked) return json({ tip: '' });
+  const p = PLAN[week - 1];
+  return json({
+    tip: picked.tip,
+    cat: picked.cat,
+    catRu: CAT_RU[picked.cat] || picked.cat,
+    onTopic: picked.onTopic,
+    chapter: p ? { n: p.ch, title: p.cht, page: p.pg } : null,
+  });
+}
+
+
+/* ============================================================================
+   [10] РАССЫЛКА БОТА · план недели и напоминание о замере
+   ----------------------------------------------------------------------------
+   Крон уже стоит раз в час ([triggers] в wrangler.toml), новый не нужен.
+   В scheduled() добавить:  ctx.waitUntil(progressCron(env));
+   ========================================================================= */
+
+// Список активных участников ведения. Пишется при покупке гайда.
+//   guidelist  → JSON [tgid, ...]
+async function guideMembers(env) {
+  try { return JSON.parse(await env.RATE_LIMIT.get('guidelist') || '[]'); }
+  catch { return []; }
+}
+// вызывать в grantPack ветке guide:
+//   const gl = await guideMembers(env);
+//   if (!gl.includes(tgid)) { gl.push(tgid); await env.RATE_LIMIT.put('guidelist', JSON.stringify(gl)); }
+
+// Тексты плана - 13 недель. Задание + зачем + как понять, что сделано.
+const PLAN = [
+  { t:'Сон и вода',            task:'Фиксированное время отбоя, 7–9 часов, 2–2.5 л воды равномерно за день.', why:'Отёк уходит быстрее всего остального - результат виден за 3–5 дней.', check:'Пять ночей подряд лёг в одно время (±30 мин).', ch:'04', cht:'Сон, вода, соль, алкоголь', pg:'10' },
+  { t:'Кожа: базовая рутина',  task:'Очищение утром и вечером, увлажнение, SPF 30+ каждое утро. Активы пока не трогаем.', why:'Без базы активы не работают, а сожжённый барьер делает кожу хуже, чем было.', check:'SPF нанесён 7 дней из 7.', ch:'02', cht:'Кожа: фундамент всего', pg:'5' },
+  { t:'Питание',               task:'Посчитать норму калорий, дефицит 300–500 ккал, белок 1.6–2 г/кг. Убрать алкоголь.', why:'Процент жира - главный рычаг для челюсти и скул.', check:'Взвесился в один и тот же день недели, утром.', ch:'03', cht:'Процент жира и лицо', pg:'8' },
+  { t:'Груминг',               task:'Стрижка у хорошего мастера с 3–4 референсами. Брови. Триммер. Записаться на гигиену.', why:'Самая быстрая отдача: восприятие меняется за один визит.', check:'Стрижка сделана, референсы показаны мастеру.', ch:'05', cht:'Груминг: волосы, борода, брови', pg:'11' },
+  { t:'Первый актив',          task:'Ниацинамид или ретинол 2 раза в неделю, только на ночь.', why:'Кожа обновляется за 28 дней - раньше оценивать бессмысленно.', check:'Ни одного вечера с двумя активами сразу.', ch:'02', cht:'Кожа: активы', pg:'7' },
+  { t:'Силовые',               task:'3 тренировки в неделю, акцент на плечи и спину. Плюс 8–10 тыс. шагов.', why:'Сохраняет мышцы в дефиците и расширяет силуэт.', check:'3 тренировки и в среднем 8 тыс. шагов.', ch:'08', cht:'Тело и одежда', pg:'15' },
+  { t:'Осанка',                task:'Chin tuck ежедневно, растяжка грудных, монитор на уровень глаз.', why:'Поза вперёд головой прячет челюсть и укорачивает шею.', check:'Chin tuck 3 подхода в день, 5 дней из 7.', ch:'07', cht:'Осанка, шея, линия челюсти', pg:'14' },
+  { t:'Контрольная точка',     task:'Замер в тех же условиях. Сравнить с точкой отсчёта.', why:'Здесь обычно кажется, что ничего не изменилось - а сравнение показывает обратное.', check:'Замер сделан.', ch:'09', cht:'Фотогеничность', pg:'16' },
+  { t:'Гардероб',              task:'Убрать всё не по размеру. Собрать базу из 8–10 однотонных вещей.', why:'Посадка вещей влияет сильнее большинства деталей лица.', check:'В шкафу не осталось вещей не по размеру.', ch:'08', cht:'Тело и одежда', pg:'15' },
+  { t:'Второй актив',          task:'Если кожа приняла первый - добавить кислоту в другие дни. При раздражении откатиться.', why:'Наслаивать активы можно только по одному и только на спокойной коже.', check:'Нет покраснения третий день подряд.', ch:'02', cht:'Кожа: активы', pg:'7' },
+  { t:'Фото-навык',            task:'Отработать ракурсы из главы 09. Найти рабочий угол и свет.', why:'Половина «плохой внешности на фото» - это оптика и свет.', check:'Серия из 20+ кадров, выбран рабочий ракурс.', ch:'09', cht:'Фотогеничность', pg:'16' },
+  { t:'Долгосрочное',          task:'Консультация ортодонта при вопросах к прикусу. Дерматолог, если акне не ушло.', why:'Через 90 дней есть режим, в который такие истории встраиваются.', check:'Записан хотя бы на одну консультацию.', ch:'06', cht:'Зубы и улыбка', pg:'13' },
+  { t:'Финальный замер',       task:'Замер в тех же условиях. Сравнение всех точек.', why:'Сравнение с собой в день 0 - единственная честная метрика.', check:'Все точки сравнены.', ch:'12', cht:'План на 90 дней', pg:'20' },
+];
+
+async function progressCron(env) {
+  const members = await guideMembers(env);
+  const now = Date.now();
+
+  for (const tgid of members) {
+    try {
+      // ── 1. Задание недели: раз в 7 дней от момента покупки ──
+      const startedAt = parseInt(await env.RATE_LIMIT.get(`gstart:${tgid}`) || '0', 10);
+      if (startedAt) {
+        const weekNow = Math.min(Math.floor((now - startedAt) / (7 * 864e5)) + 1, PLAN_WEEKS);
+        const weekSent = parseInt(await env.RATE_LIMIT.get(`wsent:${tgid}`) || '0', 10);
+        if (weekNow > weekSent) {
+          const p = PLAN[weekNow - 1];
+          const picked = await pickTip(env, tgid, weekNow);
+          const tip = picked
+            ? (picked.onTopic
+                ? `\n\n<b>Лично тебе - из твоего анализа:</b>\n${picked.tip}`
+                : `\n\n<b>Твоё слабое место сейчас (${CAT_RU[picked.cat] || picked.cat}):</b>\n${picked.tip}`)
+            : '';
+          await tgApi(env, 'sendMessage', {
+            chat_id: tgid, parse_mode: 'HTML',
+            text: `<b>Неделя ${weekNow} из ${PLAN_WEEKS} · ${p.t}</b>\n\n`
+                + `<b>Задание.</b> ${p.task}\n\n`
+                + `<b>Зачем.</b> ${p.why}\n\n`
+                + `<b>Как понять, что сделано.</b> ${p.check}${tip}\n\n`
+                + `📕 Подробно в гайде: глава ${p.ch} «${p.cht}», стр. ${p.pg}.\n`
+                + `Весь план и разбор параметров - на facerate.ru, вкладка «Ведение».`,
+          }).catch(() => {});
+          await env.RATE_LIMIT.put(`wsent:${tgid}`, String(weekNow));
+          await env.RATE_LIMIT.put(`planw:${tgid}`, String(weekNow));
+          await env.RATE_LIMIT.put(`wask:${tgid}`, '0');   // на эту неделю ещё не спрашивали
+        }
+      }
+
+      // ── 1b. Опрос в конце недели: сделал или нет ──
+      // Спрашиваем на 6-й день, чтобы человек ещё успел дожать, а мы узнали,
+      // что он отвалился, до того как он молча исчезнет.
+      if (startedAt) {
+        const weekNow = Math.min(Math.floor((now - startedAt) / (7 * 864e5)) + 1, PLAN_WEEKS);
+        const dayInWeek = Math.floor(((now - startedAt) % (7 * 864e5)) / 864e5);
+        const asked = (await env.RATE_LIMIT.get(`wask:${tgid}`)) === '1';
+        if (!asked && dayInWeek >= 5 && weekNow <= PLAN_WEEKS) {
+          const streak = parseInt(await env.RATE_LIMIT.get(`streak:${tgid}`) || '0', 10);
+          await tgApi(env, 'sendMessage', {
+            chat_id: tgid, parse_mode: 'HTML',
+            text: `Неделя ${weekNow} подходит к концу. Справился с заданием?`
+                + (streak > 1 ? `\n\nСейчас серия: ${streak} ${plural(streak, 'неделя', 'недели', 'недель')} подряд.` : ''),
+            reply_markup: { inline_keyboard: [[
+              { text: '✅ Сделал', callback_data: `wk:1:${weekNow}` },
+              { text: '✗ Не вышло', callback_data: `wk:0:${weekNow}` },
+            ]] },
+          }).catch(() => {});
+          await env.RATE_LIMIT.put(`wask:${tgid}`, '1');
+        }
+      }
+
+      // ── 2. Напоминание о замере: когда прошли 10 дней ──
+      const list = await progList(env, tgid);
+      const last = list[list.length - 1];
+      const since = last ? now - last.t : (startedAt ? now - startedAt : 0);
+      if (since >= PROG_COOLDOWN) {
+        const remKey = `prem:${tgid}`;
+        const lastRem = parseInt(await env.RATE_LIMIT.get(remKey) || '0', 10);
+        // не чаще раза в 3 дня, чтобы не превратиться в спам
+        if (now - lastRem > 3 * 864e5) {
+          await tgApi(env, 'sendMessage', {
+            chat_id: tgid, parse_mode: 'HTML',
+            text: last
+              ? `📸 <b>Пора на замер</b>\n\nС прошлого прошло ${Math.floor(since / 864e5)} дней - можно снимать.\n\n`
+                + `Главное: тот же свет, та же дистанция, то же время суток. Иначе сравнишь не себя, а освещение.\n\n`
+                + `facerate.ru → «Ведение» → «Сделать замер»`
+              : `📸 <b>Сделай точку отсчёта</b>\n\nБез неё через 90 дней не с чем будет сравнивать - к своему лицу глаз привыкает моментально.\n\n`
+                + `facerate.ru → «Ведение» → «Сделать замер»`,
+          }).catch(() => {});
+          await env.RATE_LIMIT.put(remKey, String(now));
+        }
+      }
+    } catch { /* один сломанный юзер не должен рушить рассылку остальным */ }
+  }
+}
+
+
