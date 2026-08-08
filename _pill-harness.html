@@ -1,0 +1,76 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>pill frames</title>
+<style>
+  html,body{ margin:0; padding:0; background:transparent; }
+  #sheet{ display:grid; width:max-content; }
+  #sheet model-viewer{ display:block; --poster-color:transparent; background-color:transparent; }
+  #log{ position:fixed; right:4px; bottom:4px; z-index:99; font:12px monospace; color:#0f0; }
+</style>
+<!-- Стенд для разовой отрисовки кадров вращения пилюли. В сайт не входит: лежит
+     в корне, чтобы модель отдавалась с того же origin, и удаляется после сборки.
+
+     Кадры НЕ снимаются через toDataURL: чтение из WebGL гонится с собственным
+     циклом отрисовки model-viewer и отдаёт пустые кадры. Вместо этого на страницу
+     кладётся по одному экземпляру на ракурс, каждый со своим camera-orbit и без
+     auto-rotate - они рисуют себя сами, а кадры снимает обычный скриншот страницы.
+     Экземпляры делят один WebGL-контекст, поэтому их можно много.  -->
+<div id="sheet"></div>
+<div id="log">boot</div>
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+<script type="module">
+const log = (m) => { document.getElementById('log').textContent = m; document.title = m; };
+window.addEventListener('error', (e) => log('ERR ' + e.message));
+window.addEventListener('unhandledrejection', (e) => log('REJ ' + e.reason));
+
+try {
+  const P = new URLSearchParams(location.search);
+  const N    = +(P.get('n')    || 180);  // кадров на полный оборот
+  const FROM = +(P.get('from') || 0);
+  const CNT  = +(P.get('cnt')  || 20);
+  const FW   = +(P.get('w')    || 600);
+  const FH   = +(P.get('h')    || 250);
+  const COLS = +(P.get('cols') || 5);
+
+  const sheet = document.getElementById('sheet');
+  sheet.style.gridTemplateColumns = `repeat(${COLS}, ${FW}px)`;
+
+  const views = [];
+  for (let k = 0; k < CNT; k++) {
+    const mv = document.createElement('model-viewer');
+    mv.setAttribute('src', 'assets/pill3d/scene.gltf');
+    mv.setAttribute('camera-orbit', ((FROM + k) * 360 / N).toFixed(3) + 'deg 78deg 105%');
+    mv.setAttribute('field-of-view', '22deg');
+    mv.setAttribute('exposure', '1.1');
+    mv.setAttribute('shadow-intensity', '0');
+    mv.setAttribute('interaction-prompt', 'none');
+    mv.setAttribute('loading', 'eager');
+    mv.setAttribute('reveal', 'auto');
+    mv.setAttribute('disable-zoom', '');
+    mv.setAttribute('disable-pan', '');
+    mv.style.width = FW + 'px';
+    mv.style.height = FH + 'px';
+    sheet.appendChild(mv);
+    views.push(mv);
+  }
+
+  log('waiting ' + CNT);
+  for (let t = 0; t < 600; t++) {
+    const done = views.filter((v) => v.loaded).length;
+    if (done === CNT) break;
+    log('loaded ' + done + '/' + CNT);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  // Пара кадров отрисовки, чтобы все экземпляры успели показать себя.
+  for (let i = 0; i < 8; i++) await new Promise((r) => requestAnimationFrame(r));
+  await new Promise((r) => setTimeout(r, 400));
+
+  document.getElementById('log').style.display = 'none';
+  document.body.dataset.ready = '1';
+  document.title = 'ready';
+} catch (e) {
+  log('CATCH ' + (e && e.message));
+}
+</script>
