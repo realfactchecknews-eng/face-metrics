@@ -3165,7 +3165,7 @@ function renderWeeks(){
 
 function renderChapters(){
   document.getElementById('chapters').innerHTML = CHAPTERS.map(([n,t,s],i) =>
-    `<div class="ch" style="--i:${i}"><span class="chn">${n}</span><span class="cht"><b>${t}</b><span>${s}</span></span></div>`
+    `<div class="ch" data-n="${n}" style="--i:${i}"><span class="chn">${n}</span><span class="cht"><b>${t}</b><span>${s}</span></span></div>`
   ).join('');
 }
 
@@ -3495,4 +3495,48 @@ window.addEventListener('resize', () => {
   if (!pgLoaded) return;
   if (POINTS.length) drawChart();
   moveInk(document.querySelector('.tab.on'));
+});
+
+/* ═══════════ ВЕБ-ВЕРСИЯ ГАЙДА ═══════════ */
+// Текст глав лежит в guide-web.json (собран из guide.html) и грузится один раз,
+// когда человек впервые открывает главу. Раньше оглавление было мёртвым:
+// пункты выглядели кликабельными, но за ними ничего не было.
+let GUIDE_TEXT = null;
+let guideLoading = false;
+
+async function loadGuideText(){
+  if (GUIDE_TEXT || guideLoading) return GUIDE_TEXT;
+  guideLoading = true;
+  try {
+    const r = await fetch('guide-web.json');
+    GUIDE_TEXT = await r.json();
+  } catch { GUIDE_TEXT = null; }
+  guideLoading = false;
+  return GUIDE_TEXT;
+}
+
+document.addEventListener('click', async (e) => {
+  const row = e.target.closest('#chapters .ch'); if (!row) return;
+  const n = row.dataset.n;
+
+  // повторный клик — закрыть
+  const opened = row.nextElementSibling;
+  if (opened && opened.classList.contains('chbody')) {
+    opened.remove(); row.classList.remove('open'); return;
+  }
+  document.querySelectorAll('#chapters .chbody').forEach((b) => b.remove());
+  document.querySelectorAll('#chapters .ch.open').forEach((c) => c.classList.remove('open'));
+
+  row.classList.add('open');
+  const box = document.createElement('div');
+  box.className = 'chbody';
+  box.innerHTML = '<p style="color:#8a8a8a">Загружаю…</p>';
+  row.after(box);
+
+  const data = await loadGuideText();
+  const ch = data && data.find((c) => c.n === n);
+  box.innerHTML = ch
+    ? ch.html
+    : '<p style="color:#8a8a8a">Текст главы не загрузился. Полная версия — в PDF, он у тебя в боте.</p>';
+  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });

@@ -2685,3 +2685,107 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   display:block; max-height:150px; margin:12px auto 0;
   border-radius:12px; border:1px solid var(--line);
 }
+
+/* ─── веб-версия гайда: содержимое главы ─── */
+#progressSection .ch{ position:relative; }
+#progressSection .ch::after{
+  content:""; position:absolute; right:6px; top:22px;
+  width:7px; height:7px; border-right:1px solid var(--accent);
+  border-bottom:1px solid var(--accent); transform:rotate(45deg);
+  opacity:.55; transition:transform .3s var(--ease);
+}
+#progressSection .ch.open::after{ transform:rotate(-135deg); }
+#progressSection .chbody{
+  padding:4px 4px 22px; border-bottom:1px solid var(--line);
+  animation:fadeUp .35s var(--ease) both;
+}
+#progressSection .chbody h2{ display:none; }
+#progressSection .chbody h3{
+  font-size:10px; letter-spacing:.22em; text-transform:uppercase;
+  color:var(--accent); margin:18px 0 8px; font-weight:400;
+}
+#progressSection .chbody p{ font-size:13.5px; color:#c4c0b9; margin:0 0 9px; }
+#progressSection .chbody ul, #progressSection .chbody ol{ margin:0 0 12px; }
+#progressSection .chbody li{
+  font-size:13.5px; color:#c4c0b9; padding-left:16px; position:relative; margin-bottom:6px;
+}
+#progressSection .chbody ul li::before{
+  content:""; position:absolute; left:0; top:8px; width:5px; height:5px;
+  border:1px solid var(--accent); transform:rotate(45deg);
+}
+#progressSection .chbody ol{ counter-reset:gn; }
+#progressSection .chbody ol li{ counter-increment:gn; padding-left:26px; }
+#progressSection .chbody ol li::before{
+  content:counter(gn,decimal-leading-zero); position:absolute; left:0; top:0;
+  font-family:'Cormorant Garamond',serif; font-size:13px; color:var(--accent);
+  font-variant-numeric:lining-nums;
+}
+#progressSection .chbody table{ width:100%; border-collapse:collapse; margin:0 0 14px; font-size:12.5px; }
+#progressSection .chbody th{
+  text-align:left; font-weight:400; font-size:9.5px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--accent); padding:0 10px 7px 0;
+  border-bottom:1px solid var(--line);
+}
+#progressSection .chbody td{
+  padding:9px 10px 9px 0; color:#c4c0b9; vertical-align:top;
+  border-bottom:1px solid rgba(255,255,255,.05);
+}
+#progressSection .chbody .tag{
+  display:inline-block; font-size:8.5px; letter-spacing:.14em; text-transform:uppercase;
+  border-radius:100px; padding:3px 9px; white-space:nowrap; border:1px solid;
+}
+#progressSection .chbody .t-work{ color:#8fce9b; border-color:rgba(143,206,155,.4); }
+#progressSection .chbody .t-prob{ color:var(--accent); border-color:rgba(196,164,107,.4); }
+#progressSection .chbody .t-myth{ color:var(--dim); border-color:rgba(255,255,255,.16); }
+#progressSection .chbody .t-danger{ color:#e0685c; border-color:rgba(224,104,92,.45); }
+#progressSection .chbody .callout{
+  border-left:2px solid var(--accent); border-radius:0 10px 10px 0;
+  background:linear-gradient(90deg,rgba(196,164,107,.08),transparent 88%);
+  padding:13px 16px; margin:14px 0;
+}
+#progressSection .chbody .callout.warn{
+  border-left-color:#e0685c;
+  background:linear-gradient(90deg,rgba(224,104,92,.09),transparent 88%);
+}
+#progressSection .chbody .cl-t{
+  font-size:9.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--accent); margin-bottom:6px;
+}
+#progressSection .chbody .callout.warn .cl-t{ color:#e0685c; }
+#progressSection .chbody .card{
+  border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:0 0 10px;
+  background:linear-gradient(170deg,#131313,#0d0d0d);
+}
+#progressSection .chbody .ct{
+  font-family:'Cormorant Garamond',serif; font-size:15px; color:var(--accent-hi);
+  margin-bottom:5px; font-variant-numeric:lining-nums;
+}
+#progressSection .chbody .g2, #progressSection .chbody .g3{
+  display:grid; gap:12px; margin:0 0 12px;
+}
+#progressSection .chbody .g2{ grid-template-columns:1fr 1fr; }
+#progressSection .chbody .g3{ grid-template-columns:1fr 1fr 1fr; }
+#progressSection .chbody figure{ text-align:center; margin:14px 0; }
+#progressSection .chbody figure img{
+  max-width:100%; height:auto; mix-blend-mode:screen; border-radius:10px;
+}
+#progressSection .chbody .shape-labels,
+#progressSection .chbody .duo-labels{
+  display:grid; gap:4px; margin-top:8px;
+  font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim);
+}
+#progressSection .chbody .shape-labels{ grid-template-columns:repeat(6,1fr); }
+#progressSection .chbody .duo-labels{ grid-template-columns:1fr 1fr; }
+#progressSection .chbody .step, #progressSection .chbody .phase{ margin:0 0 10px; }
+#progressSection .chbody .num, #progressSection .chbody .n{
+  color:var(--accent); font-family:'Cormorant Garamond',serif;
+  font-variant-numeric:lining-nums;
+}
+@media (max-width:600px){
+  #progressSection .chbody .g2, #progressSection .chbody .g3{ grid-template-columns:1fr; }
+  #progressSection .chbody .shape-labels{ grid-template-columns:repeat(3,1fr); }
+}
+
+/* ─── ползунок в шторке скрываем: он резал глаз посередине экрана ─── */
+#fsBody{ scrollbar-width:none; -ms-overflow-style:none; }
+#fsBody::-webkit-scrollbar{ width:0; height:0; display:none; }
