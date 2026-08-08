@@ -651,7 +651,7 @@
       <div class="card">
         <div class="card-t">Новый замер</div>
         <div class="card-s">Один замер в 10 дней. Чаще нет смысла: за меньший срок разница между фото - это шум, а не ты. Бот напомнит, когда придёт время.</div>
-        <button class="btn" onclick="openShot()">Сделать замер</button>
+        <button class="btn" id="measureBtn" onclick="openShot()">Сделать замер</button>
       </div>
 
       <div id="dynHost"></div>
@@ -724,9 +724,17 @@
       <span>Я снял по всем пяти пунктам и понимаю: если условия отличаются от прошлого раза, сравнение покажет разницу фото, а не мой прогресс.</span>
     </label>
 
+    <div class="mfile">
+      <label class="filebtn" id="measureFileLabel">
+        Выбрать фото
+        <input type="file" accept="image/*" onchange="pgPickMeasure(this)">
+      </label>
+      <img id="measurePrev" alt="" style="display:none">
+    </div>
+
     <div class="mact">
       <button class="btn-ghost" onclick="closeShot()">Позже</button>
-      <button class="btn" id="goBtn" disabled onclick="doMeasure()">Загрузить фото</button>
+      <button class="btn" id="goBtn" disabled onclick="doMeasure()">Отправить на замер</button>
     </div>
   </div>
 </div>

@@ -3187,7 +3187,7 @@ function toggleConfirm(e){
   e.preventDefault();
   confirmed = !confirmed;
   document.getElementById('confirm').classList.toggle('ok', confirmed);
-  document.getElementById('goBtn').disabled = !confirmed;
+  pgSyncGo();
 }
 
 function closeShot(){ document.getElementById('mask').classList.remove('on'); }
@@ -3358,9 +3358,16 @@ function pgPickMeasure(input){
     measureFile = rd.result.split(',')[1];
     const prev = document.getElementById('measurePrev');
     if (prev) { prev.src = rd.result; prev.style.display = 'block'; }
-    document.getElementById('goBtn').disabled = !confirmed;
+    const lbl = input.closest('.filebtn'); if (lbl) lbl.classList.add('set');
+    pgSyncGo();
   };
   rd.readAsDataURL(f);
+}
+
+// Отправить можно только когда выбрано фото И поставлена галочка.
+function pgSyncGo(){
+  const b = document.getElementById('goBtn');
+  if (b) b.disabled = !(measureFile && confirmed);
 }
 
 async function doMeasure(forcePay){
@@ -3434,14 +3441,30 @@ function renderMeasure(text){
 
 /* ═══════════ ВКЛАДКИ ═══════════ */
 
-document.getElementById('tabs')?.addEventListener('click', (e) => {
-  const b = e.target.closest('.tab'); if (!b) return;
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t === b));
-  document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === b.dataset.p));
+// Делегируем на document: app.js подключается ДО разметки раздела (она в конце
+// index.html), поэтому прямой addEventListener на #tabs навешивался на null.
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#progressSection .tab'); if (!b) return;
+  document.querySelectorAll('#progressSection .tab').forEach((t) => t.classList.toggle('on', t === b));
+  document.querySelectorAll('#progressSection .panel').forEach((p) => p.classList.toggle('on', p.id === b.dataset.p));
   moveInk(b);
 });
 
+// Переключение параметра на графике. При нарезке демо этот обработчик потерялся:
+// я вытаскивал код по именам функций, а он был анонимным слушателем.
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('#progressSection .chip'); if (!c) return;
+  chartCat = c.dataset.c === 'Общий балл' ? null : c.dataset.c;
+  renderChips();
+  if (POINTS.length) drawChart();
+});
+
 function openShot(){
+  measureFile = null;
+  const lbl = document.getElementById('measureFileLabel');
+  if (lbl) lbl.classList.remove('set');
+  const prev = document.getElementById('measurePrev');
+  if (prev) { prev.style.display = 'none'; prev.removeAttribute('src'); }
   confirmed = false;
   document.getElementById('confirm').classList.remove('ok');
   document.getElementById('goBtn').disabled = true;
