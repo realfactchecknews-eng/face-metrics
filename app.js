@@ -3324,12 +3324,23 @@ function pgShowUnlocked(){
   if (POINTS.length) drawChart(); else pgEmptyChart();
 
   const left = PG.cooldownLeft || 0;
+  const days = Math.ceil(left / 864e5);
   const btn = document.getElementById('measureBtn');
   if (btn) {
-    btn.disabled = left > 0;
+    // Кнопку НЕ блокируем во время кулдауна: иначе досрочный замер за анализ
+    // недостижим — модалку не открыть, и предложение сервера не показать.
+    btn.disabled = false;
     btn.textContent = left > 0
-      ? 'Следующий замер через ' + Math.ceil(left / 864e5) + ' дн.'
+      ? 'Сделать замер досрочно'
       : (POINTS.length ? 'Сделать замер' : 'Сделать первый замер');
+  }
+  const note = document.getElementById('measureNote');
+  if (note) {
+    note.textContent = left > 0
+      ? 'Бесплатный замер будет доступен через ' + days + ' ' +
+        (days === 1 ? 'день' : days < 5 ? 'дня' : 'дней') +
+        '. Раньше срока — за 1 анализ.'
+      : 'Один замер в 10 дней. Чаще нет смысла: за меньший срок разница между фото это шум, а не ты.';
   }
   const nx = document.getElementById('mNext');
   if (nx) nx.textContent = left > 0 ? 'через ' + Math.ceil(left / 864e5) + ' дн.' : 'доступен';
