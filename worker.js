@@ -1673,9 +1673,11 @@ async function grantPack(env, tgid, pack, L, sp) {
     if (!gl.includes(String(tgid))) { gl.push(String(tgid)); await env.RATE_LIMIT.put('guidelist', JSON.stringify(gl)); }
     if (env.GUIDE_FILE_ID) {
       await tgApi(env, 'sendDocument', { chat_id: tgid, document: env.GUIDE_FILE_ID,
-        caption: '📕 Твой гайд на 25 страниц.\n\nВедение уже открыто на facerate.ru - вкладка «Ведение». Там замеры прогресса, разбор всех параметров и план на 90 дней.\n\nЗадания буду присылать сюда раз в неделю.' }).catch(() => {});
+        caption: '📕 Твой гайд на 25 страниц.\n\nНачни с главы 11 — там план на 90 дней. Замеры прогресса и разбор параметров ждут на facerate.ru, в разделе «Ведение».\n\nЗадание на неделю буду присылать сюда каждый понедельник.' }).catch(() => {});
     }
-    return `✅ Гайд отправлен файлом выше, ведение открыто на сайте. Плюс ${pack.credits} анализов на счёт.`;
+    // Уходит внутрь BL.payOk («✅ Оплата получена! {текст}.») — поэтому без своей
+    // галочки и без точки на конце, иначе получается «✅ ✅ … на счёт..».
+    return `гайд отправлен файлом выше, ведение открыто, плюс ${pack.credits} анализов на счёт`;
   }
   if (pack?.type === 'sub') {
     const until = (sp?.subscription_expiration_date ? sp.subscription_expiration_date * 1000 : Date.now() + 30 * 24 * 3600 * 1000);
