@@ -930,6 +930,11 @@ const BL = {
     kbStatus: '💎 My status', kbShop: '⭐ Buy analyses / unlimited', kbOrders: '📦 My orders', kbPromo: '🎁 Enter promo code',
     kbMyRef: '🔗 My referral link',
     kbSub: '🔄 My subscription', kbGw: '🎉 Giveaways', kbSite: '🌐 Open FaceRate', kbLang: '🌍 Язык: Русский',
+    kbFree: '📄 Free chapter of the guide', kbFreeCheck: '✅ I subscribed',
+    freeNeedSub: 'The free chapter «Myths and dangerous practices» goes to channel subscribers.\n\nSubscribe, then tap «I subscribed» and I will send the file right away.',
+    freeOk: 'Sent it above. This is one chapter out of fourteen — the full guide and the 90-day coaching are in «Buy».',
+    freeOkCaption: '📄 FaceRate · Myths and dangerous practices. One chapter from the guide, free.',
+    freeSoon: 'The free chapter is being prepared, it will be here shortly.',
     kbSupport: '💬 Support',
     kbBack: '← Menu',
     shopTitle: '⭐ What are we getting?',
@@ -990,6 +995,11 @@ const BL = {
     kbStatus: '💎 Мой статус', kbShop: '⭐ Купить анализы / безлимит', kbOrders: '📦 Мои заказы', kbPromo: '🎁 Ввести промокод',
     kbMyRef: '🔗 Моя реферальная ссылка',
     kbSub: '🔄 Моя подписка', kbGw: '🎉 Розыгрыши', kbSite: '🌐 Открыть FaceRate', kbLang: '🌍 Language: English',
+    kbFree: '📄 Бесплатная глава гайда', kbFreeCheck: '✅ Я подписался',
+    freeNeedSub: 'Глава «Мифы и опасные практики» уходит подписчикам канала.\n\nПодпишись и нажми «Я подписался», файл придёт сразу.',
+    freeOk: 'Отправил выше. Это одна глава из четырнадцати, полный гайд и ведение на 90 дней — в разделе «Купить».',
+    freeOkCaption: '📄 FaceRate · Мифы и опасные практики. Одна глава из гайда, бесплатно.',
+    freeSoon: 'Отрывок готовится, скоро появится здесь.',
     kbSupport: '💬 Поддержка',
     kbBack: '← Меню',
     shopTitle: '⭐ Что берём?',
@@ -1059,6 +1069,7 @@ function menuKb(L) {
     [{ text: b.kbOrders, callback_data: 'orders' }],
     [{ text: b.kbPromo, callback_data: 'promo' }],
     [{ text: b.kbMyRef, callback_data: 'myref' }],
+    [{ text: b.kbFree, callback_data: 'free' }],
     [{ text: b.kbSub, callback_data: 'mysub' }, { text: b.kbGw, callback_data: 'gw' }],
     [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbSupport, url: 'https://t.me/FaceRateSupport_bot' }],
     [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
@@ -1219,6 +1230,18 @@ async function tgWebhook(request, env) {
     } else if (code === 'shop') {
       // Диплинк из постов про акцию/цены — сразу к выбору способа оплаты, минуя меню.
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: methodKb(L, env) });
+    } else if (code === 'free') {
+      // Диплинк из поста про бесплатную главу: сразу к проверке подписки.
+      if (await isSubscribed(env, tgid, true) && env.EXCERPT_FILE_ID) {
+        await tgApi(env, 'sendDocument', { chat_id: chat, document: env.EXCERPT_FILE_ID, caption: b.freeOkCaption }).catch(() => {});
+        await tgApi(env, 'sendMessage', { chat_id: chat, text: b.freeOk, reply_markup: menuKb(L) });
+      } else {
+        await tgApi(env, 'sendMessage', { chat_id: chat, text: b.freeNeedSub, reply_markup: { inline_keyboard: [
+          [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }],
+          [{ text: b.kbFreeCheck, callback_data: 'free:check' }],
+          [{ text: b.kbBack, callback_data: 'menu' }],
+        ]}});
+      }
     } else if (code === 'giveaway') {
       const gw = await getGiveaway(env);
       if (gw && gw.endTs > Date.now()) {
@@ -1539,6 +1562,26 @@ async function handleCallback(env, cq) {
       }
     } else {
       await reply(b.unsubNone, menuKb(L));
+    }
+  } else if (data === 'free' || data === 'free:check') {
+    // Бесплатный отрывок гайда (глава про мифы) за подписку на канал.
+    // Проверяем живьём, а не из кэша: иначе после «Я подписался» отрывок
+    // пришлось бы ждать до пяти минут, пока протухнет запись.
+    if (await isSubscribed(env, tgid, true)) {
+      if (env.EXCERPT_FILE_ID) {
+        await tgApi(env, 'sendDocument', {
+          chat_id: chat, document: env.EXCERPT_FILE_ID, caption: b.freeOkCaption,
+        }).catch(() => {});
+        await reply(b.freeOk, menuKb(L));
+      } else {
+        await reply(b.freeSoon, menuKb(L));
+      }
+    } else {
+      await reply(b.freeNeedSub, { inline_keyboard: [
+        [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }],
+        [{ text: b.kbFreeCheck, callback_data: 'free:check' }],
+        [{ text: b.kbBack, callback_data: 'menu' }],
+      ]});
     }
   } else if (data === 'gw') {
     const gw = await getGiveaway(env);
