@@ -932,7 +932,8 @@ const BL = {
     kbSub: '🔄 My subscription', kbGw: '🎉 Giveaways', kbSite: '🌐 Open FaceRate', kbLang: '🌍 Язык: Русский',
     kbFree: '📄 Free chapter of the guide', kbFreeCheck: '✅ I subscribed',
     freeNeedSub: 'The free chapter «Myths and dangerous practices» goes to channel subscribers.\n\nSubscribe, then tap «I subscribed» and I will send the file right away.',
-    freeOk: 'Sent it above. This is one chapter out of fourteen — the full guide and the 90-day coaching are in «Buy».',
+    freeOk: 'Sent it above. This is one chapter out of fourteen.',
+    freeUpsell: 'In the full version there are 13 more chapters and 90 days of coaching: a check-in every 10 days, a chart across 8 parameters, a weekly task from me and 5 analyses on your balance.',
     freeOkCaption: '📄 FaceRate · Myths and dangerous practices. One chapter from the guide, free.',
     freeSoon: 'The free chapter is being prepared, it will be here shortly.',
     kbSupport: '💬 Support',
@@ -997,7 +998,8 @@ const BL = {
     kbSub: '🔄 Моя подписка', kbGw: '🎉 Розыгрыши', kbSite: '🌐 Открыть FaceRate', kbLang: '🌍 Language: English',
     kbFree: '📄 Бесплатная глава гайда', kbFreeCheck: '✅ Я подписался',
     freeNeedSub: 'Глава «Мифы и опасные практики» уходит подписчикам канала.\n\nПодпишись и нажми «Я подписался», файл придёт сразу.',
-    freeOk: 'Отправил выше. Это одна глава из четырнадцати, полный гайд и ведение на 90 дней — в разделе «Купить».',
+    freeOk: 'Отправил выше. Это одна глава из четырнадцати.',
+    freeUpsell: 'В полной версии ещё 13 глав и ведение на 90 дней: замер раз в 10 дней, график по 8 параметрам, задание на неделю от меня и 5 анализов на счёт.',
     freeOkCaption: '📄 FaceRate · Мифы и опасные практики. Одна глава из гайда, бесплатно.',
     freeSoon: 'Отрывок готовится, скоро появится здесь.',
     kbSupport: '💬 Поддержка',
@@ -1076,6 +1078,24 @@ function menuKb(L) {
   ]};
 }
 // Шаг 1: выбор способа оплаты.
+// Покупка гайда одним шагом: после бесплатной главы вести человека через общий
+// список тарифов незачем, он уже знает, что хочет. Кнопки сразу на pay:guide:*.
+function guideKb(L, env) {
+  const b = BL[L];
+  const p = PACKS.guide;
+  const money = (cur, old, unit) => (old && old > cur ? strike(old + unit) + ' ' : '') + cur + unit;
+  const rows = [[{ text: `${b.payStars} · ${money(p.stars, p.oldStars, '⭐')}`, callback_data: 'pay:guide:stars' }]];
+  if (lavaConfigured(env) || env.YUKASSA_PROVIDER_TOKEN) {
+    rows.push([{ text: `${b.payCard} · ${money(p.rub, p.oldRub, '₽')}`, callback_data: 'pay:guide:rub' }]);
+  }
+  if (lavaConfigured(env)) {
+    rows.push([{ text: `${b.paySbp} · ${money(p.lavaRub, p.oldLavaRub, '₽')}`, callback_data: 'pay:guide:sbp' }]);
+  }
+  if (env.CRYPTOBOT_TOKEN) rows.push([{ text: b.payCrypto, callback_data: 'pay:guide:crypto' }]);
+  rows.push([{ text: BL[L].kbBack, callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
 function methodKb(L, env) {
   const b = BL[L];
   const rows = [[{ text: b.payStars, callback_data: 'mth:stars' }]];
@@ -1234,7 +1254,7 @@ async function tgWebhook(request, env) {
       // Диплинк из поста про бесплатную главу: сразу к проверке подписки.
       if (await isSubscribed(env, tgid, true) && env.EXCERPT_FILE_ID) {
         await tgApi(env, 'sendDocument', { chat_id: chat, document: env.EXCERPT_FILE_ID, caption: b.freeOkCaption }).catch(() => {});
-        await tgApi(env, 'sendMessage', { chat_id: chat, text: b.freeOk, reply_markup: menuKb(L) });
+        await tgApi(env, 'sendMessage', { chat_id: chat, text: b.freeOk + '\n\n' + b.freeUpsell, reply_markup: guideKb(L, env) });
       } else {
         await tgApi(env, 'sendMessage', { chat_id: chat, text: b.freeNeedSub, reply_markup: { inline_keyboard: [
           [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }],
@@ -1572,7 +1592,7 @@ async function handleCallback(env, cq) {
         await tgApi(env, 'sendDocument', {
           chat_id: chat, document: env.EXCERPT_FILE_ID, caption: b.freeOkCaption,
         }).catch(() => {});
-        await reply(b.freeOk, menuKb(L));
+        await reply(b.freeOk + '\n\n' + b.freeUpsell, guideKb(L, env));
       } else {
         await reply(b.freeSoon, menuKb(L));
       }
