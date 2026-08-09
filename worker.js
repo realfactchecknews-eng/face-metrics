@@ -932,7 +932,6 @@ const BL = {
     kbSub: '🔄 My subscription', kbGw: '🎉 Giveaways', kbSite: '🌐 Open FaceRate', kbLang: '🌍 Язык: Русский',
     kbFree: '📄 Free chapter of the guide', kbFreeCheck: '✅ I subscribed',
     freeNeedSub: 'The free chapter «Myths and dangerous practices» goes to channel subscribers.\n\nSubscribe, then tap «I subscribed» and I will send the file right away.',
-    freeOk: 'Sent it above. This is one chapter out of fourteen.',
     freeUpsell: 'In the full version there are 13 more chapters and 90 days of coaching: a check-in every 10 days, a chart across 8 parameters, a weekly task from me and 5 analyses on your balance.',
     freeOkCaption: '📄 FaceRate · Myths and dangerous practices. One chapter from the guide, free.',
     freeSoon: 'The free chapter is being prepared, it will be here shortly.',
@@ -998,7 +997,6 @@ const BL = {
     kbSub: '🔄 Моя подписка', kbGw: '🎉 Розыгрыши', kbSite: '🌐 Открыть FaceRate', kbLang: '🌍 Language: English',
     kbFree: '📄 Бесплатная глава гайда', kbFreeCheck: '✅ Я подписался',
     freeNeedSub: 'Глава «Мифы и опасные практики» уходит подписчикам канала.\n\nПодпишись и нажми «Я подписался», файл придёт сразу.',
-    freeOk: 'Отправил выше. Это одна глава из четырнадцати.',
     freeUpsell: 'В полной версии ещё 13 глав и ведение на 90 дней: замер раз в 10 дней, график по 8 параметрам, задание на неделю от меня и 5 анализов на счёт.',
     freeOkCaption: '📄 FaceRate · Мифы и опасные практики. Одна глава из гайда, бесплатно.',
     freeSoon: 'Отрывок готовится, скоро появится здесь.',
@@ -1253,8 +1251,11 @@ async function tgWebhook(request, env) {
     } else if (code === 'free') {
       // Диплинк из поста про бесплатную главу: сразу к проверке подписки.
       if (await isSubscribed(env, tgid, true) && env.EXCERPT_FILE_ID) {
-        await tgApi(env, 'sendDocument', { chat_id: chat, document: env.EXCERPT_FILE_ID, caption: b.freeOkCaption }).catch(() => {});
-        await tgApi(env, 'sendMessage', { chat_id: chat, text: b.freeOk + '\n\n' + b.freeUpsell, reply_markup: guideKb(L, env) });
+        await tgApi(env, 'sendDocument', {
+          chat_id: chat, document: env.EXCERPT_FILE_ID,
+          caption: b.freeOkCaption + '\n\n' + b.freeUpsell,
+          reply_markup: guideKb(L, env),
+        }).catch(() => {});
       } else {
         await tgApi(env, 'sendMessage', { chat_id: chat, text: b.freeNeedSub, reply_markup: { inline_keyboard: [
           [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }],
@@ -1589,10 +1590,13 @@ async function handleCallback(env, cq) {
     // пришлось бы ждать до пяти минут, пока протухнет запись.
     if (await isSubscribed(env, tgid, true)) {
       if (env.EXCERPT_FILE_ID) {
+        // Одним сообщением: отдельный текст вслед за документом обгонял его,
+        // и предложение купить приходило раньше самого файла.
         await tgApi(env, 'sendDocument', {
-          chat_id: chat, document: env.EXCERPT_FILE_ID, caption: b.freeOkCaption,
+          chat_id: chat, document: env.EXCERPT_FILE_ID,
+          caption: b.freeOkCaption + '\n\n' + b.freeUpsell,
+          reply_markup: guideKb(L, env),
         }).catch(() => {});
-        await reply(b.freeOk + '\n\n' + b.freeUpsell, guideKb(L, env));
       } else {
         await reply(b.freeSoon, menuKb(L));
       }
