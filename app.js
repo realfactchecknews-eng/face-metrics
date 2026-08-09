@@ -2933,7 +2933,13 @@ function drawChart(){
   let hi = Math.ceil(Math.max(...vals) * 2) / 2 + .5;
   if (hi - lo < 1.5) { hi = lo + 1.5; }
 
-  const x = i => padL + (new Date(POINTS[i].t).getTime() - t0) / span * (W - padL - padR);
+  // Если все замеры пришлись на один день, раскладке по времени не за что
+  // зацепиться: точки схлопываются в одну, а подписи дат печатаются друг
+  // на друге («08.0808.08»). В этом случае разносим точки по порядку.
+  const sameDay = (tN - t0) < DAY;
+  const x = i => sameDay
+    ? padL + (POINTS.length < 2 ? .5 : i / (POINTS.length - 1)) * (W - padL - padR)
+    : padL + (new Date(POINTS[i].t).getTime() - t0) / span * (W - padL - padR);
   const y = v => padT + (hi - v) / (hi - lo) * (H - padT - padB);
 
   // горизонтальные линии сетки
@@ -2949,15 +2955,17 @@ function drawChart(){
   const area = d + ` L${pts[pts.length-1][0].toFixed(1)} ${H-padB} L${pts[0][0].toFixed(1)} ${H-padB} Z`;
 
   // подписи дат: первую и последнюю всегда, промежуточные - если не наезжают
-  let marks = '', lastLabelX = -999;
+  let marks = '', lastLabelX = -999, lastLabelTxt = '';
   pts.forEach((p,i) => {
     const P = POINTS[i], diff = P.q !== 'СОПОСТАВИМО';
     marks += `<circle class="dot${diff?' warn':''}" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="animation-delay:${(1+i*.12).toFixed(2)}s"><title>${fmtLong(P.t)} - ${series[i].toFixed(1)}${P.note?' · '+P.note:''}</title></circle>`;
     marks += `<text class="val" x="${p[0].toFixed(1)}" y="${(p[1]-13).toFixed(1)}" text-anchor="middle">${series[i].toFixed(1)}</text>`;
-    if (i === 0 || i === pts.length-1 || p[0] - lastLabelX > 62){
+    const txt = fmtD(P.t);
+    const room = i === 0 || p[0] - lastLabelX > 62;
+    if (txt !== lastLabelTxt && (room || i === pts.length-1)){
       const anch = i === 0 ? 'start' : i === pts.length-1 ? 'end' : 'middle';
-      marks += `<text class="lbl" x="${p[0].toFixed(1)}" y="${H-14}" text-anchor="${anch}">${fmtD(P.t)}</text>`;
-      lastLabelX = p[0];
+      marks += `<text class="lbl" x="${p[0].toFixed(1)}" y="${H-14}" text-anchor="${anch}">${txt}</text>`;
+      lastLabelX = p[0]; lastLabelTxt = txt;
     }
   });
 
@@ -3158,7 +3166,7 @@ function renderWeeks(){
         <div class="wl">Задание</div><p>${w.task}</p>
         <div class="wl">Зачем</div><p>${w.why}</p>
         <div class="wl">Как понять, что сделано</div><p>${w.check}</p>
-        <a class="chlink" href="#"><span class="chn2">${w.ch}</span><span>Глава ${w.ch} «${w.cht}» &middot; стр. ${w.pg}</span></a>
+        <a class="chlink" href="#" data-n="${w.ch}"><span class="chn2">${w.ch}</span><span>Глава ${w.ch} «${w.cht}» &middot; стр. ${w.pg}</span></a>
         ${w.tip ? `<div class="tipbox"><div class="tl">${w.weak ? 'Твоё слабое место сейчас' : 'Лично тебе - из твоего анализа'}</div><p>${w.tip}</p></div>` : ''}
       </div>
     </details>`;
@@ -3180,7 +3188,7 @@ function renderWeekNow(){
      <p style="font-size:13.5px;color:#c4c0b9">${w.task}</p>
      <div class="wl" style="font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:12px 0 5px">Как понять, что сделано</div>
      <p style="font-size:13.5px;color:#c4c0b9">${w.check}</p>
-     <a class="chlink" href="#"><span class="chn2">${w.ch}</span><span>Глава ${w.ch} «${w.cht}» &middot; стр. ${w.pg}</span></a>
+     <a class="chlink" href="#" data-n="${w.ch}"><span class="chn2">${w.ch}</span><span>Глава ${w.ch} «${w.cht}» &middot; стр. ${w.pg}</span></a>
      ${w.tip?`<div class="tipbox"><div class="tl">Лично тебе - из твоего анализа</div><p>${w.tip}</p></div>`:''}`;
 }
 
@@ -3564,6 +3572,21 @@ async function loadGuideText(){
   guideLoading = false;
   return GUIDE_TEXT;
 }
+
+// Ссылка «Глава NN» из задания недели: переключает на вкладку «Гайд» и
+// раскрывает нужную главу. Раньше это был <a href="#"> без обработчика,
+// то есть кнопка выглядела кликабельной, но не делала ничего.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('#progressSection .chlink'); if (!a) return;
+  e.preventDefault();
+  const n = a.dataset.n;
+  const tab = document.querySelector('#progressSection .tab[data-p="p4"]');
+  if (tab) tab.click();
+  const row = document.querySelector('#chapters .ch[data-n="' + n + '"]');
+  if (!row) return;
+  if (!row.classList.contains('open')) row.click();
+  setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+});
 
 document.addEventListener('click', async (e) => {
   const row = e.target.closest('#chapters .ch'); if (!row) return;
