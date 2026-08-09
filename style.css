@@ -2834,3 +2834,37 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   width:7px; height:7px; border-radius:50%; background:var(--accent); flex:none;
   animation:aura 2.4s ease-in-out infinite;
 }
+
+/* ─── Пропорции и тир: считаются на клиенте по 468 точкам, без нейросети ─── */
+.prop-block{ display:flex; flex-direction:column; gap:2px; }
+.prop-row{
+  display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:12px;
+  padding:11px 0; border-bottom:1px solid rgba(255,255,255,.05);
+}
+.prop-row:last-of-type{ border-bottom:0; }
+.prop-name{ font-size:13.5px; color:var(--text-dim); }
+.prop-val{
+  font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--text-bright);
+  font-variant-numeric:lining-nums tabular-nums;
+}
+.prop-tag{
+  font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+  border:1px solid; border-radius:100px; padding:3px 9px; white-space:nowrap;
+}
+.prop-tag.ideal{ color:#8fce9b; border-color:rgba(143,206,155,.4); }
+.prop-tag.good { color:var(--accent); border-color:rgba(196,164,107,.4); }
+.prop-tag.off  { color:#d9a08f; border-color:rgba(217,160,143,.4); }
+.prop-note{ font-size:11.5px; color:var(--text-dim); opacity:.7; margin-top:10px; }
+.tier-badge{
+  display:inline-block; margin:0 auto 10px; padding:5px 16px; border-radius:100px;
+  font-size:11px; letter-spacing:.24em; text-transform:uppercase;
+  border:1px solid var(--accent); color:var(--accent-hi); background:rgba(196,164,107,.07);
+}
+.tier-badge.chad, .tier-badge.chadlite{ border-color:#e8d4a0; color:#e8d4a0; }
+.tier-badge.sub5, .tier-badge.sub3{ border-color:rgba(217,160,143,.5); color:#d9a08f; }
+@media (max-width:600px){
+  .prop-row{ grid-template-columns:1fr auto; row-gap:4px; }
+  .prop-tag{ grid-column:2; }
+  .prop-val{ grid-column:2; grid-row:1; }
+  .prop-name{ grid-column:1; grid-row:1; }
+}

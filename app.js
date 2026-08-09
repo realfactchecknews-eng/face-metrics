@@ -885,6 +885,82 @@ function computeFaceMetrics(lm) {
   return { cheekboneWidth: cheekboneWidth, jawWidth: jawWidth, foreheadWidth: foreheadWidth, faceHeight: faceHeight, widthHeightRatio: widthHeightRatio, symmetryScore: symmetryScore };
 }
 
+
+/* ═══════════ Геометрия, которую считаем сами ═══════════
+   Пропорции и тир не спрашиваем у модели: это арифметика по 468 точкам.
+   Считая их на клиенте, мы (а) не платим за токены, (б) получаем одинаковый
+   ответ для одного и того же лица, а не новый каждый раз. Так же устроено
+   у конкурентов с ценой в три рубля за анализ. */
+
+// [ключ, подпись RU, подпись EN, идеальный коридор, приемлемый коридор]
+var PROP_DEFS = [
+  ['lenWidth',  'Длина лица к ширине',   'Face length to width', [1.45, 1.60], [1.35, 1.72]],
+  ['noseFace',  'Длина носа к лицу',     'Nose to face length',  [0.30, 0.36], [0.27, 0.39]],
+  ['eyeGap',    'Расстояние между глаз', 'Intercanthal ratio',   [0.95, 1.05], [0.88, 1.14]],
+  ['lipsFace',  'Ширина губ к лицу',     'Mouth to face width',  [0.45, 0.55], [0.40, 0.60]],
+  ['foreCheek', 'Ширина лба к скулам',   'Forehead to cheekbones', [0.90, 1.02], [0.84, 1.08]],
+  ['cheekJaw',  'Ширина скул к челюсти', 'Cheekbones to jaw',    [1.20, 1.35], [1.10, 1.45]],
+];
+
+function computeProportions(lm) {
+  var faceH  = _dist(lm[10], lm[152]);
+  var cheekW = _dist(lm[234], lm[454]);
+  var jawW   = _dist(lm[58], lm[288]);
+  var foreW  = _dist(lm[21], lm[251]);
+  var noseL  = _dist(lm[168], lm[2]);
+  var inter  = _dist(lm[133], lm[362]);
+  var eyeL   = _dist(lm[33], lm[133]);
+  var eyeR   = _dist(lm[362], lm[263]);
+  var eyeAvg = (eyeL + eyeR) / 2;
+  var lipsW  = _dist(lm[61], lm[291]);
+  var raw = {
+    lenWidth:  cheekW ? faceH / cheekW : 0,
+    noseFace:  faceH ? noseL / faceH : 0,
+    eyeGap:    eyeAvg ? inter / eyeAvg : 0,
+    lipsFace:  cheekW ? lipsW / cheekW : 0,
+    foreCheek: cheekW ? foreW / cheekW : 0,
+    cheekJaw:  jawW ? cheekW / jawW : 0,
+  };
+  var ru = lang() === 'ru';
+  return PROP_DEFS.map(function (d) {
+    var v = raw[d[0]];
+    var verdict = (v >= d[3][0] && v <= d[3][1]) ? (ru ? 'Идеально' : 'Ideal')
+                : (v >= d[4][0] && v <= d[4][1]) ? (ru ? 'Хорошо' : 'Good')
+                : (ru ? 'Отклонение' : 'Off');
+    var level = (v >= d[3][0] && v <= d[3][1]) ? 'ideal' : (v >= d[4][0] && v <= d[4][1]) ? 'good' : 'off';
+    return { label: ru ? d[1] : d[2], value: v, verdict: verdict, level: level };
+  });
+}
+
+// Тир по общему баллу. Шкала та же, что на странице psl-tiers.html, чтобы
+// человек не встретил в отчёте одно название, а в статье другое.
+function pslTier(score) {
+  if (score >= 8.5) return { key: 'chad',     label: 'Chad' };
+  if (score >= 7.5) return { key: 'chadlite', label: 'Chadlite' };
+  if (score >= 6.5) return { key: 'htn',      label: 'HTN' };
+  if (score >= 5.5) return { key: 'mtn',      label: 'MTN' };
+  if (score >= 4.5) return { key: 'ltn',      label: 'LTN' };
+  if (score >= 3)   return { key: 'sub5',     label: 'Sub-5' };
+  return { key: 'sub3', label: 'Sub-3' };
+}
+
+function renderProportions(lm) {
+  var host = document.getElementById('propBlock');
+  if (!host || !lm) return;
+  var rows = computeProportions(lm);
+  host.innerHTML =
+    '<span class="eyebrow">' + (lang() === 'ru' ? 'Пропорции' : 'Proportions') + '</span>' +
+    rows.map(function (r) {
+      return '<div class="prop-row"><span class="prop-name">' + r.label + '</span>' +
+             '<span class="prop-val">' + r.value.toFixed(2) + '</span>' +
+             '<span class="prop-tag ' + r.level + '">' + r.verdict + '</span></div>';
+    }).join('') +
+    '<p class="prop-note">' + (lang() === 'ru'
+      ? 'Посчитано по 468 точкам прямо в браузере, без нейросети.'
+      : 'Measured from 468 landmarks in your browser, no AI involved.') + '</p>';
+  host.classList.remove('hidden');
+}
+
 function classifyFaceShape(metrics) {
   // Точки 234/454 — это самые широкие точки контура (у ушей), поэтому скулы
   // почти всегда чуть шире лба и челюсти: cbJaw/cbFore обычно лежат в ~1.0-1.25.
@@ -948,6 +1024,8 @@ async function processImage(img, sideImage) {
     })();
     var metrics   = computeFaceMetrics(lm);
     var shapeInfo = classifyFaceShape(metrics);
+    window._fmLandmarks = lm;          // нужны share-карточке и блоку пропорций
+    window._fmMetrics   = metrics;
     runFaceAnimation(lm, metrics, function() {
       resultsDiv.classList.remove("hidden");
       gateThenAI(metrics, shapeInfo);
@@ -1359,6 +1437,16 @@ function renderAIReport(text, skipSideEffects, isTeaser) {
       }
     }, 120);
   } else { scoreEl.textContent = "--"; }
+  renderProportions(window._fmLandmarks);
+  var tierEl = document.getElementById("tierBadge");
+  if (tierEl) {
+    if (parsed.overall !== null) {
+      var tier = pslTier(parsed.overall);
+      tierEl.textContent = tier.label;
+      tierEl.className = "tier-badge " + tier.key;
+      tierEl.hidden = false;
+    } else { tierEl.hidden = true; }
+  }
   var catContainer = document.getElementById("categoryScores");
   catContainer.innerHTML = "";
   if (parsed.categories.length > 0) {
