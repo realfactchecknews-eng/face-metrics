@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>video frames</title>
+<style>
+  html,body{ margin:0; padding:0; background:#000; }
+  #sheet{ display:grid; width:max-content; }
+  #sheet canvas{ display:block; }
+</style>
+<!-- Разовый стенд: рисует кадры ролика тем же svDrawFrame, что и сайт, сеткой,
+     чтобы снять их одним скриншотом и склеить локально через ffmpeg. Нужен
+     только для показа демо-ролика: в самом браузере кодирование идёт через
+     WebCodecs и никакого ffmpeg не требует. В сборку сайта не входит. -->
+<div id="sheet"></div>
+<script src="sharevideo.js"></script>
+<script>
+(async function () {
+  const P = new URLSearchParams(location.search);
+  const FROM = +(P.get('from') || 0);
+  const CNT  = +(P.get('cnt')  || 25);
+  const COLS = +(P.get('cols') || 5);
+
+  const img = new Image();
+  img.src = 'how-scan.jpg';
+  await new Promise((r) => { img.onload = r; img.onerror = r; });
+  const ph = document.createElement('canvas');
+  ph.width = img.naturalWidth || 600; ph.height = img.naturalHeight || 800;
+  ph.getContext('2d').drawImage(img, 0, 0);
+
+  const lm = {};
+  for (let i = 0; i < 468; i++) {
+    const a = (i / 468) * Math.PI * 2;
+    lm[i] = { x: 0.5 + Math.cos(a) * (0.10 + (i % 7) * 0.012),
+              y: 0.47 + Math.sin(a) * (0.16 + (i % 5) * 0.014) };
+  }
+  const data = {
+    photo: ph, landmarks: lm, overall: 6.3, tier: 'MTN',
+    categories: [
+      { label: 'Симметрия',           score: 7.0 },
+      { label: 'Canthal Tilt / Eyes', score: 6.8 },
+      { label: 'Midface / Maxilla',   score: 5.9 },
+      { label: 'Jawline / Mandible',  score: 5.2 },
+      { label: 'Skin',                score: 6.4 },
+    ],
+  };
+
+  const sheet = document.getElementById('sheet');
+  sheet.style.gridTemplateColumns = 'repeat(' + COLS + ', 540px)';
+  for (let k = 0; k < CNT; k++) {
+    const c = document.createElement('canvas');
+    c.width = 540; c.height = 960;
+    window.svDrawFrame(c.getContext('2d'), data, FROM + k);
+    sheet.appendChild(c);
+  }
+  document.body.dataset.ready = '1';
+  document.title = 'ready';
+})();
+</script>

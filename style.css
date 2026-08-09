@@ -1836,12 +1836,19 @@ body.entered .mute-btn { opacity: 1; pointer-events: auto; }
 .menu-screen.in .menu-pill-stage { opacity: 1; transform: translateY(0); transition-delay: .05s; }
 .menu-screen.in .menu-eyebrow { opacity: 1; transform: translateY(0); transition-delay: .12s; }
 .menu-screen.in .menu-title { opacity: 1; transform: translateY(0); transition-delay: .18s; }
-.menu-screen.in .menu-tile:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: .24s; }
-.menu-screen.in .menu-tile:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: .30s; }
-.menu-screen.in .menu-tile:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: .36s; }
-.menu-screen.in .menu-tile:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: .42s; }
-.menu-screen.in .menu-tile:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: .48s; }
-.menu-screen.in .menu-go { opacity: 1; transform: translateY(0); transition-delay: .50s; }
+/* Показываем ЛЮБУЮ плитку, а задержку уточняем по номеру. Раньше правила были
+   выписаны только для пяти, а плиток шесть: шестая навсегда оставалась с
+   opacity:0, место занимала, и под меню зияла дырка размером с плитку. */
+.menu-screen.in .menu-tile { opacity: 1; transform: translateY(0); transition-delay: .48s; }
+.menu-screen.in .menu-tile:nth-child(1) { transition-delay: .24s; }
+.menu-screen.in .menu-tile:nth-child(2) { transition-delay: .30s; }
+.menu-screen.in .menu-tile:nth-child(3) { transition-delay: .36s; }
+.menu-screen.in .menu-tile:nth-child(4) { transition-delay: .42s; }
+.menu-screen.in .menu-tile:nth-child(5) { transition-delay: .48s; }
+.menu-screen.in .menu-tile:nth-child(6) { transition-delay: .54s; }
+.menu-screen.in .menu-tile:nth-child(7) { transition-delay: .60s; }
+.menu-screen.in .menu-tile:nth-child(8) { transition-delay: .66s; }
+.menu-screen.in .menu-go { opacity: 1; transform: translateY(0); transition-delay: .60s; }
 /* the floating menuFloat keeps working on the stage after reveal */
 .menu-screen.in .menu-pill-stage { animation: menuFloat 5s ease-in-out infinite; }
 

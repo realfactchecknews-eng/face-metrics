@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>video demo</title>
+<!-- Разовый стенд: гоняет тот же sharevideo.js, что и сайт, и выкладывает
+     готовый mp4 в base64, чтобы его можно было забрать через --dump-dom.
+     В сборку сайта не входит. -->
+<pre id="out" style="white-space:pre-wrap;word-break:break-all;font:10px monospace"></pre>
+<script src="vendor/mp4muxer/mp4-muxer.min.js"></script>
+<script src="sharevideo.js"></script>
+<script>
+(async function () {
+  const out = document.getElementById('out');
+  const log = (m) => { document.title = m; };
+  try {
+    log('loading photo');
+    const img = new Image();
+    img.src = 'how-scan.jpg';
+    await img.decode();
+    const ph = document.createElement('canvas');
+    ph.width = img.width; ph.height = img.height;
+    ph.getContext('2d').drawImage(img, 0, 0);
+    window.cleanImageCanvas = ph;
+
+    const lm = {};
+    for (let i = 0; i < 468; i++) {
+      const a = (i / 468) * Math.PI * 2;
+      lm[i] = { x: 0.5 + Math.cos(a) * (0.10 + (i % 7) * 0.012),
+                y: 0.47 + Math.sin(a) * (0.16 + (i % 5) * 0.014) };
+    }
+    window._fmLandmarks = lm;
+    window._fmParsed = { overall: 6.3, categories: [
+      { label: 'Симметрия',           score: 7.0 },
+      { label: 'Canthal Tilt / Eyes', score: 6.8 },
+      { label: 'Midface / Maxilla',   score: 5.9 },
+      { label: 'Jawline / Mandible',  score: 5.2 },
+      { label: 'Skin',                score: 6.4 },
+    ]};
+    window.pslTier = function () { return { label: 'MTN' }; };
+
+    log('encoding');
+    const blob = await window.svMakeVideo(function (p) { log('encoding ' + Math.round(p * 100) + '%'); });
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    let s = '';
+    for (let i = 0; i < buf.length; i++) s += String.fromCharCode(buf[i]);
+    out.textContent = blob.type + '|' + btoa(s);
+    document.body.dataset.ready = '1';
+    log('ready ' + blob.size);
+  } catch (e) {
+    out.textContent = 'ERR ' + e.message;
+    log('ERR ' + e.message);
+  }
+})();
+</script>
