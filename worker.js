@@ -63,11 +63,13 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   m1: { type: 'unlim',  hours: 720,  stars: 749,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 749, oldRub: 999, oldLavaRub: 999 },
   // Гайд + ведение 90 дней. Цена в дыре между d1 (299) и m1 (999), чтобы не
   // конкурировать с месячным безлимитом.
-  // launch:true — цена запуска, зачёркнутая старая показывается независимо от
-  // недельной акции (SALE_ENDS_AT). Поднять до 499/349 = убрать launch и вернуть
-  // rub/stars/lavaRub к значениям old*. В Lava.top оффер гайда должен быть
-  // isDynamicPrice, иначе там цена останется прежней — воркер шлёт сумму сам.
-  guide: { type: 'guide', credits: 5, stars: 199, rub: 299, lavaRub: 299, launch: true,
+  // Обычная цена гайда 499 ₽ / 349 ⭐, на запуске действует скидка 20%: 399 / 279.
+  // launch:true показывает зачёркнутую старую цену независимо от недельной акции
+  // (SALE_ENDS_AT). Закончить промо = убрать launch и вернуть rub/stars/lavaRub
+  // к значениям old*. Дальше по плану подъём до 999 ₽, тогда old* тоже поднять.
+  // В Lava.top оффер гайда должен быть isDynamicPrice, иначе там цена останется
+  // прежней: сумму воркер передаёт сам.
+  guide: { type: 'guide', credits: 5, stars: 279, rub: 399, lavaRub: 399, launch: true,
            label: 'Гайд + ведение 90 дней', labelEn: 'Guide + 90-day coaching',
            oldStars: 349, oldRub: 499, oldLavaRub: 499 },
 };
