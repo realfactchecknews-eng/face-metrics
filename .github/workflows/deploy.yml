@@ -28,7 +28,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -R \
-            index.html app.js style.css \
+            index.html app.js style.css sharevideo.js \
             glossary.html glossary-en.html terms.html terms-en.html privacy.html privacy-en.html \
             fwhr.html psl-shkala.html psl-tiers.html canthal-tilt.html feedback.html faq.html \
             favicon.svg favicon-32.png favicon-180.png favicon-512.png og.png how-scan.jpg music.mp3 CNAME \

@@ -2834,3 +2834,7 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   width:7px; height:7px; border-radius:50%; background:var(--accent); flex:none;
   animation:aura 2.4s ease-in-out infinite;
 }
+
+/* ─── Кнопка рендера видео с результатом ─── */
+.video-btn{ width:100%; margin:14px 0 4px; cursor:pointer; }
+.video-btn[disabled]{ opacity:.55; cursor:default; }

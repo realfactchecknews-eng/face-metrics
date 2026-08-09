@@ -706,7 +706,7 @@ resetBtn.addEventListener("click", function() {
   loadingCard.classList.add("hidden");
   errorBox.classList.add("hidden");
   fileInput.value = ""; sideInput.value = "";
-  cleanImageCanvas = null; cleanSideCanvas = null;
+  cleanImageCanvas = null; cleanSideCanvas = null; window.cleanImageCanvas = null;
   frontImg = null; sideImg = null;
   document.getElementById("frontThumb").classList.add("hidden");
   document.getElementById("frontPlaceholder").classList.remove("hidden");
@@ -915,6 +915,7 @@ async function processImage(img, sideImage) {
     ctx.drawImage(img, 0, 0);
 
     cleanImageCanvas = document.createElement("canvas");
+    window.cleanImageCanvas = cleanImageCanvas;   // нужен рендеру видео (sharevideo.js)
     cleanImageCanvas.width  = canvas.width;
     cleanImageCanvas.height = canvas.height;
     cleanImageCanvas.getContext("2d").drawImage(img, 0, 0);
@@ -948,6 +949,7 @@ async function processImage(img, sideImage) {
     })();
     var metrics   = computeFaceMetrics(lm);
     var shapeInfo = classifyFaceShape(metrics);
+    window._fmLandmarks = lm;                     // нужны рендеру видео
     runFaceAnimation(lm, metrics, function() {
       resultsDiv.classList.remove("hidden");
       gateThenAI(metrics, shapeInfo);
@@ -1392,6 +1394,8 @@ function renderAIReport(text, skipSideEffects, isTeaser) {
       var li = document.createElement("li"); li.textContent = rec; recsList.appendChild(li);
     });
     aiRecs.classList.remove("hidden");
+    var vb = document.getElementById("videoBtn");
+    if (vb) vb.classList.remove("hidden");
   }
 
   // Отчёт готов — звук, сохранение, кнопка «Поделиться».
@@ -3612,4 +3616,25 @@ document.addEventListener('click', async (e) => {
     ? ch.html
     : '<p style="color:#8a8a8a">Текст главы не загрузился. Полная версия — в PDF, он у тебя в боте.</p>';
   row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+// Кнопка «Скачать видео»: рендер целиком в браузере, см. sharevideo.js
+document.addEventListener('click', async function (e) {
+  var btn = e.target.closest('#videoBtn');
+  if (!btn || btn.disabled) return;
+  var label = document.getElementById('videoBtnText');
+  var was = label ? label.textContent : '';
+  btn.disabled = true;
+  try {
+    var blob = await window.svMakeVideo(function (p) {
+      if (label) label.textContent = 'Собираю видео… ' + Math.round(p * 100) + '%';
+    });
+    window.svDownload(blob);
+    if (label) label.textContent = 'Готово, файл скачан';
+    setTimeout(function () { if (label) label.textContent = was; }, 3000);
+  } catch (err) {
+    if (label) label.textContent = 'Не получилось: ' + err.message;
+    setTimeout(function () { if (label) label.textContent = was; }, 4000);
+  }
+  btn.disabled = false;
 });
