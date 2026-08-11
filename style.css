@@ -2858,9 +2858,11 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
   border:1px solid; border-radius:100px; padding:3px 9px; white-space:nowrap;
 }
-.prop-tag.ideal{ color:#8fce9b; border-color:rgba(143,206,155,.4); }
-.prop-tag.good { color:var(--accent); border-color:rgba(196,164,107,.4); }
-.prop-tag.off  { color:#d9a08f; border-color:rgba(217,160,143,.4); }
+.prop-tag.plus { color:#8fce9b; border-color:rgba(143,206,155,.4); }
+.prop-tag.norm { color:var(--accent); border-color:rgba(196,164,107,.4); }
+.prop-tag.minus{ color:#d9a08f; border-color:rgba(217,160,143,.4); }
+/* Сужение к челюсти оцениваем не «хорошо/плохо», а словом — нейтральный вид. */
+.prop-tag.plain{ color:var(--text-dim); border-color:rgba(255,255,255,.16); }
 .prop-note{ font-size:11.5px; color:var(--text-dim); opacity:.7; margin-top:10px; }
 .tier-badge{
   display:inline-block; margin:0 auto 10px; padding:5px 16px; border-radius:100px;
