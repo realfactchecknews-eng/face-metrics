@@ -1,0 +1,119 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Стенд геометрии — FaceRate</title>
+<!-- Только для локальной проверки. В deploy.yml список файлов явный, сюда этот файл не попадает.
+     Ничего не считает сам: вся математика берётся из настоящего app.js через скрытый iframe
+     с index.html, поэтому цифры здесь ровно те же, что человек увидит в отчёте.
+     Нейросеть не вызывается, кредиты не списываются, фото никуда не уходит. -->
+<style>
+  body { margin:0; background:#0d0d0f; color:#f0ece6; font:15px/1.6 system-ui,sans-serif; padding:32px; }
+  h1 { font-weight:400; font-size:1.4rem; margin:0 0 4px; }
+  .sub { color:#8a8a92; font-size:.85rem; margin-bottom:24px; }
+  #drop { border:1px dashed #c4a46b66; border-radius:14px; padding:34px; text-align:center;
+          color:#8a8a92; cursor:pointer; transition:.2s; }
+  #drop.over { border-color:#c4a46b; background:#c4a46b0e; color:#f0ece6; }
+  .wrap { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; margin-top:24px; }
+  canvas { border-radius:12px; max-width:340px; height:auto; background:#000; }
+  table { border-collapse:collapse; font-size:.92rem; }
+  td { padding:7px 14px 7px 0; border-bottom:1px solid #ffffff12; }
+  td.v { font-variant-numeric:tabular-nums; text-align:right; color:#c4a46b; }
+  .tag { font-size:.72rem; padding:2px 8px; border-radius:99px; }
+  .ideal { background:#4ade8022; color:#4ade80; }
+  .good  { background:#60a5fa22; color:#60a5fa; }
+  .off   { background:#f8717122; color:#f87171; }
+  .extra { margin-top:18px; color:#8a8a92; font-size:.85rem; }
+  .extra b { color:#f0ece6; font-weight:400; }
+  #err { color:#f87171; margin-top:16px; }
+  iframe { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; border:0; }
+</style>
+
+<h1>Стенд геометрии</h1>
+<div class="sub">Считается на твоём устройстве. Нейросеть не вызывается, кредит не тратится.</div>
+
+<div id="drop">Перетащи фото сюда или нажми, чтобы выбрать</div>
+<input type="file" id="pick" accept="image/*" hidden>
+<div id="err"></div>
+
+<div class="wrap">
+  <canvas id="cv" hidden></canvas>
+  <div>
+    <table id="tbl"></table>
+    <div class="extra" id="extra"></div>
+  </div>
+</div>
+
+<iframe id="app" src="index.html"></iframe>
+
+<script>
+const drop = document.getElementById('drop'), pick = document.getElementById('pick');
+const err = document.getElementById('err'), tbl = document.getElementById('tbl');
+const extra = document.getElementById('extra'), cv = document.getElementById('cv');
+
+// Ждём, пока в iframe поднимется настоящее приложение со всеми функциями.
+function appWin() {
+  return new Promise(res => {
+    const f = document.getElementById('app');
+    const ready = () => {
+      const w = f.contentWindow;
+      if (w && typeof w.computeProportions === 'function') res(w);
+      else setTimeout(ready, 60);
+    };
+    ready();
+  });
+}
+
+drop.onclick = () => pick.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) run(e.dataTransfer.files[0]); };
+pick.onchange = () => { if (pick.files[0]) run(pick.files[0]); };
+
+async function run(file) {
+  err.textContent = ''; tbl.innerHTML = ''; extra.innerHTML = '';
+  drop.textContent = 'Считаю…';
+  try {
+    const w = await appWin();
+    // Именно возвращаемое значение: внутри app.js переменная объявлена через let,
+    // а такие объявления не становятся свойством window и снаружи не видны.
+    const fl = await w.initFaceLandmarker();
+
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i); i.onerror = () => rej(new Error('не удалось прочитать файл'));
+      i.src = URL.createObjectURL(file);
+    });
+
+    const det = fl.detect(img);
+    if (!det.faceLandmarks || !det.faceLandmarks.length) throw new Error('лицо не найдено — попробуй фото анфас, лицо покрупнее');
+    const lm = det.faceLandmarks[0];
+
+    // Превью с точками, чтобы было видно, что распозналось.
+    const scale = Math.min(1, 680 / Math.max(img.width, img.height));
+    cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+    const c = cv.getContext('2d');
+    c.drawImage(img, 0, 0, cv.width, cv.height);
+    c.fillStyle = 'rgba(196,164,107,.75)';
+    lm.forEach(p => c.fillRect(p.x * cv.width - 1, p.y * cv.height - 1, 2, 2));
+    cv.hidden = false;
+
+    const rows = w.computeProportions(lm);
+    tbl.innerHTML = rows.map(r =>
+      `<tr><td>${r.label}</td><td class="v">${r.value.toFixed(3)}</td>` +
+      `<td><span class="tag ${r.level}">${r.verdict}</span></td></tr>`).join('');
+
+    // Метрики из основного отчёта — чтобы сверять со шкалой симметрии в промпте.
+    const m = w.computeFaceMetrics ? w.computeFaceMetrics(lm) : null;
+    if (m) {
+      const shape = w.classifyFaceShape ? w.classifyFaceShape(m).shape : '—';
+      extra.innerHTML =
+        `Симметрия <b>${Math.round((m.symmetryScore || 0) * 100)}%</b> · ` +
+        `fWHR <b>${(m.widthHeightRatio || 0).toFixed(3)}</b> · ` +
+        `форма <b>${shape}</b>`;
+    }
+    drop.textContent = 'Готово. Кинь следующее фото';
+  } catch (e) {
+    err.textContent = e.message;
+    drop.textContent = 'Перетащи фото сюда или нажми, чтобы выбрать';
+  }
+}
+</script>
