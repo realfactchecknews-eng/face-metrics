@@ -97,7 +97,7 @@ async function run(file) {
     cv.hidden = false;
 
     // Замеры идут по пикселям кадра — так же, как в основном потоке.
-    const lmPx = w._toPixels(lm, img.width, img.height);
+    const lmPx = lm.map(p => ({ x: p.x * img.width, y: p.y * img.height, z: p.z * img.width }));
     const rows = w.computeProportions(lmPx);
     tbl.innerHTML = rows.map(r =>
       `<tr><td>${r.label}</td><td class="v">${r.value.toFixed(3)}</td>` +
@@ -108,6 +108,7 @@ async function run(file) {
     const shape = w.classifyFaceShape(m).shape;
     extra.innerHTML =
       `Симметрия <b>${Math.round((m.symmetryScore || 0) * 100)}%</b> · ` +
+      `поворот головы <b>${Math.round(m.yawDeg || 0)}°</b> · ` +
       `fWHR <b>${m.widthHeightRatio.toFixed(3)}</b> · ` +
       `форма <b>${shape}</b><br>` +
       `лоб/скулы <b>${(m.foreheadWidth / m.cheekboneWidth).toFixed(3)}</b> (эталон 0.974) · ` +
