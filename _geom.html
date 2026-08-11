@@ -28,7 +28,8 @@
 </style>
 
 <h1>Стенд геометрии</h1>
-<div class="sub">Считается на твоём устройстве. Нейросеть не вызывается, кредит не тратится.</div>
+<div class="sub">Считается на твоём устройстве. Нейросеть не вызывается, кредит не тратится.
+  <span id="ver" style="color:#c4a46b"></span></div>
 
 <div id="drop">Перетащи фото сюда или нажми, чтобы выбрать</div>
 <input type="file" id="pick" accept="image/*" hidden>
@@ -42,9 +43,14 @@
   </div>
 </div>
 
-<iframe id="app" src="index.html"></iframe>
+<!-- src проставляется скриптом с меткой времени: без неё браузер отдаёт
+     index.html из кэша вместе со старой версией app.js, и стенд молча
+     показывает результаты предыдущей правки. -->
+<iframe id="app"></iframe>
 
 <script>
+document.getElementById('app').src = 'index.html?_=' + Date.now();
+
 const drop = document.getElementById('drop'), pick = document.getElementById('pick');
 const err = document.getElementById('err'), tbl = document.getElementById('tbl');
 const extra = document.getElementById('extra'), cv = document.getElementById('cv');
@@ -55,12 +61,21 @@ function appWin() {
     const f = document.getElementById('app');
     const ready = () => {
       const w = f.contentWindow;
-      if (w && typeof w.computeProportions === 'function') res(w);
-      else setTimeout(ready, 60);
+      if (w && typeof w.computeProportions === 'function' && typeof w.headPose === 'function') {
+        // Показываем, какая версия app.js реально загрузилась.
+        const tag = f.contentDocument.querySelector('script[src*="app.js"]');
+        document.getElementById('ver').textContent =
+          '· код ' + (tag ? tag.getAttribute('src') : 'неизвестен');
+        res(w);
+      } else setTimeout(ready, 60);
     };
     ready();
   });
 }
+
+// Поднимаем приложение сразу, не дожидаясь фото: так метка версии видна
+// с первой секунды, а первый замер не ждёт загрузку модели.
+appWin();
 
 drop.onclick = () => pick.click();
 drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
