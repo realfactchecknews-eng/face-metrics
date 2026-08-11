@@ -96,20 +96,23 @@ async function run(file) {
     lm.forEach(p => c.fillRect(p.x * cv.width - 1, p.y * cv.height - 1, 2, 2));
     cv.hidden = false;
 
-    const rows = w.computeProportions(lm);
+    // Замеры идут по пикселям кадра — так же, как в основном потоке.
+    const lmPx = w._toPixels(lm, img.width, img.height);
+    const rows = w.computeProportions(lmPx);
     tbl.innerHTML = rows.map(r =>
       `<tr><td>${r.label}</td><td class="v">${r.value.toFixed(3)}</td>` +
       `<td><span class="tag ${r.level}">${r.verdict}</span></td></tr>`).join('');
 
     // Метрики из основного отчёта — чтобы сверять со шкалой симметрии в промпте.
-    const m = w.computeFaceMetrics ? w.computeFaceMetrics(lm) : null;
-    if (m) {
-      const shape = w.classifyFaceShape ? w.classifyFaceShape(m).shape : '—';
-      extra.innerHTML =
-        `Симметрия <b>${Math.round((m.symmetryScore || 0) * 100)}%</b> · ` +
-        `fWHR <b>${(m.widthHeightRatio || 0).toFixed(3)}</b> · ` +
-        `форма <b>${shape}</b>`;
-    }
+    const m = w.computeFaceMetrics(lmPx);
+    const shape = w.classifyFaceShape(m).shape;
+    extra.innerHTML =
+      `Симметрия <b>${Math.round((m.symmetryScore || 0) * 100)}%</b> · ` +
+      `fWHR <b>${m.widthHeightRatio.toFixed(3)}</b> · ` +
+      `форма <b>${shape}</b><br>` +
+      `лоб/скулы <b>${(m.foreheadWidth / m.cheekboneWidth).toFixed(3)}</b> (эталон 0.974) · ` +
+      `челюсть/скулы <b>${(m.jawWidth / m.cheekboneWidth).toFixed(3)}</b> (эталон 0.888) · ` +
+      `длина/ширина <b>${(m.faceHeight / m.cheekboneWidth).toFixed(3)}</b> (эталон 1.337)`;
     drop.textContent = 'Готово. Кинь следующее фото';
   } catch (e) {
     err.textContent = e.message;
