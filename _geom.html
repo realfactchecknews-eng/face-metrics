@@ -84,6 +84,8 @@ async function run(file) {
     });
 
     const det = fl.detect(img);
+    const mats = det.facialTransformationMatrixes;
+    const pose = (mats && mats[0]) ? w.headPose(mats[0].data) : null;
     if (!det.faceLandmarks || !det.faceLandmarks.length) throw new Error('лицо не найдено — попробуй фото анфас, лицо покрупнее');
     const lm = det.faceLandmarks[0];
 
@@ -108,9 +110,16 @@ async function run(file) {
     const shape = w.classifyFaceShape(m).shape;
     extra.innerHTML =
       `Симметрия <b>${Math.round((m.symmetryScore || 0) * 100)}%</b> · ` +
-      `поворот головы <b>${Math.round(m.yawDeg || 0)}°</b> · ` +
       `fWHR <b>${m.widthHeightRatio.toFixed(3)}</b> · ` +
       `форма <b>${shape}</b><br>` +
+      (pose
+        ? `<b>поза головы:</b> поворот ${pose.yaw.toFixed(1)}° · ` +
+          `наклон вверх-вниз ${pose.pitch.toFixed(1)}° · завал ${pose.roll.toFixed(1)}° · ` +
+          `отклонение от анфаса <b>${pose.offFrontal.toFixed(1)}°</b>` +
+          (pose.offFrontal > 15
+            ? ` <span style="color:#d9a08f">— велико, вертикальные отношения ненадёжны</span>`
+            : '') + '<br>'
+        : '') +
       `лоб/скулы <b>${(m.foreheadWidth / m.cheekboneWidth).toFixed(3)}</b> (эталон 0.974) · ` +
       `челюсть/скулы <b>${(m.jawWidth / m.cheekboneWidth).toFixed(3)}</b> (эталон 0.888) · ` +
       `длина/ширина <b>${(m.faceHeight / m.cheekboneWidth).toFixed(3)}</b> (эталон 1.337)`;
