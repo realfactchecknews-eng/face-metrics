@@ -115,29 +115,42 @@ async function run(file) {
 
     // Замеры идут по пикселям кадра — так же, как в основном потоке.
     const lmPx = lm.map(p => ({ x: p.x * img.width, y: p.y * img.height, z: p.z * img.width }));
-    const rows = w.computeProportions(lmPx);
-    tbl.innerHTML = rows.map(r =>
-      `<tr><td>${r.label}</td><td class="v">${r.value.toFixed(3)}</td>` +
-      `<td><span class="tag ${r.level}">${r.verdict}</span></td></tr>`).join('');
+    const rows    = w.computeProportions(lmPx, pose);   // с поправкой на наклон
+    const rowsRaw = w.computeProportions(lmPx, null);   // без неё, для сравнения
+    tbl.innerHTML = rows.map((r, i) => {
+      const was = rowsRaw[i].value;
+      const moved = Math.abs(was - r.value) / (was || 1) > 0.005;
+      return `<tr><td>${r.label}</td><td class="v">${r.value.toFixed(3)}` +
+        (moved ? `<span style="color:#666;font-size:.8em"> ← ${was.toFixed(3)}</span>` : '') +
+        `</td><td><span class="tag ${r.level}">${r.verdict}</span></td></tr>`;
+    }).join('');
 
     // Метрики из основного отчёта — чтобы сверять со шкалой симметрии в промпте.
+    // Поправку на наклон применяем так же, как это делает processImage.
     const m = w.computeFaceMetrics(lmPx);
+    const fwhrRaw = m.widthHeightRatio, lenRaw = m.faceHeight / m.cheekboneWidth;
+    if (pose) {
+      m.widthHeightRatio *= w.pitchFix('fwhr', pose.pitch);
+      m.faceHeight       *= w.pitchFix('lenWidth', pose.pitch);
+    }
     const shape = w.classifyFaceShape(m).shape;
+    const wasNote = v => `<span style="color:#666;font-size:.85em"> ← ${v}</span>`;
     extra.innerHTML =
       `Симметрия <b>${Math.round((m.symmetryScore || 0) * 100)}%</b> · ` +
-      `fWHR <b>${m.widthHeightRatio.toFixed(3)}</b> · ` +
+      `fWHR <b>${m.widthHeightRatio.toFixed(3)}</b>${wasNote(fwhrRaw.toFixed(3))} · ` +
       `форма <b>${shape}</b><br>` +
       (pose
         ? `<b>поза головы:</b> поворот ${pose.yaw.toFixed(1)}° · ` +
           `наклон вверх-вниз ${pose.pitch.toFixed(1)}° · завал ${pose.roll.toFixed(1)}° · ` +
           `отклонение от анфаса <b>${pose.offFrontal.toFixed(1)}°</b>` +
-          (pose.offFrontal > 15
-            ? ` <span style="color:#d9a08f">— велико, вертикальные отношения ненадёжны</span>`
-            : '') + '<br>'
+          (Math.abs(pose.pitch) > 25 || Math.abs(pose.yaw) > 20
+            ? ` <span style="color:#d9a08f">— поправка уже не спасает, нужен кадр ровнее</span>`
+            : ` <span style="color:#8fce9b">— наклон скомпенсирован</span>`) + '<br>'
         : '') +
       `лоб/скулы <b>${(m.foreheadWidth / m.cheekboneWidth).toFixed(3)}</b> (эталон 0.974) · ` +
       `челюсть/скулы <b>${(m.jawWidth / m.cheekboneWidth).toFixed(3)}</b> (эталон 0.888) · ` +
-      `длина/ширина <b>${(m.faceHeight / m.cheekboneWidth).toFixed(3)}</b> (эталон 1.337)`;
+      `длина/ширина <b>${(m.faceHeight / m.cheekboneWidth).toFixed(3)}</b>` +
+      wasNote(lenRaw.toFixed(3)) + ` (эталон 1.337)`;
     drop.textContent = 'Готово. Кинь следующее фото';
   } catch (e) {
     err.textContent = e.message;
