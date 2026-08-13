@@ -2883,3 +2883,7 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   .prop-val{ grid-column:2; grid-row:1; }
   .prop-name{ grid-column:1; grid-row:1; }
 }
+
+/* ─── Кнопка рендера видео с результатом ─── */
+.video-btn{ width:100%; margin:14px 0 4px; cursor:pointer; }
+.video-btn[disabled]{ opacity:.55; cursor:default; }
