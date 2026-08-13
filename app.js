@@ -2121,7 +2121,9 @@ function buildShareCard() {
     var score = parsed.overall !== null ? parsed.overall.toFixed(1) : (document.getElementById("overallScoreNum").textContent || "--");
     var by = py + ph + 175;
     g.textAlign = "left";
-    var scoreFont = "180px Georgia, serif", denomFont = "58px Georgia, serif";
+    // 150px вместо 180: на 180 цифра перетягивала на себя всю карточку и
+    // оставляла мало воздуха между фото и плашкой тира.
+    var scoreFont = "150px Georgia, serif", denomFont = "50px Georgia, serif";
     g.font = scoreFont; var wS = g.measureText(score).width;
     g.font = denomFont; var wD = g.measureText("/10").width;
     var sx = W / 2 - (wS + 14 + wD) / 2;

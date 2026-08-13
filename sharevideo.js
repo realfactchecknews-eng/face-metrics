@@ -14,7 +14,9 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 var SV_W = 540, SV_H = 960;       // вертикаль под сторис и репост в тг
-var SV_FPS = 25, SV_SECONDS = 7;
+// 30 кадров вместо 25: на 25 движение кольца и бегущей цифры заметно дёргалось.
+// 8 секунд вместо 7 — фазы перестали налезать друг на друга.
+var SV_FPS = 30, SV_SECONDS = 8;
 var SV_FRAMES = SV_FPS * SV_SECONDS;
 
 var SV_GOLD = '#c4a46b', SV_GOLD_HI = '#e8d4a0', SV_BG = '#0a0a0a', SV_TEXT = '#f4efe7';
@@ -71,19 +73,76 @@ function svPhoto(c, img, p) {
   return { x: x, y: y, w: w, h: h };
 }
 
-// Сетка точек поверх фото: проявляется и гаснет, как при сканировании.
-function svMesh(c, lm, box, p) {
-  if (!lm || !box.w) return;
-  var a = svPhase(p, .06, .22) * (1 - svPhase(p, .34, .52));
-  if (a <= 0.01) return;
+// Положение линии сканирования: 0..1 по высоте фото. Возвращает null, когда
+// сканирование ещё не началось или уже закончилось.
+function svScanY(p) {
+  var t = (p - SV_SCAN_FROM) / (SV_SCAN_TO - SV_SCAN_FROM);
+  if (t < 0 || t > 1) return null;
+  // Плавный разгон и торможение — линия не дёргается на старте и в конце.
+  return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+var SV_SCAN_FROM = .07, SV_SCAN_TO = .40;
+
+// Золотая линия сканирования с затемнением ниже неё — как на самом сайте.
+function svScan(c, box, p) {
+  var s = svScanY(p);
+  if (s === null || !box.w) return;
+  var y = box.y + s * box.h;
   c.save();
-  c.globalAlpha = a * .7;
-  c.fillStyle = SV_GOLD;
-  var keys = Object.keys(lm);
-  for (var i = 0; i < keys.length; i += 2) {
-    var pt = lm[keys[i]];
-    if (!pt) continue;
-    c.fillRect(box.x + pt.x * box.w - 1, box.y + pt.y * box.h - 1, 2, 2);
+  svRoundRect(c, box.x, box.y, box.w, box.h, 14); c.clip();
+  // ниже линии кадр притушен: видно, что часть ещё «не обработана»
+  var shade = c.createLinearGradient(0, y, 0, Math.min(y + box.h * .5, box.y + box.h));
+  shade.addColorStop(0, 'rgba(0,0,0,.45)'); shade.addColorStop(1, 'rgba(0,0,0,.12)');
+  c.fillStyle = shade; c.fillRect(box.x, y, box.w, box.h);
+  // свечение вокруг самой линии
+  var glow = c.createLinearGradient(0, y - 26, 0, y + 6);
+  glow.addColorStop(0, 'rgba(196,164,107,0)'); glow.addColorStop(1, 'rgba(196,164,107,.30)');
+  c.fillStyle = glow; c.fillRect(box.x, y - 26, box.w, 32);
+  c.shadowColor = SV_GOLD_HI; c.shadowBlur = 14;
+  c.strokeStyle = SV_GOLD_HI; c.lineWidth = 1.6;
+  c.beginPath(); c.moveTo(box.x, y); c.lineTo(box.x + box.w, y); c.stroke();
+  c.restore();
+}
+
+// Сетка поверх фото. Точки приходят в ПИКСЕЛЯХ исходного снимка, поэтому
+// приводим их к рамке через размеры самого фото: раньше здесь умножали на
+// ширину рамки, будто координаты нормализованы, и сетка улетала за кадр —
+// в готовом ролике её просто не было видно.
+function svMesh(c, lm, box, p, photo) {
+  if (!lm || !box.w || !photo || !photo.width) return;
+  var a = svPhase(p, .07, .2) * (1 - svPhase(p, .46, .62));
+  if (a <= 0.01) return;
+  var kx = box.w / photo.width, ky = box.h / photo.height;
+  var scan = svScanY(p);
+  var limitY = scan === null ? 1 : scan;   // во время скана рисуем только выше линии
+  function px(i) {
+    var pt = lm[i];
+    if (!pt) return null;
+    var ry = (pt.y / photo.height);
+    if (scan !== null && ry > limitY) return null;
+    return [box.x + pt.x * kx, box.y + ry * box.h];
+  }
+  c.save();
+  c.globalAlpha = a * .85;
+  // Линии сетки по тем же группам, что рисует анализ на сайте.
+  if (typeof MESH_GROUPS !== 'undefined') {
+    c.lineWidth = .7;
+    MESH_GROUPS.forEach(function (grp) {
+      c.strokeStyle = 'rgba(196,164,107,' + (grp.alpha * .75) + ')';
+      c.beginPath();
+      grp.conns.forEach(function (pair) {
+        var A = px(pair[0]), B = px(pair[1]);
+        if (!A || !B) return;
+        c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]);
+      });
+      c.stroke();
+    });
+  }
+  // Точки поверх линий — придают «замеру» плотность.
+  c.fillStyle = 'rgba(232,212,160,.75)';
+  for (var i = 0; i < lm.length; i += 3) {
+    var q = px(i);
+    if (q) c.fillRect(q[0] - .9, q[1] - .9, 1.8, 1.8);
   }
   c.restore();
 }
@@ -112,7 +171,7 @@ function svSpaced(c, s, x, y, font, color, gap, alpha) {
 }
 
 function svScoreRing(c, cx, cy, r, value, p) {
-  var grow = svPhase(p, .28, .62);
+  var grow = svPhase(p, .46, .72);
   c.save();
   c.lineWidth = 5; c.lineCap = 'round';
   c.strokeStyle = 'rgba(255,255,255,.08)';
@@ -127,7 +186,7 @@ function svScoreRing(c, cx, cy, r, value, p) {
 function svBars(c, cats, p) {
   var top = 722, rowH = 34, w = SV_W - 104, x = 52;
   cats.slice(0, 5).forEach(function (cat, i) {
-    var appear = svPhase(p, .5 + i * .04, .62 + i * .04);
+    var appear = svPhase(p, .62 + i * .045, .74 + i * .045);
     if (appear <= 0) return;
     var y = top + i * rowH;
     svText(c, cat.label, x, y, '400 16px "Inter", system-ui, sans-serif', 'rgba(230,226,219,.75)', 'left', appear);
@@ -156,32 +215,40 @@ function svDrawFrame(c, data, frame) {
            '300 13px "Inter", system-ui, sans-serif', SV_GOLD, 4, svPhase(p, 0, .1));
 
   var box = svPhoto(c, data.photo, p);
-  svMesh(c, data.landmarks, box, p);
+  svMesh(c, data.landmarks, box, p, data.photo);
+  svScan(c, box, p);
 
+  // Плашка тира появляется после того, как сканирование дошло до низа кадра.
   if (data.tier) {
-    var ta = svPhase(p, .2, .3);
+    var ta = svPhase(p, .42, .54);
     if (ta > 0) {
       c.save();
       c.globalAlpha = ta;
-      var tw = 118, tx = SV_W / 2 - tw / 2, ty = box.y + box.h - 50;
-      c.fillStyle = 'rgba(10,10,10,.65)'; c.strokeStyle = SV_GOLD; c.lineWidth = 1;
-      svRoundRect(c, tx, ty, tw, 32, 16); c.fill(); c.stroke();
+      c.font = '400 15px "Inter", system-ui, sans-serif';
+      var tw = c.measureText(data.tier).width + 3 * data.tier.length + 46;
+      var tx = SV_W / 2 - tw / 2, ty = box.y + box.h - 54, th = 36;
+      c.fillStyle = 'rgba(10,10,10,.72)';
+      svRoundRect(c, tx, ty, tw, th, th / 2); c.fill();
+      c.shadowColor = SV_GOLD_HI; c.shadowBlur = 16 * ta;
+      c.strokeStyle = SV_GOLD_HI; c.lineWidth = 1.2;
+      svRoundRect(c, tx, ty, tw, th, th / 2); c.stroke();
       c.restore();
-      svSpaced(c, data.tier, SV_W / 2, ty + 21, '400 13px "Inter", system-ui, sans-serif', SV_GOLD_HI, 3, ta);
+      svSpaced(c, data.tier, SV_W / 2, ty + 23,
+               '400 15px "Inter", system-ui, sans-serif', SV_GOLD_HI, 3, ta);
     }
   }
 
   // Общий балл: цифра набегает, кольцо заполняется
-  var shown = (data.overall || 0) * svPhase(p, .28, .62);
+  var shown = (data.overall || 0) * svPhase(p, .46, .72);
   svSpaced(c, 'ОБЩАЯ ОЦЕНКА', SV_W / 2, 578, '300 12px "Inter", system-ui, sans-serif',
-           'rgba(196,164,107,.85)', 4, svPhase(p, .24, .34));
+           'rgba(196,164,107,.85)', 4, svPhase(p, .44, .52));
   svScoreRing(c, SV_W / 2, 638, 48, data.overall || 0, p);
   svText(c, shown.toFixed(1), SV_W / 2, 653,
-         '400 50px "Cormorant Garamond", Georgia, serif', SV_TEXT, 'center', svPhase(p, .26, .36));
+         '400 50px "Cormorant Garamond", Georgia, serif', SV_TEXT, 'center', svPhase(p, .45, .53));
 
   svBars(c, data.categories || [], p);
 
-  var fa = svPhase(p, .8, .9);
+  var fa = svPhase(p, .86, .95);
   svSpaced(c, 'FACERATE.RU', SV_W / 2, SV_H - 52,
            '300 13px "Inter", system-ui, sans-serif', SV_GOLD, 5, fa);
 }
@@ -258,7 +325,13 @@ function svCollect() {
   var parsed = window._fmParsed;
   if (!parsed) return null;
   return {
-    photo: window.cleanImageCanvas || document.getElementById('canvas'),
+    // Именно cleanImageCanvas по имени, а не через window: в app.js он объявлен
+    // через let и свойством window не становится, так что window.cleanImageCanvas
+    // всегда undefined. Раньше из-за этого сюда попадал #canvas — тот, на котором
+    // уже нарисованы сетка и подписи замера, и ролик показывал их поверх фото,
+    // а собственная анимация сетки ложилась вторым слоем.
+    photo: (typeof cleanImageCanvas !== 'undefined' && cleanImageCanvas)
+             ? cleanImageCanvas : document.getElementById('canvas'),
     landmarks: window._fmLandmarks || null,
     overall: parsed.overall,
     categories: parsed.categories || [],
