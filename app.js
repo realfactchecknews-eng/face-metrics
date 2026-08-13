@@ -739,6 +739,8 @@ function clearReport() {
   if (desc) desc.textContent = "";
   var cats = document.getElementById("categoryScores");
   if (cats) cats.innerHTML = "";
+  var radar = document.getElementById("radarBlock");
+  if (radar) radar.classList.add("hidden");
   var recs = document.getElementById("recsList");
   if (recs) recs.innerHTML = "";
 
@@ -1089,6 +1091,90 @@ function pslTier(score) {
     if (score >= PSL_TIERS[i][0]) return { key: PSL_TIERS[i][1], label: PSL_TIERS[i][2] };
   }
   return { key: 'sub3', label: 'Sub-3' };
+}
+
+// Короткие подписи для лучей диаграммы: полные названия категорий по краям
+// восьмиугольника не помещаются и налезают друг на друга.
+var RADAR_SHORT = {
+  ru: ['Симметрия', 'Глаза', 'Мидфейс', 'Челюсть', 'Нос', 'Губы', 'Кожа', 'Груминг'],
+  en: ['Symmetry', 'Eyes', 'Midface', 'Jawline', 'Nose', 'Lips', 'Skin', 'Grooming'],
+};
+
+// Восьмиугольник по баллам категорий. Своих данных не считает — берёт те же
+// значения, что и полосы ниже, поэтому расходиться с ними не может.
+function renderRadar(cats) {
+  var host = document.getElementById('radarBlock');
+  var cv   = document.getElementById('radarCanvas');
+  if (!host || !cv || !cats || cats.length < 3) return;
+
+  var ru = lang() === 'ru';
+  var names = RADAR_SHORT[ru ? 'ru' : 'en'];
+  var vals = cats.slice(0, 8).map(function (c) { return Math.max(0, Math.min(10, c.score)); });
+  var n = vals.length;
+
+  var g = cv.getContext('2d');
+  var W = cv.width, H = cv.height;
+  var cx = W / 2, cy = H / 2 + 6, R = W * 0.325;
+  g.clearRect(0, 0, W, H);
+
+  // Угол i-го луча: начинаем сверху и идём по часовой стрелке.
+  function ang(i) { return -Math.PI / 2 + (i / n) * Math.PI * 2; }
+  function pt(i, r) { return [cx + Math.cos(ang(i)) * r, cy + Math.sin(ang(i)) * r]; }
+
+  // Сетка: кольца по 2 балла + лучи.
+  g.lineWidth = 1;
+  for (var ring = 1; ring <= 5; ring++) {
+    var rr = R * ring / 5;
+    g.beginPath();
+    for (var i = 0; i <= n; i++) { var p = pt(i % n, rr); i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }
+    g.strokeStyle = ring === 5 ? 'rgba(196,164,107,.32)' : 'rgba(255,255,255,.07)';
+    g.stroke();
+  }
+  for (var j = 0; j < n; j++) {
+    var e = pt(j, R);
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(e[0], e[1]);
+    g.strokeStyle = 'rgba(255,255,255,.07)'; g.stroke();
+  }
+
+  // Сама фигура.
+  g.beginPath();
+  vals.forEach(function (v, i) {
+    var p = pt(i, R * v / 10);
+    i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]);
+  });
+  g.closePath();
+  var fill = g.createRadialGradient(cx, cy, 0, cx, cy, R);
+  fill.addColorStop(0, 'rgba(232,207,150,.34)');
+  fill.addColorStop(1, 'rgba(196,164,107,.12)');
+  g.fillStyle = fill; g.fill();
+  g.strokeStyle = '#e8cf96'; g.lineWidth = 2; g.stroke();
+
+  // Точки на вершинах.
+  vals.forEach(function (v, i) {
+    var p = pt(i, R * v / 10);
+    g.beginPath(); g.arc(p[0], p[1], 4, 0, Math.PI * 2);
+    g.fillStyle = '#e8cf96'; g.fill();
+  });
+
+  // Подписи с баллами. Выравнивание зависит от того, слева луч или справа,
+  // иначе текст наезжает на фигуру.
+  g.font = '400 19px "Cormorant Garamond", Georgia, serif';
+  g.textBaseline = 'middle';
+  vals.forEach(function (v, i) {
+    var a = ang(i), lx = cx + Math.cos(a) * (R + 34), ly = cy + Math.sin(a) * (R + 30);
+    var cosA = Math.cos(a);
+    g.textAlign = Math.abs(cosA) < 0.25 ? 'center' : (cosA > 0 ? 'left' : 'right');
+    g.fillStyle = 'rgba(240,236,230,.72)';
+    g.fillText(names[i] || '', lx, ly - 11);
+    g.fillStyle = '#e8cf96';
+    g.font = '400 21px "Cormorant Garamond", Georgia, serif';
+    g.fillText(v.toFixed(1), lx, ly + 12);
+    g.font = '400 19px "Cormorant Garamond", Georgia, serif';
+  });
+
+  var ttl = document.getElementById('radarTitle');
+  if (ttl) ttl.textContent = ru ? 'Профиль лица' : 'Face profile';
+  host.classList.remove('hidden');
 }
 
 function renderProportions(lm, pose) {
@@ -1640,6 +1726,7 @@ function renderAIReport(text, skipSideEffects, isTeaser) {
     }, 120);
   } else { scoreEl.textContent = "--"; }
   renderProportions(window._fmLandmarks, window._fmMetrics && window._fmMetrics.pose);
+  renderRadar(parsed.categories);
   var tierEl = document.getElementById("tierBadge");
   if (tierEl) {
     if (parsed.overall !== null) {

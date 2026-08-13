@@ -21,7 +21,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=36" />
+<link rel="stylesheet" href="style.css?v=37" />
 
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
@@ -362,6 +362,12 @@
           <p id="overallDesc" class="overall-desc"></p>
         </div>
         <div id="propBlock" class="card scores-card prop-block hidden"></div>
+        <!-- Восьмиугольник по категориям. Рисуется из тех же баллов, что и полосы
+             ниже, поэтому отдельных данных не требует. -->
+        <div id="radarBlock" class="card scores-card radar-card hidden">
+          <span class="eyebrow" id="radarTitle">Профиль лица</span>
+          <canvas id="radarCanvas" width="620" height="620"></canvas>
+        </div>
         <div id="categoryScores" class="card scores-card"></div>
         <button id="videoBtn" class="btn-primary video-btn hidden" type="button">
           <span id="videoBtnText">🎬 Скачать видео с результатом</span>
@@ -560,7 +566,7 @@
      Модель assets/pill3d/scene.gltf — "Pill (Capsule)" by jaromir.ternavskiy,
      CC-BY-4.0, оставлена как исходник для пересъёмки:
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
-<script src="app.js?v=78"></script>
+<script src="app.js?v=79"></script>
 <script src="sharevideo.js?v=1"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════
