@@ -984,40 +984,24 @@ var PROP_DEFS = [
   ['cheekJaw',  'Сужение скул к челюсти','Cheekbones to jaw',      1.126, 'plain'],
 ];
 
-// Поправка на наклон камеры вверх-вниз.
+// Поправку на наклон камеры я пробовал и УБРАЛ. Оставляю запись, чтобы не
+// потратить время на неё второй раз.
 //
-// Снимок сверху укорачивает лицо, снизу — вытягивает, и вертикальные отношения
-// уезжают до 20%. Это больше настоящей разницы между людьми, поэтому без
-// поправки замер описывает не лицо, а то, как держали телефон.
+// Идея была такая: повернуть эталонную модель MediaPipe с шагом 3 градуса,
+// записать, во сколько раз уезжает каждое вертикальное отношение, и делить на
+// этот множитель. На самой модели работало идеально — разброс длины лица падал
+// с 12% до 0.4%, fWHR с 20% до 0.1%.
 //
-// Таблица снята с эталонной модели MediaPipe: её поворачивали с шагом 3 градуса
-// и делили значение при нулевом наклоне на значение при текущем. Горизонтальные
-// отношения (лоб/скулы, глаза, скулы/челюсть) наклон не трогает — их тут нет.
-var PITCH_FIX_FROM = -30, PITCH_FIX_STEP = 3;
-var PITCH_FIX = {
-  lenWidth: [1.159,1.122,1.091,1.065,1.044,1.028,1.015,1.006,1.000,0.999,1.000,
-             1.005,1.013,1.025,1.041,1.061,1.085,1.114,1.148,1.188,1.236],
-  noseFace: [1.195,1.168,1.143,1.119,1.098,1.079,1.061,1.044,1.028,1.014,1.000,
-             0.987,0.975,0.964,0.953,0.943,0.933,0.924,0.915,0.906,0.897],
-  // fWHR считается по верхним векам и только по вертикали (см. computeFaceMetrics),
-  // поэтому его кривая несимметрична и не похожа на остальные.
-  fwhr:     [0.741,0.780,0.818,0.852,0.883,0.911,0.936,0.957,0.975,0.989,1.000,
-             1.007,1.010,1.010,1.006,0.999,0.988,0.974,0.957,0.936,0.913],
-  lipsFace: [0.949,0.952,0.956,0.960,0.965,0.969,0.975,0.981,0.987,0.993,1.000,
-             1.007,1.015,1.022,1.030,1.039,1.047,1.056,1.065,1.074,1.083],
-};
-
-function pitchFix(key, pitchDeg) {
-  var tbl = PITCH_FIX[key];
-  if (!tbl || typeof pitchDeg !== 'number') return 1;
-  // За пределами таблицы не экстраполируем: там поправка уже недостоверна,
-  // а такие кадры мы всё равно помечаем как непригодные.
-  var p = Math.max(PITCH_FIX_FROM, Math.min(-PITCH_FIX_FROM, pitchDeg));
-  var pos = (p - PITCH_FIX_FROM) / PITCH_FIX_STEP;
-  var i = Math.floor(pos);
-  if (i >= tbl.length - 1) return tbl[tbl.length - 1];
-  return tbl[i] + (tbl[i + 1] - tbl[i]) * (pos - i);
-}
+// На живых лицах (три ракурса одного человека, 13.08.2026) не сработало:
+//   длина лица  разброс 8.2% -> 8.4%   поправка вдвое сильнее нужной
+//   fWHR        разброс 13%  -> 19%    поправка ушла В ПРОТИВОПОЛОЖНУЮ сторону
+// Причин две. Модель поворачивается вокруг центра лица, а живой человек — вокруг
+// шеи, и заодно меняет расстояние до камеры. А fWHR меряется до края верхнего
+// века: когда человек задирает голову, он ещё и шире открывает глаза, и это
+// движение века больше самого эффекта наклона.
+//
+// Поза головы всё равно считается (headPose) и уходит модели в промпт — знать
+// про кривой ракурс полезно, даже если чинить его этим способом нельзя.
 
 function computeProportions(lm, pose) {
   var faceH  = _dist(lm[10], lm[152]);
@@ -1030,13 +1014,11 @@ function computeProportions(lm, pose) {
   var eyeR   = _dist(lm[362], lm[263]);
   var eyeAvg = (eyeL + eyeR) / 2;
   var lipsW  = _dist(lm[61], lm[291]);
-  // Наклон камеры компенсируем, иначе отношения описывают ракурс, а не лицо.
-  var pd = pose ? pose.pitch : null;
   var raw = {
-    lenWidth:  (cheekW ? faceH / cheekW : 0) * pitchFix('lenWidth', pd),
-    noseFace:  (faceH ? noseL / faceH : 0)   * pitchFix('noseFace', pd),
+    lenWidth:  cheekW ? faceH / cheekW : 0,
+    noseFace:  faceH ? noseL / faceH : 0,
     eyeGap:    eyeAvg ? inter / eyeAvg : 0,
-    lipsFace:  (cheekW ? lipsW / cheekW : 0) * pitchFix('lipsFace', pd),
+    lipsFace:  cheekW ? lipsW / cheekW : 0,
     foreCheek: cheekW ? foreW / cheekW : 0,
     cheekJaw:  jawW ? cheekW / jawW : 0,
   };
@@ -1166,13 +1148,6 @@ async function processImage(img, sideImage) {
     var metrics   = computeFaceMetrics(lm);
     var mats = results.facialTransformationMatrixes;
     metrics.pose = (mats && mats[0]) ? headPose(mats[0].data) : null;
-    // Те же поправки, что и для пропорций: fWHR и длина лица меряются по
-    // вертикали, поэтому наклон камеры искажает их сильнее всего.
-    if (metrics.pose) {
-      var pdeg = metrics.pose.pitch;
-      metrics.widthHeightRatio *= pitchFix('fwhr', pdeg);
-      metrics.faceHeight       *= pitchFix('lenWidth', pdeg);
-    }
     var shapeInfo = classifyFaceShape(metrics);
     window._fmLandmarks = lm;          // нужны share-карточке и блоку пропорций
     window._fmMetrics   = metrics;
