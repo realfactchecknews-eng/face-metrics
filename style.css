@@ -2853,6 +2853,12 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 .prop-val{
   font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--text-bright);
   font-variant-numeric:lining-nums tabular-nums;
+  display:flex; flex-direction:column; align-items:flex-end; line-height:1.15;
+}
+/* Эталонное значение под числом: без опоры вердикт выглядит взявшимся из воздуха. */
+.prop-ref{
+  font-family:system-ui,sans-serif; font-style:normal; font-size:10px;
+  color:var(--text-dim); opacity:.65; letter-spacing:.02em; white-space:nowrap;
 }
 .prop-tag{
   font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
