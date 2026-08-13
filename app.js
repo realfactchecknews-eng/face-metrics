@@ -1982,9 +1982,9 @@ function buildShareCard() {
     g.fillText("AI AESTHETIC ANALYSIS", W / 2, 158); ls(0);
 
     // ── Фото со скруглением, сеткой точек и брекетами ──
-    // ph уменьшена с 500 до 460: плашка тира под баллом забрала 40px, и без этого
-    // на тизере (там ещё строка про замочек) нижний блок наезжал на футер.
-    var px = 120, py = 195, pw = W - 240, ph = 460, pr = 26;
+    // ph уменьшена с 500 до 400: подпись балла, плашка тира и строки категорий с
+    // иконками стали выше, и без этого блок сводки наезжал на футер.
+    var px = 120, py = 195, pw = W - 240, ph = 400, pr = 26;
     g.save();
     roundRect(g, px, py, pw, ph, pr); g.clip();
     // Кроп с привязкой к лицу (если рамка есть) — иначе cover по центру.
@@ -2043,10 +2043,12 @@ function buildShareCard() {
     g.font = scoreFont; g.fillStyle = sg; g.fillText(score, sx, by);
     g.font = denomFont; g.fillStyle = "#6f6858"; g.fillText("/10", sx + wS + 14, by - 8);
     g.textAlign = "center";
+    g.font = "26px Georgia, serif"; ls(10); g.fillStyle = GOLD;
+    g.fillText("OVERALL PSL SCORE", W / 2, by + 48); ls(0);
 
     // ── Плашка тира ──
-    // Заняла место подписи «OVERALL PSL SCORE»: та дублировала очевидное, а тир
-    // человек как раз и несёт в чат. Верхние тиры светлее, нижний — тёплый красный.
+    // Балл сам по себе мало что говорит; тир — это то, что человек несёт в чат.
+    // Верхние ступени светлее и со свечением, нижняя — приглушённо-красная.
     var tier = pslTier(parsed.overall !== null ? parsed.overall : 0);
     var TIER_COLOR = {
       trueadam: "#f7ecd2", adamlite: "#f2e4bd", chad: "#e8d4a0",
@@ -2054,32 +2056,43 @@ function buildShareCard() {
     };
     var tCol = TIER_COLOR[tier.key] || GOLD;
     var tLabel = tier.label.toUpperCase();
-    g.font = "30px Georgia, serif"; ls(7);
-    var tW = g.measureText(tLabel).width + 62;
-    var tH = 52, tX = W / 2 - tW / 2, tY = by + 22;
-    g.fillStyle = "rgba(196,164,107,0.08)";
-    roundRect(g, tX, tY, tW, tH, tH / 2); g.fill();
+    g.font = "31px Georgia, serif"; ls(7);
+    var tW = g.measureText(tLabel).width + 68;
+    var tH = 54, tX = W / 2 - tW / 2, tY = by + 74;
+    var tGlow = g.createLinearGradient(tX, tY, tX + tW, tY + tH);
+    tGlow.addColorStop(0, "rgba(196,164,107,0.05)");
+    tGlow.addColorStop(0.5, "rgba(232,212,160,0.16)");
+    tGlow.addColorStop(1, "rgba(196,164,107,0.05)");
+    g.fillStyle = tGlow; roundRect(g, tX, tY, tW, tH, tH / 2); g.fill();
     g.strokeStyle = tCol; g.lineWidth = 1.6;
     roundRect(g, tX, tY, tW, tH, tH / 2); g.stroke();
+    g.save(); g.shadowColor = tCol; g.shadowBlur = 22;
     g.fillStyle = tCol; g.textBaseline = "middle";
-    g.fillText(tLabel, W / 2, tY + tH / 2 + 2); ls(0);
+    g.fillText(tLabel, W / 2, tY + tH / 2 + 2); g.restore(); ls(0);
     g.textBaseline = "alphabetic";
-    g.font = "18px Georgia, serif"; ls(6); g.fillStyle = DIM;
-    g.fillText("PSL TIER", W / 2, tY + tH + 26); ls(0);
 
-    // Тизер (бесплатный урезанный отчёт) — замочек + приглашение открыть полный разбор в боте.
+    // Под плашкой — либо подпись «PSL TIER», либо (на бесплатном тизере) замочек.
+    // Слот один и тот же, поэтому высота карточки в обоих режимах одинаковая.
     if (window._fmTeaser) {
       g.font = "22px Georgia, serif"; ls(2); g.fillStyle = GOLD_HI;
-      g.fillText("🔒 " + (lang() === "ru" ? "ПОЛНЫЙ РАЗБОР НА FACERATE.RU" : "FULL REPORT ON FACERATE.RU"), W / 2, tY + tH + 62); ls(0);
+      g.fillText("🔒 " + (lang() === "ru" ? "ПОЛНЫЙ РАЗБОР НА FACERATE.RU" : "FULL REPORT ON FACERATE.RU"), W / 2, tY + tH + 34); ls(0);
+    } else {
+      g.font = "18px Georgia, serif"; ls(6); g.fillStyle = DIM;
+      g.fillText("PSL TIER", W / 2, tY + tH + 30); ls(0);
     }
-    // разделитель с ромбом (сдвинут ниже на тизере, чтобы не наезжать на надпись про замочек)
-    var dy = by + (window._fmTeaser ? 168 : 128);
-    var lg = g.createLinearGradient(W / 2 - 260, 0, W / 2 + 260, 0);
-    lg.addColorStop(0, "rgba(196,164,107,0)"); lg.addColorStop(0.5, "rgba(196,164,107,0.8)"); lg.addColorStop(1, "rgba(196,164,107,0)");
-    g.strokeStyle = lg; g.lineWidth = 1.5;
-    g.beginPath(); g.moveTo(W / 2 - 260, dy); g.lineTo(W / 2 + 260, dy); g.stroke();
-    g.save(); g.translate(W / 2, dy); g.rotate(Math.PI / 4);
-    g.fillStyle = GOLD_HI; g.fillRect(-5, -5, 10, 10); g.restore();
+
+    // Разделитель: тонкая линия с ярким горячим центром, как в макете.
+    var dy = tY + tH + 66;
+    var lg = g.createLinearGradient(W / 2 - 300, 0, W / 2 + 300, 0);
+    lg.addColorStop(0, "rgba(196,164,107,0)"); lg.addColorStop(0.5, "rgba(232,212,160,0.95)");
+    lg.addColorStop(1, "rgba(196,164,107,0)");
+    g.strokeStyle = lg; g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(W / 2 - 300, dy); g.lineTo(W / 2 + 300, dy); g.stroke();
+    // Свечение даём тенью на самой линии: заливка прямоугольником поверх чёрного
+    // читалась как серое пятно, а не как блик.
+    g.save(); g.shadowColor = "rgba(255,240,200,0.9)"; g.shadowBlur = 16;
+    g.beginPath(); g.moveTo(W / 2 - 70, dy); g.lineTo(W / 2 + 70, dy);
+    g.strokeStyle = "rgba(255,244,214,0.95)"; g.lineWidth = 1.4; g.stroke(); g.restore();
 
     // ── Категории: 2 колонки, бары ──
     // На тизере (бесплатный урезанный отчёт) parsed.categories содержит только 3 из 8 —
@@ -2093,50 +2106,64 @@ function buildShareCard() {
           return found ? { label: label, score: found.score, locked: false } : { label: label, score: null, locked: true };
         })
       : realCats.slice(0, 8).map(function(c){ return { label: c.label, score: c.score, locked: false }; });
-    var cy0 = dy + 60, rowH = 92, colW = 425;
-    var cols = [{ x: 105 }, { x: 105 + colW + 30 }];
+    // Иконки идут в том же порядке, что и FULL_CAT_LABELS.
+    var CAT_ICONS = ["sym", "eyes", "midface", "jaw", "nose", "lips", "skin", "hair"];
+    var cy0 = dy + 62, rowH = 92, colW = 400;
+    // Колонки заполняются СТОЛБЦАМИ, а не строками: сначала все четыре строки
+    // левой колонки, потом правой — так же, как в макете.
+    var perCol = Math.ceil(cats.length / 2);
+    var cols = [{ x: 96 }, { x: W - 96 - colW }];
     g.textBaseline = "alphabetic";
+
+    // Вертикальная нить между колонками с горячей точкой посередине.
+    var midX = W / 2, colTop = cy0 - 26, colBot = cy0 + perCol * rowH - 34;
+    var vg2 = g.createLinearGradient(0, colTop, 0, colBot);
+    vg2.addColorStop(0, "rgba(196,164,107,0)"); vg2.addColorStop(0.5, "rgba(196,164,107,0.5)");
+    vg2.addColorStop(1, "rgba(196,164,107,0)");
+    g.strokeStyle = vg2; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(midX, colTop); g.lineTo(midX, colBot); g.stroke();
+
     cats.forEach(function(cat, i) {
-      var col = cols[i % 2], row = Math.floor(i / 2);
+      var col = cols[Math.floor(i / perCol)], row = i % perCol;
       var x = col.x, y = cy0 + row * rowH;
-      // ромб-буллет
-      g.save(); g.translate(x + 9, y + 2); g.rotate(Math.PI / 4);
-      g.strokeStyle = cat.locked ? "#4a4a4a" : GOLD; g.lineWidth = 2; g.strokeRect(-6, -6, 12, 12); g.restore();
-      var name = cat.label.length > 20 ? cat.label.slice(0, 19) + "…" : cat.label;
-      var bw = colW - 50, bx = x + 32, byy = y + 34;
+      var icon = CAT_ICONS[FULL_CAT_LABELS.indexOf(cat.label)] || "sym";
+      var iconR = 30, textX = x + 74, valW = 92;
+      var bw = colW - 74 - valW, bx = textX, byy = y + 20;
+
       if (cat.locked) {
-        // Размытые название/балл/бар (нечитаемо намеренно) + чёткий замочек поверх.
+        drawCatIcon(g, icon, x + iconR, y - 2, iconR * 1.5, "#4a4438");
         g.save();
         try { g.filter = "blur(3px)"; } catch (e) {}
-        g.textBaseline = "alphabetic";
-        g.textAlign = "left"; g.font = "27px Georgia, serif"; g.fillStyle = "#555";
-        g.fillText(name, x + 32, y + 10);
-        g.textAlign = "right"; g.font = "31px Georgia, serif"; g.fillStyle = "#555";
-        g.fillText("6.5", x + colW - 18, y + 11);
-        g.fillStyle = "#242018"; roundRect(g, bx, byy, bw, 7, 3.5); g.fill();
-        g.fillStyle = "#4a4030"; roundRect(g, bx, byy, bw * 0.5, 7, 3.5); g.fill();
+        g.textAlign = "left"; g.font = "25px Georgia, serif"; g.fillStyle = "#555";
+        g.fillText(cat.label, textX, y - 2);
+        g.fillStyle = "#242018"; roundRect(g, bx, byy, bw, 4, 2); g.fill();
+        g.textAlign = "right"; g.font = "30px Georgia, serif"; g.fillStyle = "#555";
+        g.fillText("6.5", x + colW, y + 8);
         g.restore();
         g.textAlign = "center"; g.font = "24px Georgia, serif"; g.fillStyle = GOLD_HI;
-        g.fillText("🔒", x + colW / 2, y + 22);
-      } else {
-        // название + балл на ОДНОЙ линии (название слева, балл справа)
-        g.textBaseline = "alphabetic";
-        g.textAlign = "left"; g.font = "27px Georgia, serif"; g.fillStyle = TXT; ls(1);
-        g.fillText(name, x + 32, y + 10); ls(0);
-        g.textAlign = "right"; g.font = "31px Georgia, serif"; g.fillStyle = "#ecdaa8";
-        g.fillText(cat.score.toFixed(1), x + colW - 18, y + 11);
-        // бар под ними
-        g.fillStyle = "#1d1912"; roundRect(g, bx, byy, bw, 7, 3.5); g.fill();
-        var fillW = Math.max(8, bw * Math.min(cat.score, 10) / 10);
-        var bg2 = g.createLinearGradient(bx, 0, bx + fillW, 0);
-        bg2.addColorStop(0, "#8a6c38"); bg2.addColorStop(1, GOLD_HI);
-        g.fillStyle = bg2; roundRect(g, bx, byy, fillW, 7, 3.5); g.fill();
-        g.beginPath(); g.arc(bx + fillW, byy + 3.5, 5, 0, Math.PI * 2); g.fillStyle = GOLD_HI; g.fill();
+        g.fillText("🔒", bx + bw / 2, y + 6);
+        return;
       }
+
+      drawCatIcon(g, icon, x + iconR, y - 2, iconR * 1.5, GOLD);
+      // Название над полосой, балл — справа, крупно.
+      g.textAlign = "left"; g.font = "25px Georgia, serif"; g.fillStyle = TXT; ls(0.5);
+      g.fillText(cat.label.length > 19 ? cat.label.slice(0, 18) + "…" : cat.label, textX, y - 2); ls(0);
+      // Тонкая полоса: тёмная дорожка + золотая заливка по баллу.
+      g.fillStyle = "rgba(255,255,255,0.07)"; roundRect(g, bx, byy, bw, 3, 1.5); g.fill();
+      var fillW = Math.max(6, bw * Math.min(cat.score, 10) / 10);
+      var bg2 = g.createLinearGradient(bx, 0, bx + fillW, 0);
+      bg2.addColorStop(0, "rgba(138,108,56,0.85)"); bg2.addColorStop(1, GOLD_HI);
+      g.fillStyle = bg2; roundRect(g, bx, byy, fillW, 3, 1.5); g.fill();
+      g.save(); g.shadowColor = GOLD_HI; g.shadowBlur = 9;
+      g.beginPath(); g.arc(bx + fillW, byy + 1.5, 3.2, 0, Math.PI * 2);
+      g.fillStyle = GOLD_HI; g.fill(); g.restore();
+      g.textAlign = "right"; g.font = "33px Georgia, serif"; g.fillStyle = "#ecdaa8";
+      g.fillText(cat.score.toFixed(1), x + colW, y + 12);
     });
 
     // ── Summary + POTENTIAL ──
-    var sy = cy0 + Math.ceil(cats.length / 2) * rowH + 18;
+    var sy = cy0 + perCol * rowH + 4;
     var sh = 128;
     g.fillStyle = "rgba(255,255,255,0.025)";
     roundRect(g, 90, sy, W - 180, sh, 18); g.fill();
@@ -2188,6 +2215,77 @@ function buildShareCard() {
 
     c.toBlob(function(b) { resolve(b); }, "image/png");
   });
+}
+
+// Линейные иконки категорий для карточки. Рисуем путями, а не эмодзи: эмодзи
+// на канвасе выглядят по-разному в каждой системе и ломают строгий вид.
+function drawCatIcon(g, key, cx, cy, s, color) {
+  g.save();
+  g.translate(cx, cy);
+  g.strokeStyle = color; g.lineWidth = Math.max(1.4, s * 0.055);
+  g.lineJoin = "round"; g.lineCap = "round"; g.fillStyle = "transparent";
+  var u = s / 2;
+  function face() {           // овал лица
+    g.beginPath();
+    g.ellipse(0, 0, u * 0.72, u * 0.92, 0, 0, Math.PI * 2); g.stroke();
+  }
+  if (key === "sym") {
+    face();
+    g.beginPath(); g.moveTo(0, -u * 0.92); g.lineTo(0, u * 0.92); g.stroke();
+    g.beginPath(); g.arc(-u * 0.32, -u * 0.2, u * 0.13, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(u * 0.32, -u * 0.2, u * 0.13, 0, Math.PI * 2); g.stroke();
+  } else if (key === "eyes") {
+    g.beginPath();
+    g.moveTo(-u, 0); g.quadraticCurveTo(0, -u * 0.78, u, 0);
+    g.quadraticCurveTo(0, u * 0.78, -u, 0); g.stroke();
+    g.beginPath(); g.arc(0, 0, u * 0.3, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(0, 0, u * 0.11, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+  } else if (key === "midface") {
+    face();
+    g.beginPath(); g.moveTo(-u * 0.62, -u * 0.05); g.quadraticCurveTo(-u * 0.3, u * 0.2, -u * 0.1, u * 0.05); g.stroke();
+    g.beginPath(); g.moveTo(u * 0.62, -u * 0.05); g.quadraticCurveTo(u * 0.3, u * 0.2, u * 0.1, u * 0.05); g.stroke();
+  } else if (key === "jaw") {
+    g.beginPath();
+    g.moveTo(-u * 0.78, -u * 0.7); g.lineTo(-u * 0.7, u * 0.05);
+    g.quadraticCurveTo(0, u * 0.95, u * 0.7, u * 0.05);
+    g.lineTo(u * 0.78, -u * 0.7); g.stroke();
+  } else if (key === "nose") {
+    g.beginPath();
+    g.moveTo(-u * 0.12, -u * 0.85); g.lineTo(-u * 0.3, u * 0.28);
+    g.quadraticCurveTo(0, u * 0.62, u * 0.3, u * 0.28);
+    g.lineTo(u * 0.12, -u * 0.85); g.stroke();
+    g.beginPath(); g.arc(-u * 0.42, u * 0.4, u * 0.13, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(u * 0.42, u * 0.4, u * 0.13, 0, Math.PI * 2); g.stroke();
+  } else if (key === "lips") {
+    g.beginPath();
+    g.moveTo(-u * 0.9, 0);
+    g.quadraticCurveTo(-u * 0.45, -u * 0.55, 0, -u * 0.16);
+    g.quadraticCurveTo(u * 0.45, -u * 0.55, u * 0.9, 0);
+    g.quadraticCurveTo(u * 0.45, u * 0.62, 0, u * 0.62);
+    g.quadraticCurveTo(-u * 0.45, u * 0.62, -u * 0.9, 0);
+    g.stroke();
+    g.beginPath(); g.moveTo(-u * 0.9, 0); g.lineTo(u * 0.9, 0); g.stroke();
+  } else if (key === "skin") {
+    [[0, -u * 0.28, u * 0.62], [-u * 0.6, u * 0.42, u * 0.36], [u * 0.6, u * 0.38, u * 0.3]].forEach(function (k) {
+      var x = k[0], y = k[1], r = k[2];
+      g.beginPath();
+      g.moveTo(x, y - r); g.quadraticCurveTo(x + r * 0.18, y - r * 0.18, x + r, y);
+      g.quadraticCurveTo(x + r * 0.18, y + r * 0.18, x, y + r);
+      g.quadraticCurveTo(x - r * 0.18, y + r * 0.18, x - r, y);
+      g.quadraticCurveTo(x - r * 0.18, y - r * 0.18, x, y - r);
+      g.stroke();
+    });
+  } else if (key === "hair") {
+    face();
+    g.beginPath();
+    g.moveTo(-u * 0.74, -u * 0.3);
+    g.quadraticCurveTo(-u * 0.62, -u * 1.06, 0, -u * 0.96);
+    g.quadraticCurveTo(u * 0.62, -u * 1.06, u * 0.74, -u * 0.3);
+    g.quadraticCurveTo(u * 0.4, -u * 0.62, 0, -u * 0.56);
+    g.quadraticCurveTo(-u * 0.4, -u * 0.62, -u * 0.74, -u * 0.3);
+    g.stroke();
+  }
+  g.restore();
 }
 
 function roundRect(c2, x, y, w, h, r) {
