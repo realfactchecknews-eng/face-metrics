@@ -2869,8 +2869,14 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   font-size:11px; letter-spacing:.24em; text-transform:uppercase;
   border:1px solid var(--accent); color:var(--accent-hi); background:rgba(196,164,107,.07);
 }
+/* Верхние тиры светлее и ярче, нижний — приглушённый тёплый красный.
+   Средние (htn/mtn/ltn) остаются на базовом золоте. */
+.tier-badge.trueadam, .tier-badge.adamlite{
+  border-color:#f2e4bd; color:#f7ecd2; background:rgba(232,212,160,.14);
+  box-shadow:0 0 18px rgba(232,212,160,.22);
+}
 .tier-badge.chad, .tier-badge.chadlite{ border-color:#e8d4a0; color:#e8d4a0; }
-.tier-badge.sub5, .tier-badge.sub3{ border-color:rgba(217,160,143,.5); color:#d9a08f; }
+.tier-badge.sub3{ border-color:rgba(217,160,143,.5); color:#d9a08f; }
 @media (max-width:600px){
   .prop-row{ grid-template-columns:1fr auto; row-gap:4px; }
   .prop-tag{ grid-column:2; }
