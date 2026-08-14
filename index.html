@@ -21,7 +21,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=39" />
+<link rel="stylesheet" href="style.css?v=40" />
 
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
@@ -548,6 +548,35 @@
   </div>
 </div>
 
+<!-- ПАМЯТКА ПО СЪЁМКЕ.
+     Показывается один раз, СТРОГО после соглашения (см. proceedWithTips в app.js),
+     чтобы два окна не встали друг на друга. Общая для анализа и для дуэли. -->
+<div id="tipsModal" class="consent-overlay hidden">
+  <div class="consent-box tips-box">
+    <span class="eyebrow" id="tipsEyebrow">ЧТОБЫ ЗАМЕР БЫЛ ТОЧНЫМ</span>
+    <h2 class="consent-title" id="tipsTitle">Как сфотографироваться</h2>
+    <div class="consent-body">
+      <ul class="tips-list" id="tipsList">
+        <li><b>Камера на уровне глаз.</b> Съёмка сверху укорачивает лицо, снизу — вытягивает.
+            Это сильнее влияет на пропорции, чем реальная разница между людьми.</li>
+        <li><b>Лицо анфас, взгляд в камеру.</b> Поворот головы механически занижает симметрию.</li>
+        <li><b>Расстояние 40–60 см.</b> Слишком близко — перспектива искажает нос и скулы.</li>
+        <li><b>Ровный рассеянный свет.</b> Жёсткие тени подделывают скулы и линию челюсти,
+            контровой свет съедает черты.</li>
+        <li><b>Ничего не перекрывает лицо.</b> Волосы со лба, без очков, шапки и маски.</li>
+        <li><b>Нейтральное выражение, рот закрыт.</b> Улыбка меняет и щёки, и глаза.</li>
+        <li><b>Без фильтров и бьюти-режима.</b> Они правят ровно то, что мы измеряем.</li>
+      </ul>
+      <p class="tips-note" id="tipsNote">Плохой ракурс не сломает разбор целиком — часть замеров
+        просто будет помечена как ненадёжная.</p>
+    </div>
+    <div class="consent-actions">
+      <button id="tipsBack" class="btn-reset">Назад</button>
+      <button id="tipsGo" class="btn-primary">Всё понятно</button>
+    </div>
+  </div>
+</div>
+
 <!-- PAYWALL: показывается после сканирования, перед генерацией отчёта -->
 <div id="paywall" class="paywall hidden">
   <div class="pw-box">
@@ -591,7 +620,7 @@
      Модель assets/pill3d/scene.gltf — "Pill (Capsule)" by jaromir.ternavskiy,
      CC-BY-4.0, оставлена как исходник для пересъёмки:
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
-<script src="app.js?v=87"></script>
+<script src="app.js?v=88"></script>
 <script src="sharevideo.js?v=4"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════

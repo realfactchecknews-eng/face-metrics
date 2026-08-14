@@ -2940,3 +2940,22 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   .video-btn{ padding:13px 14px; gap:11px; }
   .video-btn-tx i{ font-size:11px; }
 }
+
+/* ─── Памятка по съёмке ───
+   Делит оформление с окном соглашения, чтобы не плодить второй стиль модалки. */
+.tips-box{ max-width:560px; }
+.tips-list{ list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:13px; }
+.tips-list li{
+  position:relative; padding-left:22px; font-size:14px; line-height:1.55;
+  color:var(--text-dim);
+}
+.tips-list li b{ color:var(--text-bright); font-weight:400; }
+/* Ромб вместо маркера — тот же приём, что в карточке результата. */
+.tips-list li::before{
+  content:""; position:absolute; left:2px; top:8px; width:7px; height:7px;
+  border:1px solid var(--accent); transform:rotate(45deg);
+}
+.tips-note{
+  margin-top:18px; padding-top:14px; border-top:1px solid rgba(255,255,255,.06);
+  font-size:12.5px; color:var(--text-dim); opacity:.75; line-height:1.5;
+}

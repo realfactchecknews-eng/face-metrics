@@ -91,6 +91,17 @@ var I18N = {
       "<p class='consent-full-link'><a href='terms-en.html' target='_blank' rel='noopener'>Full terms →</a><br/><a href='privacy-en.html' target='_blank' rel='noopener'>Privacy policy →</a></p>",
     consentCheck: "I have read and accept the terms",
     consentAccept: "I agree", consentDecline: "Cancel",
+    tipsEyebrow: "FOR AN ACCURATE READING", tipsTitle: "How to take the photo",
+    tipsGo: "Got it", tipsBack: "Back",
+    tipsNote: "A bad angle will not ruin the whole report — some measurements will simply be marked as unreliable.",
+    tipsList:
+      "<li><b>Camera at eye level.</b> Shooting from above shortens the face, from below stretches it. That skews proportions more than the real difference between people.</li>" +
+      "<li><b>Face the camera straight on.</b> A turned head mechanically lowers the symmetry score.</li>" +
+      "<li><b>Keep 40-60 cm of distance.</b> Any closer and perspective distorts the nose and cheekbones.</li>" +
+      "<li><b>Even, diffused light.</b> Hard shadows fake cheekbones and a jawline; backlight eats the features.</li>" +
+      "<li><b>Nothing covering the face.</b> Hair off the forehead, no glasses, hat or mask.</li>" +
+      "<li><b>Neutral expression, mouth closed.</b> A smile changes both the cheeks and the eyes.</li>" +
+      "<li><b>No filters or beauty mode.</b> They edit exactly what we measure.</li>",
     footLegal: "<a href='terms-en.html' style='color:#888;text-decoration:none'>Terms of use</a>&nbsp;·&nbsp;<a href='privacy-en.html' style='color:#888;text-decoration:none'>Privacy policy</a>",
     // dynamic
     pwReady: "Your report is ready",
@@ -193,6 +204,17 @@ var I18N = {
       "<p class='consent-full-link'><a href='terms.html' target='_blank' rel='noopener'>Полный текст соглашения →</a><br/><a href='privacy.html' target='_blank' rel='noopener'>Политика конфиденциальности →</a></p>",
     consentCheck: "Я прочитал(а) и принимаю условия",
     consentAccept: "Принимаю", consentDecline: "Отмена",
+    tipsEyebrow: "ЧТОБЫ ЗАМЕР БЫЛ ТОЧНЫМ", tipsTitle: "Как сфотографироваться",
+    tipsGo: "Всё понятно", tipsBack: "Назад",
+    tipsNote: "Плохой ракурс не сломает разбор целиком — часть замеров просто будет помечена как ненадёжная.",
+    tipsList:
+      "<li><b>Камера на уровне глаз.</b> Съёмка сверху укорачивает лицо, снизу — вытягивает. Это сильнее влияет на пропорции, чем реальная разница между людьми.</li>" +
+      "<li><b>Лицо анфас, взгляд в камеру.</b> Поворот головы механически занижает симметрию.</li>" +
+      "<li><b>Расстояние 40-60 см.</b> Слишком близко — перспектива искажает нос и скулы.</li>" +
+      "<li><b>Ровный рассеянный свет.</b> Жёсткие тени подделывают скулы и линию челюсти, контровой свет съедает черты.</li>" +
+      "<li><b>Ничего не перекрывает лицо.</b> Волосы со лба, без очков, шапки и маски.</li>" +
+      "<li><b>Нейтральное выражение, рот закрыт.</b> Улыбка меняет и щёки, и глаза.</li>" +
+      "<li><b>Без фильтров и бьюти-режима.</b> Они правят ровно то, что мы измеряем.</li>",
     footLegal: "<a href='terms.html' style='color:#888;text-decoration:none'>Пользовательское соглашение</a>&nbsp;·&nbsp;<a href='privacy.html' style='color:#888;text-decoration:none'>Политика конфиденциальности</a>",
     pwReady: "Твой отчёт готов",
     pwLoginSub: "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.",
@@ -293,8 +315,11 @@ function applyLang() {
     ["#consentModal .consent-title", "consentTitle"],
     [".consent-check-row span", "consentCheck"],
     ["#consentAccept", "consentAccept"], ["#consentDecline", "consentDecline"],
+    ["#tipsEyebrow", "tipsEyebrow"], ["#tipsTitle", "tipsTitle"],
+    ["#tipsNote", "tipsNote"], ["#tipsGo", "tipsGo"], ["#tipsBack", "tipsBack"],
   ];
   var HTML = [
+    ["#tipsList", "tipsList"],
     ["#accLoggedOut .acc-lo-text i", "accLoSub"],
     ["#consentModal .consent-body", "consentBody"],
     ["#mainFooter .container > p:last-child", "footLegal"],
@@ -623,12 +648,8 @@ function loadSideFile(file) {
 // -- Analyze -----------------------------------------------------------
 analyzeBtn.addEventListener("click", function() {
   if (!frontImg) return;
-  // Перед первой генерацией — показать соглашение и взять согласие.
-  if (localStorage.getItem("fm-consent-v2") !== "1") {
-    showConsent();
-    return;
-  }
-  runAnalysis();
+  // Соглашение, затем памятка по съёмке, затем сам анализ — см. runWithGates.
+  if (runWithGates(runAnalysis)) runAnalysis();
 });
 
 function runAnalysis() {
@@ -677,6 +698,64 @@ function showConsent() {
   if (m) m.classList.remove("hidden");
 }
 
+/* ═══════════ Соглашение и памятка по съёмке: строгая очередь ═══════════
+   Два окна никогда не показываются одновременно. Порядок всегда один:
+   сначала соглашение (если ещё не принято), потом памятка (если её ещё не
+   видели), и только затем сам запуск. Куда идти дальше, помнит _afterGates —
+   поэтому и анализ, и дуэль пользуются одним и тем же механизмом. */
+var TIPS_KEY = "fm-tips-v1";
+var _afterGates = null;
+
+function gatesPassed() {
+  return localStorage.getItem("fm-consent-v2") === "1" &&
+         localStorage.getItem(TIPS_KEY) === "1";
+}
+
+// Вызывать вместо прямого запуска. Возвращает true, если можно идти дальше.
+function runWithGates(next) {
+  _afterGates = next;
+  if (localStorage.getItem("fm-consent-v2") !== "1") { showConsent(); return false; }
+  if (localStorage.getItem(TIPS_KEY) !== "1")        { showTips();    return false; }
+  return true;
+}
+
+function showTips() {
+  var m = document.getElementById("tipsModal");
+  if (!m) { finishGates(); return; }
+  m.classList.remove("hidden");
+}
+
+function finishGates() {
+  var next = _afterGates;
+  _afterGates = null;
+  if (typeof next === "function") next();
+}
+
+(function initTips() {
+  var modal = document.getElementById("tipsModal");
+  if (!modal) return;
+  var go = document.getElementById("tipsGo");
+  var back = document.getElementById("tipsBack");
+  if (go) go.addEventListener("click", function () {
+    localStorage.setItem(TIPS_KEY, "1");
+    modal.classList.add("hidden");
+    finishGates();
+  });
+  // «Назад» закрывает памятку и НЕ запускает анализ: человек мог захотеть
+  // переснять фото. Флаг при этом не ставим — покажем ещё раз.
+  if (back) back.addEventListener("click", function () {
+    modal.classList.add("hidden");
+    _afterGates = null;
+  });
+})();
+
+// Ссылка «как фотографироваться» — открывает памятку принудительно, без запуска.
+window.fmShowTips = function () {
+  _afterGates = null;
+  var m = document.getElementById("tipsModal");
+  if (m) m.classList.remove("hidden");
+};
+
 (function initConsent() {
   var modal  = document.getElementById("consentModal");
   if (!modal) return;
@@ -692,9 +771,11 @@ function showConsent() {
     localStorage.setItem("fm-consent-v2", "1");
     localStorage.setItem("fm-consent-date", new Date().toISOString());
     modal.classList.add("hidden");
-    runAnalysis();
+    // Дальше по очереди: памятка по съёмке, потом то, что ждало (анализ или дуэль).
+    if (localStorage.getItem(TIPS_KEY) !== "1") showTips();
+    else finishGates();
   });
-  decline.addEventListener("click", function() { modal.classList.add("hidden"); });
+  decline.addEventListener("click", function() { modal.classList.add("hidden"); _afterGates = null; });
 })();
 
 resetBtn.addEventListener("click", function() {
@@ -3036,6 +3117,9 @@ function pwRecheck(silent) {
     if (!A.box){ cmpErr(t("cmpNoFaceA")); return; }
     if (!B.box){ cmpErr(t("cmpNoFaceB")); return; }
     cmpErr("");
+    // Соглашение и памятка — те же, что у обычного анализа. Раньше дуэль их
+    // не спрашивала вовсе, хотя грузят сюда чаще чужое лицо, чем своё.
+    if (!runWithGates(runCompare)) return;
     // Гейт: Who Moggs НЕ входит в бесплатную квоту (freeLeft) — только безлимит или платные кредиты.
     _afterGate = doCompare;
     fetchStatus(false).then(function(st){
