@@ -2045,6 +2045,12 @@ function drawBrandPill(g, cx, cy, w, h) {
 // Люкс-карточка результата 1080×1560: бренд, фото с сеткой и брекетами,
 // крупный балл, бары категорий, summary + POTENTIAL, facerate.ru.
 function buildShareCard() {
+  // Сначала дожидаемся иконок: без этого они не успевают загрузиться и
+  // не попадают в готовый PNG.
+  return loadCatIcons().then(function () { return _buildShareCard(); });
+}
+
+function _buildShareCard() {
   return new Promise(function(resolve) {
     var src = cleanImageCanvas || canvas;
     var parsed = window._fmParsed || { overall: null, overallDesc: "", categories: [] };
@@ -2234,7 +2240,7 @@ function buildShareCard() {
       var bw = colW - 74 - valW, bx = textX, byy = y + 20;
 
       if (cat.locked) {
-        drawCatIcon(g, icon, x + iconR, y - 2, iconR * 1.5, "#4a4438");
+        drawCatIcon(g, icon, x + iconR, y - 2, iconR * 1.9, "#4a4438");
         g.save();
         try { g.filter = "blur(3px)"; } catch (e) {}
         g.textAlign = "left"; g.font = "25px Georgia, serif"; g.fillStyle = "#555";
@@ -2248,7 +2254,7 @@ function buildShareCard() {
         return;
       }
 
-      drawCatIcon(g, icon, x + iconR, y - 2, iconR * 1.5, GOLD);
+      drawCatIcon(g, icon, x + iconR, y - 2, iconR * 1.9, GOLD);
       // Название над полосой, балл — справа, крупно.
       g.textAlign = "left"; g.font = "25px Georgia, serif"; g.fillStyle = TXT; ls(0.5);
       g.fillText(cat.label.length > 19 ? cat.label.slice(0, 18) + "…" : cat.label, textX, y - 2); ls(0);
@@ -2320,75 +2326,58 @@ function buildShareCard() {
   });
 }
 
-// Линейные иконки категорий для карточки. Рисуем путями, а не эмодзи: эмодзи
-// на канвасе выглядят по-разному в каждой системе и ломают строгий вид.
-function drawCatIcon(g, key, cx, cy, s, color) {
-  g.save();
-  g.translate(cx, cy);
-  g.strokeStyle = color; g.lineWidth = Math.max(1.4, s * 0.055);
-  g.lineJoin = "round"; g.lineCap = "round"; g.fillStyle = "transparent";
-  var u = s / 2;
-  function face() {           // овал лица
-    g.beginPath();
-    g.ellipse(0, 0, u * 0.72, u * 0.92, 0, 0, Math.PI * 2); g.stroke();
-  }
-  if (key === "sym") {
-    face();
-    g.beginPath(); g.moveTo(0, -u * 0.92); g.lineTo(0, u * 0.92); g.stroke();
-    g.beginPath(); g.arc(-u * 0.32, -u * 0.2, u * 0.13, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(u * 0.32, -u * 0.2, u * 0.13, 0, Math.PI * 2); g.stroke();
-  } else if (key === "eyes") {
-    g.beginPath();
-    g.moveTo(-u, 0); g.quadraticCurveTo(0, -u * 0.78, u, 0);
-    g.quadraticCurveTo(0, u * 0.78, -u, 0); g.stroke();
-    g.beginPath(); g.arc(0, 0, u * 0.3, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(0, 0, u * 0.11, 0, Math.PI * 2); g.fillStyle = color; g.fill();
-  } else if (key === "midface") {
-    face();
-    g.beginPath(); g.moveTo(-u * 0.62, -u * 0.05); g.quadraticCurveTo(-u * 0.3, u * 0.2, -u * 0.1, u * 0.05); g.stroke();
-    g.beginPath(); g.moveTo(u * 0.62, -u * 0.05); g.quadraticCurveTo(u * 0.3, u * 0.2, u * 0.1, u * 0.05); g.stroke();
-  } else if (key === "jaw") {
-    g.beginPath();
-    g.moveTo(-u * 0.78, -u * 0.7); g.lineTo(-u * 0.7, u * 0.05);
-    g.quadraticCurveTo(0, u * 0.95, u * 0.7, u * 0.05);
-    g.lineTo(u * 0.78, -u * 0.7); g.stroke();
-  } else if (key === "nose") {
-    g.beginPath();
-    g.moveTo(-u * 0.12, -u * 0.85); g.lineTo(-u * 0.3, u * 0.28);
-    g.quadraticCurveTo(0, u * 0.62, u * 0.3, u * 0.28);
-    g.lineTo(u * 0.12, -u * 0.85); g.stroke();
-    g.beginPath(); g.arc(-u * 0.42, u * 0.4, u * 0.13, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(u * 0.42, u * 0.4, u * 0.13, 0, Math.PI * 2); g.stroke();
-  } else if (key === "lips") {
-    g.beginPath();
-    g.moveTo(-u * 0.9, 0);
-    g.quadraticCurveTo(-u * 0.45, -u * 0.55, 0, -u * 0.16);
-    g.quadraticCurveTo(u * 0.45, -u * 0.55, u * 0.9, 0);
-    g.quadraticCurveTo(u * 0.45, u * 0.62, 0, u * 0.62);
-    g.quadraticCurveTo(-u * 0.45, u * 0.62, -u * 0.9, 0);
-    g.stroke();
-    g.beginPath(); g.moveTo(-u * 0.9, 0); g.lineTo(u * 0.9, 0); g.stroke();
-  } else if (key === "skin") {
-    [[0, -u * 0.28, u * 0.62], [-u * 0.6, u * 0.42, u * 0.36], [u * 0.6, u * 0.38, u * 0.3]].forEach(function (k) {
-      var x = k[0], y = k[1], r = k[2];
-      g.beginPath();
-      g.moveTo(x, y - r); g.quadraticCurveTo(x + r * 0.18, y - r * 0.18, x + r, y);
-      g.quadraticCurveTo(x + r * 0.18, y + r * 0.18, x, y + r);
-      g.quadraticCurveTo(x - r * 0.18, y + r * 0.18, x - r, y);
-      g.quadraticCurveTo(x - r * 0.18, y - r * 0.18, x, y - r);
-      g.stroke();
+/* ═══════════ Иконки категорий для карточки ═══════════
+   Готовые PNG в assets/icons/ (белые линии на прозрачном фоне, 256x256).
+   Раньше эти же иконки рисовались путями прямо здесь — выходило грубо, потому
+   что аккуратная кривая руками на канвасе не набирается. Цвет накладываем сами
+   через source-in, поэтому одна и та же картинка годится и для золотой строки,
+   и для приглушённой закрытой на тизере. */
+var CAT_ICON_FILES = {
+  sym: 'sym', eyes: 'eyes', midface: 'midface', jaw: 'jaw',
+  nose: 'nose', lips: 'lips', skin: 'skin', hair: 'hair',
+};
+var _catIcons = null, _catIconTint = {};
+
+// Грузим все восемь разом. Возвращаем промис, чтобы карточка не начала рисоваться
+// раньше, чем картинки готовы: иначе иконки просто не попадут в PNG.
+function loadCatIcons() {
+  if (_catIcons) return Promise.resolve(_catIcons);
+  var keys = Object.keys(CAT_ICON_FILES);
+  return Promise.all(keys.map(function (k) {
+    return new Promise(function (res) {
+      var im = new Image();
+      im.onload = function () { res([k, im]); };
+      im.onerror = function () { res([k, null]); };   // без иконки строка всё равно рисуется
+      im.src = 'assets/icons/' + CAT_ICON_FILES[k] + '.png';
     });
-  } else if (key === "hair") {
-    face();
-    g.beginPath();
-    g.moveTo(-u * 0.74, -u * 0.3);
-    g.quadraticCurveTo(-u * 0.62, -u * 1.06, 0, -u * 0.96);
-    g.quadraticCurveTo(u * 0.62, -u * 1.06, u * 0.74, -u * 0.3);
-    g.quadraticCurveTo(u * 0.4, -u * 0.62, 0, -u * 0.56);
-    g.quadraticCurveTo(-u * 0.4, -u * 0.62, -u * 0.74, -u * 0.3);
-    g.stroke();
-  }
-  g.restore();
+  })).then(function (pairs) {
+    _catIcons = {};
+    pairs.forEach(function (p) { _catIcons[p[0]] = p[1]; });
+    return _catIcons;
+  });
+}
+
+// Перекрашенная копия иконки. Кэшируем: одна и та же пара «иконка + цвет»
+// встречается по восемь раз на карточку.
+function tintedIcon(key, color) {
+  var ck = key + '|' + color;
+  if (_catIconTint[ck]) return _catIconTint[ck];
+  var im = _catIcons && _catIcons[key];
+  if (!im) return null;
+  var c = document.createElement('canvas');
+  c.width = im.width; c.height = im.height;
+  var x = c.getContext('2d');
+  x.drawImage(im, 0, 0);
+  x.globalCompositeOperation = 'source-in';
+  x.fillStyle = color; x.fillRect(0, 0, c.width, c.height);
+  _catIconTint[ck] = c;
+  return c;
+}
+
+function drawCatIcon(g, key, cx, cy, s, color) {
+  var ic = tintedIcon(key, color);
+  if (!ic) return;
+  g.drawImage(ic, cx - s / 2, cy - s / 2, s, s);
 }
 
 function roundRect(c2, x, y, w, h, r) {
