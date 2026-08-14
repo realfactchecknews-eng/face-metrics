@@ -434,7 +434,8 @@ function svbDrawFrame(c, data, frame) {
 
   // Рамка победителя разгорается после вердикта.
   var revealed = svPhase(p, .56, .68);
-  [[xA - offs, aA, winA], [xB + offs, aB, !winA]].forEach(function (k) {
+  var tieFrame = Math.abs(data.a - data.b) < 0.05;
+  [[xA - offs, aA, winA && !tieFrame], [xB + offs, aB, !winA && !tieFrame]].forEach(function (k) {
     c.save(); c.globalAlpha = k[1];
     if (k[2] && revealed > 0) { c.shadowColor = SV_GOLD_HI; c.shadowBlur = 20 * revealed; }
     c.strokeStyle = k[2] ? 'rgba(232,212,160,' + (0.45 + 0.55 * revealed) + ')'
@@ -473,8 +474,9 @@ function svbDrawFrame(c, data, frame) {
            k[2] ? SV_GOLD_HI : '#9a9084', 'center', svPhase(p, .28, .38));
   });
 
-  // MOGGED падает на глаза проигравшего.
-  if (revealed > 0) {
+  // MOGGED падает на глаза проигравшего. При ничьей плашки нет — см. карточку.
+  var tie = Math.abs(data.a - data.b) < 0.05;
+  if (revealed > 0 && !tie) {
     var lx = winA ? xB + offs : xA - offs, ly = winA ? eyeB : eyeA;
     var bh = 30, drop = (1 - revealed) * -40;
     c.save(); c.globalAlpha = revealed;
@@ -487,8 +489,8 @@ function svbDrawFrame(c, data, frame) {
   // Вердикт.
   var vA = svPhase(p, .6, .72);
   if (vA > 0) {
-    svSpaced(c, data.winner + ' MOGS ' + (winA ? 'B' : 'A'), SV_W / 2, top + ch + 132,
-             'bold 38px Georgia, serif', SV_GOLD_HI, 3, vA);
+    svSpaced(c, tie ? 'DEAD EVEN' : (data.winner + ' MOGS ' + (winA ? 'B' : 'A')),
+             SV_W / 2, top + ch + 132, 'bold 38px Georgia, serif', SV_GOLD_HI, 3, vA);
   }
 
   // Разбор: пять строк, балл A слева, название по центру, балл B справа.

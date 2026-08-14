@@ -3148,7 +3148,7 @@ function pwRecheck(silent) {
       ? "Пиши TRAITS_A, TRAITS_B и VERDICT на русском. ВАЖНО: глагол «моггать» в этом контексте пишется «моггает» (наст. время) или «могнул» (прош. время) — форма «моггит» ГРАММАТИЧЕСКИ НЕВЕРНА и запрещена, никогда её не используй. Используй англоязычные луксмаксерские термины ПРЯМО ВНУТРИ русского текста (canthal tilt, gonial angle, zygomatic arch, maxilla, philtrum, malar fat pad, hunter eyes/prey eyes и т.п.) — не переводи их на русский, это профессиональный жаргон."
       : "Write TRAITS_A, TRAITS_B and VERDICT in English.";
     var catLines = CMP_CATS.map(function(c){ return "CAT_" + c.key + ": A=0.0 B=0.0"; }).join("\n");
-    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. IMPORTANT -- do NOT confuse 'same face type/aesthetic' with 'same person': two DIFFERENT people can share a similar look (e.g. both have hunter eyes, positive canthal tilt, sharp jawline) and MUST still get DIFFERENT scores reflecting their individual differences in nose shape, skin, proportions, hair, exact bone structure etc. Only treat A and B as the SAME person if you see the same unique identifying features (identical nose shape, identical mole/scar pattern, identical eyebrow shape, identical skin texture/tone, identical hairline) -- essentially a re-crop, different angle or different lighting of the exact same photo subject, not just a similar vibe. If and ONLY IF you are confident it's truly the same individual, give IDENTICAL or near-identical SCORE_A/SCORE_B and identical CAT_ scores (within 0.1), and say so explicitly as the first sentence of VERDICT (e.g. \"Same face\" / «Это одно и то же лицо»). Otherwise treat them as two distinct people and score independently with a real spread, even if their overall style/type is similar. LIGHTING/ANGLE CAUTION: harsh side/back lighting or a steep up/down camera angle can create dramatic shadows that IMITATE strong jawline/gonial angle/maxilla projection or hooded/hunter eyes, even when the underlying bone structure is average -- mentally picture the same face under neutral frontal lighting before scoring jaw/maxilla/eyes, and don't let shadow alone justify a high score. This cuts both ways -- don't deliberately lowball a face just because it's dramatically lit either, if the strong features are genuinely visible independent of the lighting, score them fairly. \n\n" + PSL_SCALE_PROMPT + "\n\n For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine +
+    return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. IMPORTANT -- do NOT confuse 'same face type/aesthetic' with 'same person': two DIFFERENT people can share a similar look (e.g. both have hunter eyes, positive canthal tilt, sharp jawline) and MUST still get DIFFERENT scores reflecting their individual differences in nose shape, skin, proportions, hair, exact bone structure etc. DEFAULT TO TWO DIFFERENT PEOPLE. Same hair colour, same age, same lighting, same room, same general type -- none of that makes it one person, and neither does a similar overall vibe. Declare the same individual ONLY when you can point to at least TWO matching unique markers: an identically placed mole or scar, an identical nose shape down to the tip and bridge, an identical eyebrow shape, an identical hairline pattern. If you are anything less than certain, treat them as two different people. Even when it IS clearly the same person in two shots, the two photos still differ in angle, lighting and expression, so the CAT_ scores must still differ by a couple of tenths and TRAITS_A must NOT repeat TRAITS_B word for word -- describe what is visible in each photo separately. Copying the same three traits into both lists is always wrong. LIGHTING/ANGLE CAUTION: harsh side/back lighting or a steep up/down camera angle can create dramatic shadows that IMITATE strong jawline/gonial angle/maxilla projection or hooded/hunter eyes, even when the underlying bone structure is average -- mentally picture the same face under neutral frontal lighting before scoring jaw/maxilla/eyes, and don't let shadow alone justify a high score. This cuts both ways -- don't deliberately lowball a face just because it's dramatically lit either, if the strong features are genuinely visible independent of the lighting, score them fairly. \n\n" + PSL_SCALE_PROMPT + "\n\n For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine +
       "\n\nAlso rate BOTH A and B on these 8 categories: Symmetry, Canthal Tilt/Eyes, Midface/Maxilla, Jawline/Mandible, Nose, Lips/Cheekbones, Skin, Grooming/Style. One decimal each (never .0), real spread between categories per person (do not give every category the same score) — this must be consistent with the overall SCORE_A/SCORE_B.\n\nReply STRICTLY in this plain format, nothing else:\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).\n" + catLines;
   }
 
@@ -3349,11 +3349,14 @@ function pwRecheck(silent) {
         g.fillText(k[0], k[1]+42, y+47);
       });
       // MOGGED — по линии глаз проигравшего, всегда на английском
-      var loserX = winA ? xB : xA, loserEyeY = winA ? eyeB : eyeA;
-      var barH=56, barPad=24;
-      g.fillStyle="#000"; g.fillRect(loserX+barPad, loserEyeY-barH/2, cw-barPad*2, barH);
-      g.fillStyle="#ff2d2d"; g.font="bold 34px Georgia,serif"; g.textAlign="center"; ls(4);
-      g.fillText("MOGGED", loserX+cw/2, loserEyeY+12); ls(0);
+      var tieBar = Math.abs(res.a - res.b) < 0.05;
+      if (!tieBar) {
+        var loserX = winA ? xB : xA, loserEyeY = winA ? eyeB : eyeA;
+        var barH=56, barPad=24;
+        g.fillStyle="#000"; g.fillRect(loserX+barPad, loserEyeY-barH/2, cw-barPad*2, barH);
+        g.fillStyle="#ff2d2d"; g.font="bold 34px Georgia,serif"; g.textAlign="center"; ls(4);
+        g.fillText("MOGGED", loserX+cw/2, loserEyeY+12); ls(0);
+      }
 
       // VS в круге между портретами
       var vsY = y + ch/2;
@@ -3402,7 +3405,10 @@ function pwRecheck(silent) {
       g.textAlign="center";
       g.font="20px Georgia,serif"; ls(8); g.fillStyle=GOLD;
       g.fillText("VERDICT", W/2, vY+44); ls(0);
-      var winLabel = res.winner + " MOGS " + (winA ? "B" : "A");
+      // Если баллы совпали до десятой, «A MOGS B» звучит абсурдно рядом с двумя
+      // одинаковыми числами. Показываем ничью — это честнее, чем назначать победителя.
+      var tie = Math.abs(res.a - res.b) < 0.05;
+      var winLabel = tie ? "DEAD EVEN" : (res.winner + " MOGS " + (winA ? "B" : "A"));
       g.font="bold 66px Georgia,serif"; ls(3);
       var vg=g.createLinearGradient(0,vY+56,0,vY+112);
       vg.addColorStop(0,"#f4ead2"); vg.addColorStop(1,"#b3924f");
