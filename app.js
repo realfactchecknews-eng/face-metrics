@@ -2143,7 +2143,7 @@ function _buildShareCard() {
     g.textAlign = "left";
     // 150px вместо 180: на 180 цифра перетягивала на себя всю карточку и
     // оставляла мало воздуха между фото и плашкой тира.
-    var scoreFont = "150px Georgia, serif", denomFont = "50px Georgia, serif";
+    var scoreFont = "124px Georgia, serif", denomFont = "44px Georgia, serif";
     g.font = scoreFont; var wS = g.measureText(score).width;
     g.font = denomFont; var wD = g.measureText("/10").width;
     var sx = W / 2 - (wS + 14 + wD) / 2;
@@ -2267,7 +2267,7 @@ function _buildShareCard() {
       g.save(); g.shadowColor = GOLD_HI; g.shadowBlur = 9;
       g.beginPath(); g.arc(bx + fillW, byy + 1.5, 3.2, 0, Math.PI * 2);
       g.fillStyle = GOLD_HI; g.fill(); g.restore();
-      g.textAlign = "right"; g.font = "33px Georgia, serif"; g.fillStyle = "#ecdaa8";
+      g.textAlign = "right"; g.font = "29px Georgia, serif"; g.fillStyle = "#ecdaa8";
       g.fillText(cat.score.toFixed(1), x + colW, y + 12);
     });
 
@@ -3143,35 +3143,70 @@ function pwRecheck(silent) {
   }
 
   // Рисует лицо в квадратную ячейку, возвращает Y-координату глаз в ячейке.
-  function drawFaceCell(g, face, cx, cy, size){
+  // Кадр лица в ячейку произвольных пропорций. Возвращает y линии глаз в
+  // координатах карточки — по ней ставится плашка MOGGED.
+  function drawFaceCell(g, face, cx, cy, w, h){
     var src = face.canvas, box = face.box;
-    g.save(); roundRect(g, cx, cy, size, size, 22); g.clip();
+    g.save(); roundRect(g, cx, cy, w, h, 20); g.clip();
     if (box){
-      var fcx = box.x + box.w/2, fcy = box.y + box.h*0.42;
-      var rh = box.h*2.05, rw = rh; // квадрат
-      if (rw > src.width){ rw = src.width; rh = rw; }
-      if (rh > src.height){ rh = src.height; rw = rh; }
+      var ar = w / h;
+      var fcx = box.x + box.w/2, fcy = box.y + box.h*0.44;
+      var rh = box.h*2.15, rw = rh*ar;
+      if (rw > src.width){ rw = src.width; rh = rw/ar; }
+      if (rh > src.height){ rh = src.height; rw = rh*ar; }
       var rx = Math.max(0, Math.min(fcx - rw/2, src.width - rw));
       var ry = Math.max(0, Math.min(fcy - rh/2, src.height - rh));
-      g.drawImage(src, rx, ry, rw, rh, cx, cy, size, size);
+      g.drawImage(src, rx, ry, rw, rh, cx, cy, w, h);
+      // низ кадра притушен, чтобы балл под фото не спорил с картинкой
+      var sh = g.createLinearGradient(0, cy+h*0.62, 0, cy+h);
+      sh.addColorStop(0,"rgba(5,5,5,0)"); sh.addColorStop(1,"rgba(5,5,5,.55)");
+      g.fillStyle = sh; g.fillRect(cx, cy, w, h);
       g.restore();
       var eyeSrcY = box.y + box.h*0.40;
-      return cy + (eyeSrcY - ry)/rh * size;
-    } else {
-      var s = Math.min(src.width, src.height);
-      g.drawImage(src, (src.width-s)/2, (src.height-s)/2, s, s, cx, cy, size, size);
-      g.restore();
-      return cy + size*0.42;
+      return cy + (eyeSrcY - ry)/rh * h;
     }
+    var k = Math.max(w/src.width, h/src.height);
+    var dw = src.width*k, dh = src.height*k;
+    g.drawImage(src, cx + (w-dw)/2, cy + (h-dh)*0.3, dw, dh);
+    g.restore();
+    return cy + h*0.42;
+  }
+
+  // Панель с золотой рамкой — общий приём всей карточки: черты, вердикт и
+  // разбор лежат в одинаковых блоках, поэтому лист читается как единое целое.
+  function cmpPanel(g, x, y, w, h){
+    g.save();
+    g.fillStyle = "rgba(255,255,255,0.018)";
+    roundRect(g, x, y, w, h, 18); g.fill();
+    g.strokeStyle = "rgba(196,164,107,0.28)"; g.lineWidth = 1.4;
+    roundRect(g, x, y, w, h, 18); g.stroke();
+    g.restore();
   }
 
   function buildCompareCard(res){
+    return loadCatIcons().then(function(){ return _buildCompareCard(res); });
+  }
+
+  // Точка входа для локальной проверки вёрстки карточки: подставляет два фото и
+  // готовый разбор, ничего не отправляя в воркер и не списывая кредит.
+  // В обычном потоке не используется.
+  window._fmTestCompareCard = function(imgA, imgB, res){
+    function wrap(img){
+      var cv = document.createElement("canvas");
+      cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+      cv.getContext("2d").drawImage(img, 0, 0);
+      return { canvas: cv, box: null };
+    }
+    A = wrap(imgA); B = wrap(imgB);
+    return buildCompareCard(res);
+  };
+
+  function _buildCompareCard(res){
     return new Promise(function(resolve){
       var W = 1080, H = 2080;
-      var c = document.createElement("canvas"); c.width=W; c.height=H;
       var cv = $("cmpCanvas"); cv.width=W; cv.height=H;
       var g = cv.getContext("2d");
-      var GOLD="#c4a46b", GOLD_HI="#e8cf96", DIM="#8a7f6a";
+      var GOLD="#c4a46b", GOLD_HI="#e8cf96", DIM="#8a7f6a", WIN="#ecdaa8", LOSE="#8a8378";
       function ls(px){ try{ g.letterSpacing=px+"px"; }catch(e){} }
 
       g.fillStyle="#050505"; g.fillRect(0,0,W,H);
@@ -3180,99 +3215,125 @@ function pwRecheck(silent) {
       g.fillStyle=glow; g.fillRect(0,0,W,850);
       g.strokeStyle="rgba(196,164,107,0.35)"; g.lineWidth=2; roundRect(g,22,22,W-44,H-44,30); g.stroke();
 
-      // шапка — заголовок всегда на английском, независимо от языка сайта
-      g.textAlign="left"; g.textBaseline="alphabetic"; g.font="bold 56px Georgia,serif"; ls(3);
+      // ── шапка (всегда на английском, независимо от языка сайта) ──
+      g.textAlign="left"; g.textBaseline="alphabetic"; g.font="bold 58px Georgia,serif"; ls(4);
       var bw=g.measureText("FACERATE").width, pw=74, gp=22, sx=(W-(pw+gp+bw))/2;
-      drawBrandPill(g, sx+pw/2, 86, pw, 32);
-      var bg=g.createLinearGradient(0,58,0,104); bg.addColorStop(0,"#f4ead2"); bg.addColorStop(1,"#cbb789");
-      g.fillStyle=bg; g.fillText("FACERATE", sx+pw+gp, 104); ls(0);
-      g.textAlign="center"; g.font="26px Georgia,serif"; ls(8); g.fillStyle=GOLD;
-      g.fillText("WHO MOGGS?", W/2, 150); ls(0);
+      drawBrandPill(g, sx+pw/2, 88, pw, 32);
+      var bg=g.createLinearGradient(0,58,0,108); bg.addColorStop(0,"#f4ead2"); bg.addColorStop(1,"#cbb789");
+      g.fillStyle=bg; g.fillText("FACERATE", sx+pw+gp, 106); ls(0);
+      g.textAlign="center"; g.font="24px Georgia,serif"; ls(9); g.fillStyle=GOLD;
+      g.fillText("WHO MOGGS?", W/2, 152); ls(0);
 
-      // две ячейки
-      var size=390, gap=60, y=210;
-      var xA=(W-size*2-gap)/2, xB=xA+size+gap;
-      var eyeA=drawFaceCell(g, A, xA, y, size);
-      var eyeB=drawFaceCell(g, B, xB, y, size);
-      var winA = res.winner==="A";
-      // рамки: победитель — золото, проигравший — тускло
-      g.lineWidth=4; g.strokeStyle=winA?GOLD_HI:"rgba(120,120,120,0.5)"; roundRect(g,xA,y,size,size,22); g.stroke();
-      g.lineWidth=4; g.strokeStyle=!winA?GOLD_HI:"rgba(120,120,120,0.5)"; roundRect(g,xB,y,size,size,22); g.stroke();
-      // бейджи A/B
-      [["A",xA],["B",xB]].forEach(function(k){
-        g.fillStyle="rgba(0,0,0,0.7)"; roundRect(g,k[1]+14,y+14,54,40,10); g.fill();
-        g.fillStyle=GOLD_HI; g.font="26px Georgia,serif"; g.textAlign="center"; g.fillText(k[0], k[1]+41, y+42);
+      var winA = res.winner === "A";
+
+      // ── два портрета ──
+      var cw=396, ch=486, gap=76, y=196;
+      var xA=(W-cw*2-gap)/2, xB=xA+cw+gap;
+      var eyeA=drawFaceCell(g, A, xA, y, cw, ch);
+      var eyeB=drawFaceCell(g, B, xB, y, cw, ch);
+      [[xA,winA],[xB,!winA]].forEach(function(k){
+        g.lineWidth = k[1] ? 3 : 2;
+        g.strokeStyle = k[1] ? GOLD_HI : "rgba(120,120,120,0.45)";
+        roundRect(g,k[0],y,cw,ch,20); g.stroke();
       });
-      // MOGGED плашка на глазах проигравшего (всегда на английском)
+      [["A",xA],["B",xB]].forEach(function(k){
+        g.fillStyle="rgba(0,0,0,0.72)"; roundRect(g,k[1]+16,y+16,52,44,10); g.fill();
+        g.strokeStyle="rgba(196,164,107,.45)"; g.lineWidth=1; roundRect(g,k[1]+16,y+16,52,44,10); g.stroke();
+        g.fillStyle=GOLD_HI; g.font="27px Georgia,serif"; g.textAlign="center";
+        g.fillText(k[0], k[1]+42, y+47);
+      });
+      // MOGGED — по линии глаз проигравшего, всегда на английском
       var loserX = winA ? xB : xA, loserEyeY = winA ? eyeB : eyeA;
-      var barH=54, barPad=26;
-      g.fillStyle="#000"; g.fillRect(loserX+barPad, loserEyeY-barH/2, size-barPad*2, barH);
-      g.fillStyle="#ff2d2d"; g.font="bold 34px Georgia,serif"; g.textAlign="center"; ls(3);
-      g.fillText("MOGGED", loserX+size/2, loserEyeY+12); ls(0);
+      var barH=56, barPad=24;
+      g.fillStyle="#000"; g.fillRect(loserX+barPad, loserEyeY-barH/2, cw-barPad*2, barH);
+      g.fillStyle="#ff2d2d"; g.font="bold 34px Georgia,serif"; g.textAlign="center"; ls(4);
+      g.fillText("MOGGED", loserX+cw/2, loserEyeY+12); ls(0);
 
-      // баллы под ячейками
-      function scoreUnder(x, val, win){
-        g.textAlign="center";
-        g.font="300 88px Georgia,serif";
-        g.fillStyle = win ? GOLD_HI : "#9a9084";
-        g.fillText(Number(val).toFixed(1), x+size/2, y+size+96);
-      }
-      scoreUnder(xA, res.a, winA); scoreUnder(xB, res.b, !winA);
+      // VS в круге между портретами
+      var vsY = y + ch/2;
+      g.save();
+      g.fillStyle="#050505"; g.beginPath(); g.arc(W/2, vsY, 38, 0, Math.PI*2); g.fill();
+      g.shadowColor="rgba(232,207,150,.5)"; g.shadowBlur=18;
+      g.strokeStyle=GOLD; g.lineWidth=1.4; g.beginPath(); g.arc(W/2, vsY, 38, 0, Math.PI*2); g.stroke();
+      g.restore();
+      g.fillStyle=GOLD_HI; g.font="italic 34px Georgia,serif"; g.textAlign="center";
+      g.fillText("vs", W/2, vsY+12);
 
-      // характеристики лица под баллом — до 3 коротких строк на каждого
-      function traitsUnder(x, traits, win){
-        g.textAlign="center"; g.font="24px Georgia,serif";
-        g.fillStyle = win ? "#d8c9a3" : "#8a8378";
-        var ty = y+size+140;
-        (traits||[]).forEach(function(tr, i){
-          var line = tr.length > 30 ? tr.slice(0,29)+"…" : tr;
-          g.fillText(line, x+size/2, ty+i*32);
+      // ── баллы под портретами ──
+      var scoreY = y + ch + 92;
+      [[xA,res.a,winA],[xB,res.b,!winA]].forEach(function(k){
+        g.textAlign="center"; g.font="300 92px Georgia,serif";
+        g.fillStyle = k[2] ? GOLD_HI : "#9a9084";
+        g.fillText(Number(k[1]).toFixed(1), k[0]+cw/2, scoreY);
+      });
+
+      // ── черты: панель с иконками, по одной строке ──
+      // Иконки идут по кругу из общего набора: у сравнения нет привязки черты
+      // к категории, важен только ритм списка.
+      var ICON_CYCLE = ["sym","eyes","jaw","midface","lips","hair","skin","nose"];
+      var trY = scoreY + 34, trH = 208;
+      [[xA,res.traitsA,winA],[xB,res.traitsB,!winA]].forEach(function(k){
+        cmpPanel(g, k[0], trY, cw, trH);
+        var list = (k[1]||[]).slice(0,5);
+        g.textAlign="left"; g.textBaseline="middle";
+        list.forEach(function(tr,i){
+          var ry = trY + 34 + i*36;
+          drawCatIcon(g, ICON_CYCLE[i % ICON_CYCLE.length], k[0]+40, ry, 30,
+                      k[2] ? GOLD : "#6f695e");
+          g.font="23px Georgia,serif";
+          g.fillStyle = k[2] ? "#d8c9a3" : "#8a8378";
+          var line = tr;
+          while (g.measureText(line).width > cw-96 && line.length > 4) line = line.slice(0,-2);
+          if (line !== tr) line += "…";
+          g.fillText(line, k[0]+66, ry);
         });
-      }
-      traitsUnder(xA, res.traitsA, winA); traitsUnder(xB, res.traitsB, !winA);
+        g.textBaseline="alphabetic";
+      });
 
-      // VS в центре между
-      g.fillStyle=DIM; g.font="italic 40px Georgia,serif"; g.textAlign="center";
-      g.fillText("vs", W/2, y+size/2+14);
+      // ── вердикт ──
+      var vY = trY + trH + 34, vH = 300;
+      cmpPanel(g, 60, vY, W-120, vH);
+      g.textAlign="center";
+      g.font="20px Georgia,serif"; ls(8); g.fillStyle=GOLD;
+      g.fillText("VERDICT", W/2, vY+44); ls(0);
+      var winLabel = res.winner + " MOGS " + (winA ? "B" : "A");
+      g.font="bold 66px Georgia,serif"; ls(3);
+      var vg=g.createLinearGradient(0,vY+56,0,vY+112);
+      vg.addColorStop(0,"#f4ead2"); vg.addColorStop(1,"#b3924f");
+      g.fillStyle=vg; g.fillText(winLabel, W/2, vY+110); ls(0);
+      g.font="27px Georgia,serif"; g.fillStyle="#bdb3a2";
+      wrapText(g, res.verdict, W/2, vY+164, W-220, 38, 4);
 
-      // заголовок вердикта: "A MOGS B" — всегда на английском
-      var winLabel = res.winner + " MOGS " + (winA?"B":"A");
-      var vy = y+size+340;
-      g.font="bold 72px Georgia,serif"; ls(2);
-      var vg=g.createLinearGradient(0,vy-60,0,vy); vg.addColorStop(0,"#f0dfae"); vg.addColorStop(1,"#b3924f");
-      g.fillStyle=vg; g.fillText(winLabel, W/2, vy); ls(0);
-
-      // эйбров + строка вердикта (перенос, до 5 строк)
-      g.font="20px Georgia,serif"; ls(6); g.fillStyle=GOLD; g.fillText("VERDICT", W/2, vy+46); ls(0);
-      g.font="34px Georgia,serif"; g.fillStyle="#c9bfad";
-      wrapText(g, res.verdict, W/2, vy+92, W-200, 46, 5);
-
-      // компактный список из 8 категорий: A слева, B справа, имя по центру
+      // ── разбор по категориям ──
       if (res.cats && res.cats.length){
-        var cy0 = vy + 330;
-        g.textAlign="center"; g.font="22px Georgia,serif"; ls(6); g.fillStyle=GOLD;
-        g.fillText("BREAKDOWN", W/2, cy0); ls(0);
-        var rowH = 54, colW = 300;
-        res.cats.forEach(function(cat, i){
-          var ry = cy0 + 46 + i*rowH;
-          var winCatA = cat.a >= cat.b;
-          g.font="26px Georgia,serif";
-          g.textAlign="left"; g.fillStyle = winCatA ? GOLD_HI : "#8a8378";
-          g.fillText(cat.a.toFixed(1), W/2 - colW, ry);
-          g.textAlign="right"; g.fillStyle = !winCatA ? GOLD_HI : "#8a8378";
-          g.fillText(cat.b.toFixed(1), W/2 + colW, ry);
-          g.textAlign="center"; g.font="20px Georgia,serif"; g.fillStyle="#9a9084";
+        var CAT_ICON_ORDER = ["sym","eyes","midface","jaw","nose","lips","skin","hair"];
+        var rows = res.cats.slice(0,8);
+        var rowH = 56, bY = vY + vH + 34, bH = 66 + rows.length*rowH;
+        cmpPanel(g, 60, bY, W-120, bH);
+        g.textAlign="center"; g.font="20px Georgia,serif"; ls(8); g.fillStyle=GOLD;
+        g.fillText("BREAKDOWN", W/2, bY+42); ls(0);
+        rows.forEach(function(cat,i){
+          var ry = bY + 92 + i*rowH;
+          var aWins = cat.a >= cat.b;
+          drawCatIcon(g, CAT_ICON_ORDER[i] || "sym", 128, ry-8, 30, GOLD);
+          g.textAlign="left"; g.font="28px Georgia,serif";
+          g.fillStyle = aWins ? WIN : LOSE;
+          g.fillText(cat.a.toFixed(1), 176, ry);
+          g.textAlign="right"; g.fillStyle = aWins ? LOSE : WIN;
+          g.fillText(cat.b.toFixed(1), W-128, ry);
+          g.textAlign="center"; g.font="23px Georgia,serif"; g.fillStyle="#a49a8c";
           g.fillText(cat.label, W/2, ry);
-          if (i < res.cats.length - 1){
-            g.strokeStyle="rgba(196,164,107,0.12)"; g.lineWidth=1;
-            g.beginPath(); g.moveTo(W/2-colW+40, ry+18); g.lineTo(W/2+colW-40, ry+18); g.stroke();
+          if (i < rows.length-1){
+            g.strokeStyle="rgba(196,164,107,0.10)"; g.lineWidth=1;
+            g.beginPath(); g.moveTo(150, ry+20); g.lineTo(W-150, ry+20); g.stroke();
           }
         });
       }
 
-      // футер
-      g.font="42px Georgia,serif"; ls(2);
-      var fg=g.createLinearGradient(0,H-92,0,H-52); fg.addColorStop(0,"#eddcab"); fg.addColorStop(1,"#b3924f");
+      // ── футер ──
+      g.textAlign="center"; g.font="40px Georgia,serif"; ls(3);
+      var fg=g.createLinearGradient(0,H-92,0,H-52);
+      fg.addColorStop(0,"#eddcab"); fg.addColorStop(1,"#b3924f");
       g.fillStyle=fg; g.fillText("facerate.ru", W/2, H-58); ls(0);
 
       resolve();
