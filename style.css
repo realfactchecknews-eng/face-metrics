@@ -2959,3 +2959,28 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   margin-top:18px; padding-top:14px; border-top:1px solid rgba(255,255,255,.06);
   font-size:12.5px; color:var(--text-dim); opacity:.75; line-height:1.5;
 }
+
+/* ─── Кнопки памятки по съёмке ───
+   В соглашении «Отмена» и «Принимаю» равнозначны — там это осознанный выбор.
+   Здесь выбора по сути нет: «Назад» нужен редко, только если человек решил
+   переснять фото. Поэтому главная кнопка занимает две трети ширины, а «Назад»
+   ужимается до второстепенной ссылки-кнопки. */
+.tips-box .consent-actions{ justify-content:stretch; gap:10px; }
+.tips-box .consent-actions .btn-primary{
+  flex:2 1 0; padding:17px 28px; font-size:1.15rem; border-radius:14px;
+  white-space:nowrap;
+}
+.tips-box .consent-actions .btn-reset{
+  /* width:auto обязателен: у базового .btn-reset стоит width:100%, и без этого
+     «Назад» растягивался на всю строку, а главная кнопка ужималась до 151px. */
+  flex:0 0 auto; width:auto; padding:13px 22px; font-size:.9rem; opacity:.7;
+  border-radius:14px;
+}
+.tips-box .consent-actions .btn-reset:hover{ opacity:1; }
+@media (max-width:600px){
+  /* Обычная модалка на телефоне ставит кнопки в колонку и «Назад» оказывается
+     сверху — тут наоборот: главная кнопка первая и во всю ширину. */
+  .tips-box .consent-actions{ flex-direction:column; }
+  .tips-box .consent-actions .btn-primary{ width:100%; order:1; }
+  .tips-box .consent-actions .btn-reset{ width:100%; order:2; }
+}
