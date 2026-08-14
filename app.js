@@ -3190,6 +3190,28 @@ function pwRecheck(silent) {
   // Точка входа для локальной проверки вёрстки карточки: подставляет два фото и
   // готовый разбор, ничего не отправляя в воркер и не списывая кредит.
   // В обычном потоке не используется.
+  // Кнопка «Видео дуэли»: тот же рендер в браузере, что и у обычного анализа,
+  // но своя композиция кадра — см. svbDrawFrame в sharevideo.js.
+  document.addEventListener('click', async function (e) {
+    var btn = e.target.closest('#cmpVideoBtn');
+    if (!btn || btn.disabled) return;
+    if (!lastResult || !A || !B) return;
+    var label = $('cmpVideoBtnText');
+    var was = label ? label.textContent : '';
+    btn.disabled = true;
+    try {
+      var blob = await window.svMakeCompareVideo(A, B, lastResult, function (pr) {
+        if (label) label.textContent = 'Собираю видео… ' + Math.round(pr * 100) + '%';
+      });
+      window.svDownload(blob);
+      if (label) label.textContent = 'Готово, файл скачан';
+    } catch (err) {
+      if (label) label.textContent = 'Не получилось: ' + err.message;
+    }
+    setTimeout(function () { if (label) label.textContent = was; }, 3500);
+    btn.disabled = false;
+  });
+
   window._fmTestCompareCard = function(imgA, imgB, res){
     function wrap(img){
       var cv = document.createElement("canvas");

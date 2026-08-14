@@ -474,6 +474,20 @@
     <div id="cmpResult" class="hidden">
       <div class="photo-card"><div class="canvas-wrap" style="border:none;background:none"><canvas id="cmpCanvas"></canvas></div></div>
       <div id="cmpCatScores" class="card scores-card cmp-cat-card hidden"></div>
+      <button id="cmpVideoBtn" class="video-btn" type="button">
+        <span class="video-btn-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
+               stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="5" width="14" height="14" rx="3" />
+            <path d="M16.5 10.5l5-3v9l-5-3z" />
+          </svg>
+        </span>
+        <span class="video-btn-tx">
+          <b id="cmpVideoBtnText">Видео дуэли</b>
+          <i>Вертикальное, под сторис · соберётся прямо в браузере</i>
+        </span>
+        <span class="video-btn-arr" aria-hidden="true">&darr;</span>
+      </button>
       <div class="photo-actions">
         <button id="cmpShareBtn" class="btn-share" type="button" data-i18n="share">Share result</button>
         <button id="cmpTgBtn" class="btn-share btn-share-tg" type="button" data-i18n="tgCard">📩 Send card to Telegram</button>
@@ -577,8 +591,8 @@
      Модель assets/pill3d/scene.gltf — "Pill (Capsule)" by jaromir.ternavskiy,
      CC-BY-4.0, оставлена как исходник для пересъёмки:
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
-<script src="app.js?v=86"></script>
-<script src="sharevideo.js?v=3"></script>
+<script src="app.js?v=87"></script>
+<script src="sharevideo.js?v=4"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════
      Ведение. Лежит здесь скрытым, а при открытии из меню переезжает
