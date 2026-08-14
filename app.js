@@ -1832,20 +1832,25 @@ function hideTeaserUpsell() {
 
 // Молча шлёт карточку отчёта в Telegram сразу после анализа, если юзер залогинен через ТГ —
 // без клика по кнопке. Кнопка #tgCardBtn остаётся как ручной повтор (напр. если авто-отправка не прошла).
-function autoSendTgCard() {
+// Отправка готовой картинки в личку боту. Одна на оба режима: обычный анализ и
+// Who Moggs — иначе легко забыть добавить отправку во второй.
+function sendCardToTg(blob) {
   var acc = getAccount();
-  if (!acc) return;
-  buildShareCard().then(function(blob) {
-    var fr = new FileReader();
-    fr.onload = function() {
-      var b64 = String(fr.result).split(",")[1];
-      fetch(WORKER_URL + "/sendcard", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: acc.token, image: b64 }),
-      }).catch(function() {});
-    };
-    fr.readAsDataURL(blob);
-  });
+  if (!acc || !blob) return;
+  var fr = new FileReader();
+  fr.onload = function() {
+    var b64 = String(fr.result).split(",")[1];
+    fetch(WORKER_URL + "/sendcard", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: acc.token, image: b64 }),
+    }).catch(function() {});
+  };
+  fr.readAsDataURL(blob);
+}
+
+function autoSendTgCard() {
+  if (!getAccount()) return;
+  buildShareCard().then(sendCardToTg);
 }
 
 function animateCount(el, target, duration) {
@@ -3092,6 +3097,9 @@ function pwRecheck(silent) {
       buildCompareCard(parsed).then(function(){
         stopAIHUD("cmpLoading");
         $("cmpResult").classList.remove("hidden");
+        // Карточку сравнения шлём в бота так же, как карточку обычного анализа.
+        var cv = $("cmpCanvas");
+        if (cv && cv.toBlob) cv.toBlob(function(b){ sendCardToTg(b); }, "image/png");
       });
     }).catch(function(){ stopAIHUD("cmpLoading"); showSetup(); cmpErr(t("cmpErrGen")); });
   }
