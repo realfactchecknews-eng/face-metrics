@@ -4,8 +4,10 @@
 const WORKER_URL = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
   && localStorage.getItem("fmWorker") || "https://api.facerate.online";
 
-// Воспроизводимый балл: просим воркер отключить reasoning и запинить провайдера.
-// Живёт на ветке stable-score, в боевой версии поля нет.
+// Просим воркер запинить провайдера. Без этого OpenRouter отдаёт одинаковые запросы
+// разным бэкендам, и одно фото возвращало разные тиры: 4.8 / 5.6 / 6.5 на пяти прогонах
+// против 5.1-5.2 с пином. Флаг остался отдельным, чтобы старый закэшированный app.js
+// у кого-то на руках вёл себя ровно как раньше, а не непредсказуемо.
 const STABLE_SCORE = true;
 
 // MediaPipe Face Mesh connection groups
@@ -1867,12 +1869,8 @@ function renderAIReport(text, skipSideEffects, isTeaser) {
     return;
   }
   window._fmParsed = parsed; // для share-карточки
-  // Для замеров разброса: видно и наш балл, и тот, что назвала модель.
-  if (parsed.overall !== null) {
-    console.log("[balance]", "показываем", parsed.overall,
-      "· по весам вышло бы", parsed.overallComputed,
-      "· категории", parsed.categories.map(function(c){ return c.label + " " + c.score; }).join(", "));
-  }
+  // overallComputed остаётся в window._fmParsed для сверки с консоли, но сам в неё
+  // не пишется: это отчёт пользователя, а не наш стенд.
   var scoreEl = document.getElementById("overallScoreNum");
   document.getElementById("overallDesc").textContent = parsed.overallDesc;
   var flash = document.createElement("div");
