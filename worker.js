@@ -265,25 +265,39 @@ async function analyze(request, env) {
   // разница (метрики, фото, тизер-суффикс) всегда идёт ПОСЛЕ статичного блока.
   const sessionId = 'facerate-' + (body.lang === 'ru' ? 'ru' : 'en');
 
+  // Пин провайдера. Боевой app.js шлёт stable:true всегда; флаг оставлен только ради
+  // тех, у кого в кэше висит старый app.js — они доработают по-прежнему, без пина.
+  const stable = body.stable === true;
+
+  // Основная модель и запасная. Запасная включается ТОЛЬКО когда основная отказалась
+  // разбирать фото — так отказ не превращается в ошибку на экране. Порядок важен:
+  // калибровка у моделей разная (замер 15.08 — на середине шкалы luna ставит на тир
+  // выше grok), поэтому смена основной модели меняет баллы всем.
+  const MODEL_MAIN = 'x-ai/grok-4.3';
+  const MODEL_BACKUP = 'openai/gpt-5.6-luna';
+  let model = MODEL_MAIN;
+
   const buildBody = (withSeed) => {
     const b = {
-      model: 'x-ai/grok-4.3',
+      model,
       // ВАЖНО: reasoning-токены Grok (~700-950 даже на effort:'low') считаются в этот же лимит.
       // На старых 900 у тизера reasoning съедал весь бюджет, content приходил пустым, и юзер
       // видел «Сервис перегружен (unknown)». Тизер всё равно короткий — реально потратится меньше,
       // лимит нужен только чтобы reasoning не отъедал весь ответ.
       max_tokens: isTeaser ? 1800 : 2200,
-      // temperature 0 вместо 0.35: одно и то же фото давало разброс в целый тир —
-      // 5.3 (MTN) и 6.4 (HTN) на двух подряд прогонах, челюсть скакала с 4.3 на 6.7.
-      // seed один провайдера не спасал: OpenRouter раскидывает запросы по разным
-      // бэкендам, и seed там соблюдается не всегда. Разнообразие формулировок нам
-      // не нужно — нужен воспроизводимый балл, иначе замер выглядит как рулетка.
+      // temperature 0 вместо 0.35: одно и то же фото давало разброс в целый тир.
       temperature: 0,
       top_p: 1,
+      // Рассуждения не выключать. Они стоят денег, но именно на них держится разбор:
+      // без них модель отвечает по шаблону, а отказ на негодном кадре не срабатывает.
       reasoning: { effort: 'low' },
       session_id: sessionId,
       messages,
     };
+    // Пин провайдера: без него OpenRouter волен отдать тот же grok разным бэкендам,
+    // а seed на чужом бэкенде не соблюдается. Фолбэки оставляем — иначе при недоступности
+    // xAI юзер вместо отчёта получит ошибку.
+    if (stable && b.model.startsWith('x-ai/')) b.provider = { order: ['xai'], allow_fallbacks: true };
     if (withSeed) b.seed = 1337;
     return JSON.stringify(b);
   };
@@ -294,8 +308,10 @@ async function analyze(request, env) {
   //               либо «тихий отказ» Grok: пустой content при finish_reason 'stop').
   // Это НЕ перегрузка, ретраи тут не помогают — выходим из цикла сразу, чтобы не жечь
   // токены и не держать юзера лишние 1.4 секунды.
-  let data, lastErr = 'unknown', emptyKind = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // usedBackup — уходили ли на запасную модель. Одна попытка, не больше: если и она
+  // отказалась, дело в самом кадре, а не в модели, и дальше жечь токены незачем.
+  let data, lastErr = 'unknown', emptyKind = null, usedBackup = false;
+  for (let attempt = 0; attempt < 4; attempt++) {
     let status = 0;
     try {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -327,6 +343,14 @@ async function analyze(request, env) {
       // Пустой content при нормальном завершении — тихий отказ модели. Ретраить бесполезно.
       else if (fin === 'stop' || fin == null) emptyKind = 'refusal';
     }
+    // Отказ основной модели — не приговор фото: у запасной другие фильтры, и то, что
+    // одна отклонила, вторая нередко разбирает спокойно. Пробуем ровно один раз.
+    // Балл при этом придёт по чужой калибровке, но отчёт лучше отсутствия отчёта.
+    if (emptyKind === 'refusal' && !usedBackup) {
+      usedBackup = true; emptyKind = null; model = MODEL_BACKUP;
+      console.log('AI switching to backup model', JSON.stringify({ from: MODEL_MAIN, to: MODEL_BACKUP }));
+      continue;
+    }
     if (emptyKind) break;
 
     // error у OpenRouter приходит и объектом, и строкой — плюс отдельно тянем HTTP-статус,
@@ -336,7 +360,7 @@ async function analyze(request, env) {
     if (eMsg) lastErr = eMsg;
     else if (status && status !== 200) lastErr = `http ${status}`;
 
-    if (attempt < 2) await new Promise(r => setTimeout(r, 700));
+    if (attempt < 3) await new Promise(r => setTimeout(r, 700));
   }
   if (!data?.choices?.[0]?.message?.content) {
     if (emptyKind === 'refusal') {
@@ -380,6 +404,10 @@ async function analyze(request, env) {
     await progSave(env, tgid, data.choices[0].message.content);
     if (earlyPaid) creditsLeft = credits - 1;
   }
+
+  // Расход токенов на успешном ответе: раньше писался только у пустых, и сравнить
+  // стоимость двух режимов было не с чем. Видно в `wrangler tail`.
+  console.log('AI ok', JSON.stringify({ model, usedBackup, stable, isTeaser, usage: data.usage ?? null }));
 
   return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback });
 }
