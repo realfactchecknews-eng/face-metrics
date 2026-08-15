@@ -1881,7 +1881,15 @@ function parseAIReport(text) {
       byKey[cat.key] = parseFloat(m[1]);
     }
   });
-  // Показываем балл самой модели. Замер 15.08: с выключенными рассуждениями он вышел
+  // Балл берём из перцентиля, если модель его прислала: абсолютная шкала у каждой
+  // модели своя и обычно завышена, а «скольких из ста обходит» — вопрос про мир,
+  // и держится он куда ровнее. Свой балл модели остаётся в overallSaid для сверки.
+  if (typeof result.overallFromPct === "number") {
+    result.overallSaid = result.overall;
+    result.overall = result.overallFromPct;
+  }
+
+  // Старый запасной путь. Замер 15.08: с выключенными рассуждениями он вышел
   // 5.4 во всех девяти прогонах одного лица, включая три разных ракурса — воспроизводится
   // намертво. Взвешенный пересчёт, наоборот, гулял 5.4-6.0, потому что собирал дрожь
   // категорий, и держался ВЫШЕ модельного: модель сама делает поправку на общую гармонию,
@@ -3267,7 +3275,7 @@ function pwRecheck(silent) {
       : "Write TRAITS_A, TRAITS_B and VERDICT in English.";
     var catLines = CMP_CATS.map(function(c){ return "CAT_" + c.key + ": A=0.0 B=0.0"; }).join("\n");
     return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. IMPORTANT -- do NOT confuse 'same face type/aesthetic' with 'same person': two DIFFERENT people can share a similar look (e.g. both have hunter eyes, positive canthal tilt, sharp jawline) and MUST still get DIFFERENT scores reflecting their individual differences in nose shape, skin, proportions, hair, exact bone structure etc. DEFAULT TO TWO DIFFERENT PEOPLE. Same hair colour, same age, same lighting, same room, same general type -- none of that makes it one person, and neither does a similar overall vibe. Declare the same individual ONLY when you can point to at least TWO matching unique markers: an identically placed mole or scar, an identical nose shape down to the tip and bridge, an identical eyebrow shape, an identical hairline pattern. If you are anything less than certain, treat them as two different people. Even when it IS clearly the same person in two shots, the two photos still differ in angle, lighting and expression, so the CAT_ scores must still differ by a couple of tenths and TRAITS_A must NOT repeat TRAITS_B word for word -- describe what is visible in each photo separately. Copying the same three traits into both lists is always wrong. LIGHTING/ANGLE CAUTION: harsh side/back lighting or a steep up/down camera angle can create dramatic shadows that IMITATE strong jawline/gonial angle/maxilla projection or hooded/hunter eyes, even when the underlying bone structure is average -- mentally picture the same face under neutral frontal lighting before scoring jaw/maxilla/eyes, and don't let shadow alone justify a high score. This cuts both ways -- don't deliberately lowball a face just because it's dramatically lit either, if the strong features are genuinely visible independent of the lighting, score them fairly. \n\n" + PSL_SCALE_PROMPT + "\n\n For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). ABSOLUTE, NOT RELATIVE: score each face exactly as you would if it were the only photo in front of you. The same face must get the same number whether it is compared with a model or with an ordinary person. Never lower one face to make the winner look stronger, and never raise one to keep the duel close -- the gap has to fall out of two independent honest scores. If both photos contain more than one person, judge only the face that fills most of the frame. Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine +
-      "\n\nAlso rate BOTH A and B on these 8 categories: Symmetry, Canthal Tilt/Eyes, Midface/Maxilla, Jawline/Mandible, Nose, Lips/Cheekbones, Skin, Grooming/Style. One decimal each (never .0), real spread between categories per person (do not give every category the same score) — this must be consistent with the overall SCORE_A/SCORE_B.\n\nReply STRICTLY in this plain format, nothing else:\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).\n" + catLines;
+      "\n\nAlso rate BOTH A and B on these 8 categories: Symmetry, Canthal Tilt/Eyes, Midface/Maxilla, Jawline/Mandible, Nose, Lips/Cheekbones, Skin, Grooming/Style. One decimal each (never .0), real spread between categories per person (do not give every category the same score) — this must be consistent with the overall SCORE_A/SCORE_B.\n\nReply STRICTLY in this plain format, nothing else:\nPCT_A: NN\nPCT_B: NN\nEach is an integer 0-99 and nothing else on the line. HIGHER MEANS BETTER LOOKING: out of 100 random men of that person's age passing on a busy street, how many would MOST people judge WORSE looking than him -- how many does he BEAT? 50 is the honest answer for a perfectly ordinary man. Rate each face on its own, exactly as you would if the other photo did not exist -- the loser must NOT be pushed down to widen the gap, and the gap has to fall out of two independent honest numbers. Decide both percentiles FIRST, before the scores below.\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).\n" + catLines;
   }
 
   function doCompare(){
@@ -3306,6 +3314,13 @@ function pwRecheck(silent) {
     }
     var a = num(/SCORE_A:\s*(\d+(?:\.\d+)?)/i);
     var b = num(/SCORE_B:\s*(\d+(?:\.\d+)?)/i);
+    // Балл дуэли считаем той же кривой, что и в обычном анализе. Иначе режимы
+    // расходятся: замер 15.08 — чувак получал 4.2 в анализе и 2.8 в дуэли, где
+    // модель давила проигравшего вниз, чтобы разрыв выглядел убедительнее.
+    var pa = num(/PCT_A:\s*(\d{1,3})/i), pb = num(/PCT_B:\s*(\d{1,3})/i);
+    var sa = scoreFromPercentile(pa), sb = scoreFromPercentile(pb);
+    if (sa !== null) a = sa;
+    if (sb !== null) b = sb;
     var traitsA = traits(/TRAITS_A:\s*([^\n]+)/i);
     var traitsB = traits(/TRAITS_B:\s*([^\n]+)/i);
     var wm = txt.match(/WINNER:\s*([AB])/i);
