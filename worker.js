@@ -265,6 +265,11 @@ async function analyze(request, env) {
   // разница (метрики, фото, тизер-суффикс) всегда идёт ПОСЛЕ статичного блока.
   const sessionId = 'facerate-' + (body.lang === 'ru' ? 'ru' : 'en');
 
+  // Режим воспроизводимого балла. Включается ТОЛЬКО когда фронт явно прислал stable:true —
+  // боевой app.js этого поля не шлёт, так что для всех остальных запрос остаётся прежним
+  // байт в байт. Снимать флаг можно будет после замеров разброса.
+  const stable = body.stable === true;
+
   const buildBody = (withSeed) => {
     const b = {
       model: 'x-ai/grok-4.3',
@@ -280,10 +285,18 @@ async function analyze(request, env) {
       // не нужно — нужен воспроизводимый балл, иначе замер выглядит как рулетка.
       temperature: 0,
       top_p: 1,
-      reasoning: { effort: 'low' },
+      // Скрытая цепочка рассуждений сама сэмплится, и одна развилка в ней уводит балл
+      // на полтира — temperature 0 от этого не спасает. Формат ответа у нас расписан
+      // по пунктам, думать «в свободной форме» модели тут почти не над чем, поэтому в
+      // stable-режиме reasoning выключаем: разброс падает, бюджет освобождается.
+      reasoning: stable ? { exclude: true } : { effort: 'low' },
       session_id: sessionId,
       messages,
     };
+    // Пин провайдера: без него OpenRouter волен отдать тот же grok разным бэкендам,
+    // а seed на чужом бэкенде не соблюдается. Фолбэки оставляем — иначе при недоступности
+    // xAI юзер вместо отчёта получит ошибку.
+    if (stable) b.provider = { order: ['xai'], allow_fallbacks: true };
     if (withSeed) b.seed = 1337;
     return JSON.stringify(b);
   };
@@ -380,6 +393,10 @@ async function analyze(request, env) {
     await progSave(env, tgid, data.choices[0].message.content);
     if (earlyPaid) creditsLeft = credits - 1;
   }
+
+  // Расход токенов на успешном ответе: раньше писался только у пустых, и сравнить
+  // стоимость двух режимов было не с чем. Видно в `wrangler tail`.
+  console.log('AI ok', JSON.stringify({ stable, isTeaser, usage: data.usage ?? null }));
 
   return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback });
 }
