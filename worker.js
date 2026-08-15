@@ -289,7 +289,10 @@ async function analyze(request, env) {
       // на полтира — temperature 0 от этого не спасает. Формат ответа у нас расписан
       // по пунктам, думать «в свободной форме» модели тут почти не над чем, поэтому в
       // stable-режиме reasoning выключаем: разброс падает, бюджет освобождается.
-      reasoning: stable ? { exclude: true } : { effort: 'low' },
+      // exclude:true НЕ выключает рассуждения, а только прячет их из ответа — в первом
+      // же замере пришло 1165 reasoning-токенов, и платим мы за них так же. Выключает
+      // именно enabled:false.
+      reasoning: stable ? { enabled: false } : { effort: 'low' },
       session_id: sessionId,
       messages,
     };
