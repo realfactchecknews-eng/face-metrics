@@ -1835,7 +1835,7 @@ const SUP = {
     sent: '✅ Sent to the operator. Please wait for a reply.',
     noAdmin: 'Operator is temporarily unavailable, please try later.',
     langSet: '🌍 Language set: English.',
-    faq: '❓ FAQ\n\n• Free analysis — subscribe to @wwwfacerateru (1/week).\n• Paid — Telegram Stars or crypto in the payments bot.\n• No access after paying? Refresh facerate.ru; if it persists — tap “Call an operator”.\n• Promo codes — button in the payments bot; codes drop in channel giveaways.\n• Privacy — your photo is used only for the analysis and is not published.\n\nStill stuck? Just type your question here.',
+    faq: '❓ FAQ\n\n• Free analysis — subscribe to @wwwfacerateru (1/week).\n• Paid — Telegram Stars or crypto in the payments bot.\n• No access after paying? Refresh facerate.ru; if it persists — tap “Call an operator”.\n• Paid but can’t run the analysis? Refresh the page and wait a couple of minutes.\n• Paid but no full report? Refresh the page and run the analysis again.\n• Got an error? Try another photo or switch your VPN.\n• Promo codes — button in the payments bot; codes drop in channel giveaways.\n• Privacy — your photo is used only for the analysis and is not published.\n\nStill stuck? Just type your question here.',
   },
   ru: {
     hello: '👋 Поддержка FaceRate. Задай вопрос — отвечу сразу. Или выбери пункт ниже.',
@@ -1846,7 +1846,7 @@ const SUP = {
     sent: '✅ Отправлено оператору. Дождись ответа.',
     noAdmin: 'Оператор временно недоступен, попробуй позже.',
     langSet: '🌍 Язык переключён: русский.',
-    faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в неделю).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
+    faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в неделю).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Оплатил, но анализ не делается? Обнови страницу и подожди пару минут.\n• Оплатил, а полного разбора нет? Обнови страницу и сделай анализ заново.\n• Выскочила ошибка? Попробуй другое фото или смени VPN.\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
   },
 };
 function supMenuKb(L, isAdmin) {
@@ -2063,14 +2063,22 @@ const SUP_FAQ = {
 - Платно: пакеты «1 анализ», «5 анализов», «безлимит на день», «безлимит на месяц». Оплата — Telegram Stars или криптой (через CryptoBot), цена в звёздах или рублях.
 - Вход на сайте — через Telegram. После оплаты доступ появляется автоматически, обнови страницу.
 - Промокоды: в боте кнопка «Ввести промокод»; коды бывают в розыгрышах в канале.
-Отвечай кратко (2–4 предложения), на русском. Если вопрос про возврат денег, проблему с оплатой, доступ после оплаты, баг или что-то, в чём не уверен — не выдумывай, а попроси нажать «Позвать оператора».`,
+Готовые ответы — на эти три вопроса отвечай сразу, оператора не зови:
+- «Оплатил, а анализ сделать не могу» → обновите страницу и подождите пару минут.
+- «Оплатил, а полного разбора нет» → обновите страницу и сделайте анализ заново.
+- «Выскочила ошибка» → попробуйте другое фото или смените VPN.
+Отвечай кратко (2–4 предложения), на русском. Если вопрос про возврат денег, проблему с оплатой, баг или что-то, в чём не уверен — не выдумывай, а попроси нажать «Позвать оператора».`,
   en: `You are the polite support agent for FaceRate (facerate.ru) — AI face rating by looksmaxxing canons (website + Telegram bot).
 Facts:
 - Free: subscribing to the @wwwfacerateru channel gives 1 free analysis per week.
 - Paid: packages "1 analysis", "5 analyses", "day unlimited", "month unlimited". Payment via Telegram Stars or crypto (CryptoBot), priced in stars or rubles.
 - Login on the site is via Telegram. After payment access appears automatically — refresh the page.
 - Promo codes: the bot has an "Enter promo code" button; codes appear in channel giveaways.
-Answer briefly (2–4 sentences), in English. For refunds, payment issues, access-after-payment, bugs, or anything you’re unsure about — do not make things up; ask them to tap "Call an operator".`,
+Canned answers — answer these three directly, do not call an operator:
+- "Paid but can't run the analysis" → refresh the page and wait a couple of minutes.
+- "Paid but no full report" → refresh the page and run the analysis again.
+- "Got an error" → try another photo or switch your VPN.
+Answer briefly (2–4 sentences), in English. For refunds, payment issues, bugs, or anything you’re unsure about — do not make things up; ask them to tap "Call an operator".`,
 };
 
 function supportApi(env, method, body) {
