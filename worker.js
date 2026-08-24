@@ -821,7 +821,15 @@ async function lavaWebhook(request, env) {
     const pack = PACKS[packId];
     // Не помечаем как "обработано", если не смогли распознать покупателя/тариф — иначе
     // при сбое сопоставления платёж тихо теряется навсегда без шанса на ретрай/дозачисление.
-    if (!tgid || !pack) return new Response('ok');
+    if (!tgid || !pack) {
+      // Раньше отсюда был молчаливый выход, и о потерянной оплате узнавали только когда
+      // покупатель приносил чек. Теперь платёж всё так же не начисляется, но админ видит его сразу.
+      console.log('lava unresolved', JSON.stringify({ contractId: upd.contractId, email: upd.buyer?.email, productId: upd.product?.id, amount: upd.amount, packId }));
+      for (const admin of adminIds(env)) {
+        await tgApi(env, 'sendMessage', { chat_id: admin, text: `\u26a0\ufe0f Оплата Lava не начислена\n\nemail: ${upd.buyer?.email || '—'}\nтовар: ${upd.product?.id || '—'}\nсумма: ${upd.amount} ${upd.currency || 'RUB'}\ncontractId: ${upd.contractId}\n\n${!tgid ? 'Не распознан tgid из email' : 'Не сопоставлен тариф (offerId)'}` });
+      }
+      return new Response('ok');
+    }
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
