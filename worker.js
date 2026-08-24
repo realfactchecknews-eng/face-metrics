@@ -53,14 +53,14 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // оставлены на прежнем уровне (h1/d1 почти не покупают, задирать их бессмысленно). old* у
   // p1 = фактическая предыдущая цена (зачёркивается пока активна акция, см. SALE_ENDS_AT).
   // У остальных old* равны текущей цене — зачёркивания не будет (packsKb: `old && old > cur`).
-  p1: { type: 'credits', credits: 1, stars: 45,  rub: 70,   lavaRub: 70,   label: '1 анализ', labelEn: '1 analysis', oldStars: 39,   oldRub: 62,   oldLavaRub: 62 },
-  p5: { type: 'credits', credits: 5, stars: 99,  rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses', oldStars: 99,   oldRub: 149,  oldLavaRub: 149 },
-  h1: { type: 'unlim',  hours: 1,    stars: 139, rub: 199,  lavaRub: 199,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 139,  oldRub: 199,  oldLavaRub: 199 },
-  d1: { type: 'unlim',  hours: 24,   stars: 219, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 219,  oldRub: 299,  oldLavaRub: 299 },
+  p1: { type: 'credits', credits: 1, stars: 70,  rub: 70,   lavaRub: 70,   label: '1 анализ', labelEn: '1 analysis', oldStars: 62,   oldRub: 62,   oldLavaRub: 62 },
+  p5: { type: 'credits', credits: 5, stars: 149,  rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses', oldStars: 149,   oldRub: 149,  oldLavaRub: 149 },
+  h1: { type: 'unlim',  hours: 1,    stars: 199, rub: 199,  lavaRub: 199,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 199,  oldRub: 199,  oldLavaRub: 199 },
+  d1: { type: 'unlim',  hours: 24,   stars: 299, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 299,  oldRub: 299,  oldLavaRub: 299 },
   // Разовый месяц (без автопродления). Чтобы включить Stars-подписку с автопродлением,
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
-  m1: { type: 'unlim',  hours: 720,  stars: 749,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 749, oldRub: 999, oldLavaRub: 999 },
+  m1: { type: 'unlim',  hours: 720,  stars: 999,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 999, oldRub: 999, oldLavaRub: 999 },
   // Гайд + ведение 90 дней. Цена в дыре между d1 (299) и m1 (999), чтобы не
   // конкурировать с месячным безлимитом.
   // Цена гайда после запуска 999 ₽ / 749 ⭐, сейчас действует цена запуска 399 / 279.
@@ -69,9 +69,9 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // к значениям old*.
   // В Lava.top оффер гайда должен быть isDynamicPrice, иначе там цена останется
   // прежней: сумму воркер передаёт сам.
-  guide: { type: 'guide', credits: 5, stars: 279, rub: 399, lavaRub: 399, launch: true,
+  guide: { type: 'guide', credits: 5, stars: 399, rub: 399, lavaRub: 399, launch: true,
            label: 'Гайд + ведение 90 дней', labelEn: 'Guide + 90-day coaching',
-           oldStars: 749, oldRub: 999, oldLavaRub: 999 },
+           oldStars: 999, oldRub: 999, oldLavaRub: 999 },
 };
 // Недельная акция на новые цены выше — по истечении можно вернуть old*-значения в основные
 // поля (или оставить как есть, тогда акция станет постоянной ценой). Таймер на сайте/в боте
