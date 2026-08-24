@@ -831,6 +831,12 @@ async function lavaWebhook(request, env) {
       return new Response('ok');
     }
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
+    // Задержка вебхука Lava. Их поле со временем платежа точно не задокументировано,
+    // поэтому пробуем несколько имён, а список ключей payload логируем — если ни одно
+    // не подошло, из лога сразу видно настоящее имя, без ещё одного круга гаданий.
+    const paidAt = Date.parse(upd.timestamp || upd.eventTime || upd.createdAt || '') || 0;
+    console.log('lava ok', JSON.stringify({ contractId: upd.contractId, packId,
+      lagSec: paidAt ? Math.round((Date.now() - paidAt) / 1000) : null, keys: Object.keys(upd) }));
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
     await env.RATE_LIMIT.delete(`pendingDiscount:${tgid}`); // промо-скидка одноразовая, гасим ПОСЛЕ реальной оплаты
