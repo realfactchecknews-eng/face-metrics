@@ -495,6 +495,7 @@ Lava.top выбран вместо ЮKassa, так как позволяет п�
 | `OPENROUTER_API_KEY` | анализ лица + AI-ответы саппорт-бота |
 | `TG_BOT_TOKEN` | бот оплаты @faceratepay_bot |
 | `TG_WEBHOOK_SECRET` | проверка `/tg-webhook` |
+| `FACE_ADMIN_SECRET` | доступ к `/admin-face` и `/admin-wallets` (если не задан — используется `TG_WEBHOOK_SECRET`) |
 | `CRYPTOBOT_TOKEN` | Crypto Pay API (крипта) |
 | `LAVA_API_KEY` | Lava.top Public API (карта РФ, приоритетный провайдер) |
 | `LAVA_OFFER_IDS` | JSON `{"p1":"uuid",...}` — маппинг тариф → оффер Lava.top |

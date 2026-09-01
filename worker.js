@@ -3837,7 +3837,8 @@ async function isHolder(env, tgid) {
 async function adminWallets(request, env) {
   const url = new URL(request.url);
   const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
-  if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return cors('Forbidden', 403);
+  const adminSecret = env.FACE_ADMIN_SECRET || env.TG_WEBHOOK_SECRET;
+  if (!adminSecret || secret !== adminSecret) return cors('Forbidden', 403);
   const day = url.searchParams.get('day') || new Date().toISOString().slice(0, 10);
   const list = await env.RATE_LIMIT.list({ prefix: `wnew:${day}:` });
   const out = [];
@@ -4127,7 +4128,8 @@ async function pendingFacePayouts(env) {
 async function adminFace(request, env) {
   const url = new URL(request.url);
   const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
-  if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return cors('Forbidden', 403);
+  const adminSecret = env.FACE_ADMIN_SECRET || env.TG_WEBHOOK_SECRET;
+  if (!adminSecret || secret !== adminSecret) return cors('Forbidden', 403);
   // Пометить выплаченным: ?paid=<tgid>
   if (url.searchParams.get('stats')) return json(await faceStats(env));
   const paid = url.searchParams.get('paid');
