@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FACE — токен доступа FaceRate: контракт, распределение, холдерский статус</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="canonical" href="https://facerate.ru/token.html" />
+<meta name="description" content="FACE — токен доступа FaceRate в сети TON. Адрес контракта, эмиссия, распределение, что даёт холдерам и как получить токены за задания." />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
+<style>
+  :root { --accent:#c4a46b; }
+  body { background:#0a0a0a; color:#cfcac4; font-family:'Cormorant Garamond',serif; line-height:1.75; margin:0; }
+  .wrap { max-width:740px; margin:0 auto; padding:56px 24px 100px; }
+  a { color:var(--accent); }
+  h1 { color:#f0ece6; font-weight:400; font-size:2.2rem; letter-spacing:-0.02em; margin-bottom:4px; }
+  .eye { font-size:0.7rem; letter-spacing:0.25em; color:#888; text-transform:uppercase; }
+  .sub { color:#888; margin:6px 0 30px; font-size:1.1rem; }
+  h2 { color:#f0ece6; font-weight:400; font-size:1.3rem; margin:38px 0 12px; }
+  p { font-size:1.05rem; margin:10px 0 0; }
+  .back { display:inline-block; margin-bottom:26px; font-size:0.95rem; }
+  .coin { display:block; width:96px; height:96px; border-radius:50%; border:1px solid #1c1c1c; margin:0 0 22px; }
+  .box { border:1px solid #1c1c1c; border-radius:8px; padding:18px 20px; margin-top:14px; }
+  .row { display:flex; justify-content:space-between; gap:16px; padding:8px 0; border-bottom:1px solid #141414; font-size:1rem; }
+  .row:last-child { border-bottom:none; }
+  .row span:first-child { color:#888; }
+  code { font-family:ui-monospace,Menlo,monospace; font-size:0.82rem; color:var(--accent); word-break:break-all; }
+  .ca { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  button { background:none; border:1px solid var(--accent); color:var(--accent); border-radius:6px; padding:9px 16px;
+           font-family:'Cormorant Garamond',serif; font-size:0.95rem; cursor:pointer; }
+  ul { padding-left:20px; margin:10px 0 0; }
+  li { font-size:1.05rem; margin:6px 0; }
+  .links a { display:inline-block; margin:8px 16px 0 0; }
+  .warn { border:1px solid #2a2018; border-radius:8px; padding:18px 20px; margin-top:28px; color:#a09a92; font-size:1rem; }
+  .related { margin-top:44px; padding-top:20px; border-top:1px solid #1c1c1c; font-size:0.98rem; }
+  .related a { display:inline-block; margin-right:18px; }
+  .cta { display:block; text-align:center; margin:34px 0 10px; padding:20px; border:1px solid var(--accent); border-radius:8px; text-decoration:none; }
+  .cta .m { color:#f0ece6; font-size:1.25rem; }
+  .cta .s { color:#888; font-size:0.95rem; margin-top:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="index.html" class="back">&larr; На главную</a>
+  <img class="coin" src="https://realfactchecknews-eng.github.io/facerate-assets/gold-pill-dark.png" alt="FACE token" />
+  <p class="eye">FaceRate &middot; Токен доступа</p>
+  <h1>FACE</h1>
+  <p class="sub">Токен доступа FaceRate в сети TON. Не инвестиция и не обещание дохода — он открывает функции внутри сервиса.</p>
+
+  <h2>Контракт</h2>
+  <div class="box">
+    <div class="ca">
+      <code id="ca">EQDcxb_AjNwLnnf331cfF3zYILyLqp1b7fS8hm2qLTqqIyjb</code>
+      <button id="copyBtn" type="button">Копировать</button>
+    </div>
+  </div>
+  <div class="box">
+    <div class="row"><span>Название</span><span>FaceRate</span></div>
+    <div class="row"><span>Тикер</span><span>FACE</span></div>
+    <div class="row"><span>Сеть</span><span>TON</span></div>
+    <div class="row"><span>Decimals</span><span>9</span></div>
+    <div class="row"><span>Эмиссия</span><span>1 000 000 000 FACE</span></div>
+  </div>
+  <p>Всегда сверяй адрес с этой страницей. Любой другой адрес — подделка.</p>
+
+  <h2>Что даёт холдеру</h2>
+  <p>От <b>100 000 FACE</b> на привязанном кошельке:</p>
+  <ul>
+    <li>1 бесплатный анализ каждый день вместо одного в неделю</li>
+    <li>всегда полный разбор, без урезанной версии</li>
+  </ul>
+  <p>Баланс проверяется в момент запроса — статус не «выдаётся» навсегда и пропадает, если токены уходят с кошелька.</p>
+
+  <h2>Как получить</h2>
+  <p>Бесплатно, за задания в боте. Покупки засчитываются задним числом.</p>
+  <div class="box">
+    <div class="row"><span>Привязать TON-кошелёк</span><span>10 000 FACE</span></div>
+    <div class="row"><span>Любая покупка на FaceRate</span><span>50 000 FACE</span></div>
+    <div class="row"><span>Покупка гайда</span><span>100 000 FACE</span></div>
+  </div>
+  <a class="cta" href="https://t.me/faceratepay_bot?start=facetasks">
+    <div class="m">Забрать токены в боте</div>
+    <div class="s">Привязка кошелька — подпись, без транзакции</div>
+  </a>
+
+  <h2>Распределение</h2>
+  <p>Раздел заполняется — распределение эмиссии будет опубликовано здесь до запуска торгов, вместе со ссылками на блокчейн.</p>
+
+  <h2>Проверить самому</h2>
+  <div class="links">
+    <a href="https://tonviewer.com/EQDcxb_AjNwLnnf331cfF3zYILyLqp1b7fS8hm2qLTqqIyjb" target="_blank" rel="noopener">Контракт в Tonviewer</a>
+    <a href="https://minter.ton.org/jetton/EQDcxb_AjNwLnnf331cfF3zYILyLqp1b7fS8hm2qLTqqIyjb" target="_blank" rel="noopener">TON Minter</a>
+    <a href="https://t.me/wwwfacerateru" target="_blank" rel="noopener">Канал</a>
+  </div>
+
+  <div class="warn">
+    <p><b>Важно.</b> FACE — служебный токен доступа. Он не обеспечен активами, не даёт доли в проекте, права на доход или каких-либо финансовых обязательств с нашей стороны. Это не инвестиционный продукт и не финансовая рекомендация.</p>
+    <p>Торги на данный момент не запущены. Пул ликвидности, распределение и отказ от прав будут опубликованы здесь до запуска — не покупай FACE у третьих лиц до этого момента.</p>
+  </div>
+
+  <div class="related">
+    <a href="faq.html">FAQ</a>
+    <a href="terms.html">Условия</a>
+    <a href="privacy.html">Конфиденциальность</a>
+  </div>
+</div>
+
+<script>
+  document.getElementById("copyBtn").addEventListener("click", function() {
+    var btn = this, txt = document.getElementById("ca").textContent.trim();
+    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(function() {
+      var r = document.createRange(); r.selectNode(document.getElementById("ca"));
+      getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand("copy");
+    }).then(function() {
+      btn.textContent = "Скопировано";
+      setTimeout(function(){ btn.textContent = "Копировать"; }, 1600);
+    });
+  });
+</script>
+</body>
+</html>
