@@ -1361,6 +1361,21 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
+  // ── Админ: /facestats — сводка по системе FACE ──
+  if (text.startsWith('/facestats') && (msg.from.id === FACE_ADMIN_TGID || ADMIN_USERNAMES.includes(msg.from.username || ''))) {
+    const st = await faceStats(env);
+    const t = `💲 <b>FACE — сводка</b>\n\n`
+      + `Привязано кошельков: <b>${st.wallets}</b>\n`
+      + `Забрано наград: <b>${st.claimsTotal}</b>\n`
+      + `  кошелёк: ${st.claimsByTask.wallet || 0}\n`
+      + `  покупка: ${st.claimsByTask.buy || 0}\n`
+      + `  гайд: ${st.claimsByTask.guide || 0}\n\n`
+      + `К выплате: <b>${st.pendingPayouts}</b> шт, ${st.pendingAmount.toLocaleString('ru-RU')} FACE\n`
+      + `Холдерских анализов сегодня: <b>${st.holderAnalysesToday}</b>`;
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: t, parse_mode: 'HTML' });
+    return new Response('ok');
+  }
+
   // ── Админ: /facepay — все заявки на выплату FACE одним списком ──
   if (text.startsWith('/facepay') && !text.startsWith('/facepaid')
       && (msg.from.id === FACE_ADMIN_TGID || ADMIN_USERNAMES.includes(msg.from.username || ''))) {
@@ -4070,6 +4085,31 @@ async function markFacePaid(env, tgid) {
   return amount;
 }
 
+// Что реально происходит с системой. Считаем по KV, без внешних запросов —
+// балансы тут не трогаем, иначе на каждом замере ходили бы в сеть за каждым юзером.
+async function faceStats(env) {
+  const count = async (prefix) => (await env.RATE_LIMIT.list({ prefix })).keys.length;
+  const claims = (await env.RATE_LIMIT.list({ prefix: 'faceclaim:' })).keys;
+  const byTask = {};
+  for (const k of claims) {
+    const id = k.name.split(':')[2];
+    byTask[id] = (byTask[id] || 0) + 1;
+  }
+  const pend = await pendingFacePayouts(env);
+  // Сколько холдерских анализов израсходовано сегодня — прямая мера того,
+  // пользуются перком или просто держат токен ради галочки.
+  const today = new Date().toISOString().slice(0, 10);
+  const used = (await env.RATE_LIMIT.list({ prefix: `qd:` })).keys.filter((k) => k.name.endsWith(':' + today)).length;
+  return {
+    wallets: await count('wallet:'),
+    claimsByTask: byTask,
+    claimsTotal: claims.length,
+    pendingPayouts: pend.length,
+    pendingAmount: pend.reduce((a, r) => a + r.amount, 0),
+    holderAnalysesToday: used,
+  };
+}
+
 // Все незакрытые начисления, по убыванию суммы. Один источник и для бота, и для эндпоинта.
 async function pendingFacePayouts(env) {
   const list = await env.RATE_LIMIT.list({ prefix: 'facepay:' });
@@ -4089,6 +4129,7 @@ async function adminFace(request, env) {
   const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
   if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return cors('Forbidden', 403);
   // Пометить выплаченным: ?paid=<tgid>
+  if (url.searchParams.get('stats')) return json(await faceStats(env));
   const paid = url.searchParams.get('paid');
   if (paid) return json({ ok: true, paid, amount: await markFacePaid(env, paid) });
   const out = await pendingFacePayouts(env);
