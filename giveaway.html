@@ -128,7 +128,6 @@ function renderTimer() {
 
 var MEDALS = ["🥇", "🥈", "🥉"];
 function render(st) {
-  if (st.error === "auth") { $("intro").textContent = "Открой эту страницу из бота FaceRate."; return; }
   $("admin").className = st.isAdmin ? "" : "hide";
 
   if (st.giveaway) {
@@ -170,8 +169,14 @@ function render(st) {
 
 function refresh(action, extra) {
   return call(action, extra).then(function(st) {
+    // Проверка auth должна идти раньше общей: иначе объяснение из render() недостижимо,
+    // и вне Telegram страница застревала на «Загружаем…» с бесполезным «Ошибка».
+    if (st.error === "auth") {
+      $("intro").textContent = "Эта страница открывается из бота FaceRate — там она знает, кто ты.";
+      say(""); return;
+    }
     if (st.error === "sub") { say(st.text, true); if (tg) tg.openTelegramLink("https://t.me/" + String(st.channel || "").replace("@", "")); return; }
-    if (st.error) { say(st.text || "Ошибка", true); return; }
+    if (st.error) { say(st.text || "Не получилось. Попробуй ещё раз.", true); return; }
     say(""); render(st);
   }).catch(function() { say("Сеть не отвечает", true); });
 }
