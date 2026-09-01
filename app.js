@@ -2786,9 +2786,12 @@ function isEdgyTone() {
   return cb ? cb.checked : false;
 }
 
-function showCashbackToast() {
+function showCashbackToast() { toast(t("cashbackToast")); }
+
+// Всплывашка внизу экрана. Была только у кешбэка — вынес, чтобы не плодить копии.
+function toast(text) {
   var el = document.createElement("div");
-  el.textContent = t("cashbackToast");
+  el.textContent = text;
   el.style.cssText = "position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);"
     + "background:#161311;border:1px solid #c4a46b;color:#f0ece6;padding:12px 20px;border-radius:10px;"
     + "font-family:'Cormorant Garamond',serif;font-size:1.05rem;z-index:9999;opacity:0;"
@@ -2813,6 +2816,7 @@ function updateQuotaChip(freeLeft, credits, subscribed, unlimUntil) {
     return;
   }
   var parts = [];
+  if (_lastAccountStatus && _lastAccountStatus.holder) parts.push("🟡 холдер: " + _lastAccountStatus.holderFreeLeft + "/день");
   if (!subscribed) parts.push(t("chipSub"));
   else parts.push(t("chipFree") + freeLeft);
   parts.push(t("chipCredits") + credits);
@@ -2838,12 +2842,113 @@ function renderAccount(status) {
   document.getElementById("accName").textContent =
     status.user.username ? "@" + status.user.username : (status.user.first_name || "Пользователь");
   updateQuotaChip(status.freeLeft, status.credits, status.subscribed, status.unlimUntil);
+  renderWalletBtn(status);
   // Числа на быстрых кнопках покупки — всегда из живого ответа сервера, не хардкод.
   if (status.packs) {
     var b1 = document.getElementById("buyP1"), b5 = document.getElementById("buyP5");
     if (b1 && status.packs.p1) b1.textContent = "+1 · " + status.packs.p1.stars + "⭐";
     if (b5 && status.packs.p5) b5.textContent = "+5 · " + status.packs.p5.stars + "⭐";
   }
+}
+
+
+/* ─────────────── TON-кошелёк и холдерский статус FACE ───────────────
+   Подключение через TON Connect: юзер подписывает ton_proof, транзакций не
+   делает. Библиотека (413 КБ) грузится ЛЕНИВО по клику — тянуть её на каждый
+   заход ради кнопки, которой пользуется меньшинство, незачем. */
+var TONCONNECT_MANIFEST = location.origin + "/tonconnect-manifest.json";
+var _tcUi = null;
+
+function loadTonConnect() {
+  if (window.TON_CONNECT_UI) return Promise.resolve();
+  return new Promise(function(resolve, reject) {
+    var sc = document.createElement("script");
+    sc.src = "vendor/tonconnect/tonconnect-ui.min.js";
+    sc.onload = resolve;
+    sc.onerror = function(){ reject(new Error("script")); };
+    document.head.appendChild(sc);
+  });
+}
+
+function connectTonWallet() {
+  var acc = getAccount();
+  if (!acc) { toast("Сначала войди через Telegram"); return; }
+  var btn = document.getElementById("tonWalletBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+
+  loadTonConnect()
+    .then(function() {
+      // payload одноразовый и привязан к аккаунту — без него воркер подпись не примет
+      return fetch(WORKER_URL + "/wallet/challenge", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: acc.token }),
+      }).then(function(r){ return r.json(); });
+    })
+    .then(function(ch) {
+      if (!ch || ch.error || !ch.payload) throw new Error("challenge");
+      if (!_tcUi) _tcUi = new window.TON_CONNECT_UI.TonConnectUI({ manifestUrl: TONCONNECT_MANIFEST });
+      _tcUi.setConnectRequestParameters({ state: "ready", value: { tonProof: ch.payload } });
+      // Кошелёк мог остаться подключённым с прошлого раза — тогда ton_proof не
+      // запросят повторно, и подтверждать будет нечем. Отключаем и просим заново.
+      return _tcUi.disconnect().catch(function(){}).then(function() {
+        return new Promise(function(resolve, reject) {
+          var done = false;
+          var un = _tcUi.onStatusChange(function(w) {
+            if (!w || done) return;
+            var pr = w.connectItems && w.connectItems.tonProof;
+            if (pr && pr.proof) { done = true; un(); resolve({ address: w.account.address, proof: pr.proof }); }
+            else if (w.account) { done = true; un(); reject(new Error("noproof")); }
+          });
+          _tcUi.openModal();
+          setTimeout(function(){ if (!done) { done = true; un(); reject(new Error("timeout")); } }, 180000);
+        });
+      });
+    })
+    .then(function(res) {
+      return fetch(WORKER_URL + "/wallet/link", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: acc.token, address: res.address, proof: res.proof }),
+      }).then(function(r){ return r.json(); });
+    })
+    .then(function(out) {
+      if (out.error) { toast(out.text || "Не удалось привязать кошелёк"); return; }
+      toast(out.holder
+        ? "Кошелёк привязан. Холдерский доступ активен."
+        : "Кошелёк привязан. Токенов FACE пока нет — доступ включится, когда появятся.");
+      refreshAccount();
+    })
+    .catch(function(e) {
+      if (e && e.message === "noproof") toast("Кошелёк не отдал подпись. Попробуй другой кошелёк.");
+      else if (e && e.message === "timeout") toast("Подключение отменено.");
+      else toast("Не удалось подключить кошелёк.");
+    })
+    .then(function(){ renderWalletBtn(_lastAccountStatus); });
+}
+
+function renderWalletBtn(status) {
+  var btn = document.getElementById("tonWalletBtn");
+  if (!btn) return;
+  btn.disabled = false;
+  if (status && status.holder) btn.textContent = "🟡 Холдер";
+  else if (status && status.wallet) btn.textContent = "🟡 " + shortAddr(status.wallet);
+  else btn.textContent = "🟡 Кошелёк";
+  btn.title = status && status.wallet
+    ? "Кошелёк: " + status.wallet + " · FACE: " + (status.faceBalance || 0)
+    : "Подключить TON-кошелёк и получить холдерский доступ";
+}
+
+function shortAddr(a) { return a ? a.slice(0, 4) + "…" + a.slice(-4) : ""; }
+
+// Перечитать статус с сервера (после привязки — чтобы чип квоты обновился).
+function refreshAccount() {
+  var acc = getAccount();
+  if (!acc) return;
+  fetch(WORKER_URL + "/me", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: acc.token }),
+  }).then(function(r){ return r.json(); })
+    .then(function(st){ if (!st.error) renderAccount(st); })
+    .catch(function(){});
 }
 
 // Виджет входа Telegram (скрипт вставляется динамически в контейнер).
@@ -2989,6 +3094,8 @@ function buyPack(pack, btn, payMethod) {
   var b1 = document.getElementById("buyP1");
   var b5 = document.getElementById("buyP5");
   var bw = document.getElementById("buyWallet");
+  var tw = document.getElementById("tonWalletBtn");
+  if (tw) tw.addEventListener("click", connectTonWallet);
   if (b1) b1.addEventListener("click", function(){ buyPack("p1"); });
   if (b5) b5.addEventListener("click", function(){ buyPack("p5"); });
   if (bw) bw.addEventListener("click", function(){
