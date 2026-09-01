@@ -3638,7 +3638,8 @@ async function walletLink(request, env) {
     JSON.stringify({ address, at: Date.now(), user: sess.username || null }), { expirationTtl: 60 * 60 * 24 * 30 });
 
   const bal = await faceBalance(env, address, true);
-  return json({ ok: true, address, balance: bal, holder: bal >= FACE_HOLDER_MIN });
+  if (bal === null) return json({ ok: true, address, balance: null, holder: false, known: false });
+  return json({ ok: true, address, balance: bal, holder: bal >= FACE_HOLDER_MIN, known: true });
 }
 
 // Байтовая раскладка сообщения ton_proof. Вынесена отдельно: порядок и endianness
@@ -3721,31 +3722,44 @@ export async function ed25519Verify(pub, sig, data) {
   return false;
 }
 
-// Баланс FACE в целых токенах. Кэш 10 минут — иначе на каждый анализ ходим в tonapi.
+// Баланс FACE в целых токенах. Кэш 10 минут — иначе на каждый анализ ходим в сеть.
+// Возвращает null, если СПРОСИТЬ не удалось: ноль и «не смогли узнать» — разные вещи,
+// и путать их нельзя. Иначе 429 от tonapi (а он прилетает регулярно) выглядел бы как
+// «токенов нет» и на десять минут отбирал доступ у настоящего холдера.
 async function faceBalance(env, address, fresh) {
   const key = `bal:${address}`;
   if (!fresh) {
     const c = await env.RATE_LIMIT.get(key);
     if (c !== null) return parseFloat(c);
   }
-  let bal = 0;
+  let bal = null;
   try {
     const r = await fetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}/jettons/${FACE_JETTON}`);
-    if (r.ok) {
-      const d = await r.json();
-      bal = Number(BigInt(d.balance || '0') / 10n ** 9n);
-    }
-  } catch { /* tonapi лежит — считаем, что баланса нет, доступ просто не выдаём */ }
+    if (r.ok) bal = Number(BigInt((await r.json()).balance || '0') / 10n ** 9n);
+  } catch { /* пробуем второй источник */ }
+  if (bal === null) {
+    try {
+      const u = `https://toncenter.com/api/v3/jetton/wallets?owner_address=${encodeURIComponent(address)}&jetton_address=${FACE_JETTON}&limit=1`;
+      const r = await fetch(u);
+      if (r.ok) {
+        const w = (await r.json()).jetton_wallets;
+        bal = Number(BigInt(w?.[0]?.balance || '0') / 10n ** 9n);
+      }
+    } catch { /* оба источника молчат */ }
+  }
+  if (bal === null) return null;                       // неудачу не кэшируем
   await env.RATE_LIMIT.put(key, String(bal), { expirationTtl: 600 });
   return bal;
 }
 
-// Холдер или нет — на момент запроса.
+// Холдер или нет — на момент запроса. Не смогли узнать баланс — доступ не выдаём,
+// но и в кэш это не пишем: следующий запрос попробует снова.
 async function isHolder(env, tgid) {
   const addr = await env.RATE_LIMIT.get(`wallet:${tgid}`);
-  if (!addr) return { holder: false, address: null, balance: 0 };
+  if (!addr) return { holder: false, address: null, balance: 0, known: true };
   const bal = await faceBalance(env, addr);
-  return { holder: bal >= FACE_HOLDER_MIN, address: addr, balance: bal };
+  if (bal === null) return { holder: false, address: addr, balance: 0, known: false };
+  return { holder: bal >= FACE_HOLDER_MIN, address: addr, balance: bal, known: true };
 }
 
 // Выгрузка привязок за день — чтобы вручную разослать токены новым.

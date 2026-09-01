@@ -2912,8 +2912,8 @@ function connectTonWallet() {
     })
     .then(function(out) {
       if (out.error) { toast(out.text || "Не удалось привязать кошелёк"); return; }
-      toast(out.holder
-        ? "Кошелёк привязан. Холдерский доступ активен."
+      toast(out.holder ? "Кошелёк привязан. Холдерский доступ активен."
+        : out.known === false ? "Кошелёк привязан, но баланс сейчас не прочитать (сеть занята). Обнови страницу через минуту."
         : "Привязан " + shortAddr(out.address) + ", на нём " + (out.balance || 0) + " FACE. Нужно от "
           + (_lastAccountStatus && _lastAccountStatus.holderMin || 100000) + ".");
       console.log("[wallet] привязан", out.address, "баланс FACE:", out.balance);
