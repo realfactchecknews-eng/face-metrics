@@ -118,6 +118,7 @@ export default {
       if (path === '/wallet/link')      return await walletLink(request, env);
       if (path === '/wallet/unlink')    return await walletUnlink(request, env);
       if (path === '/admin-wallets')    return await adminWallets(request, env);
+      if (path === '/admin-face')       return await adminFace(request, env);
       if (path === '/buy')        return await buy(request, env);
       if (path === '/sendcard')   return await sendCard(request, env);
       if (path === '/feedback')   return await submitFeedback(request, env);
@@ -1136,6 +1137,7 @@ function menuKb(L) {
     [{ text: b.kbOrders, callback_data: 'orders' }],
     [{ text: b.kbPromo, callback_data: 'promo' }],
     [{ text: b.kbMyRef, callback_data: 'myref' }],
+    [{ text: FACE_T[L].btn, callback_data: 'face' }],
     [{ text: b.kbFree, callback_data: 'free' }],
     [{ text: b.kbSub, callback_data: 'mysub' }, { text: b.kbGw, callback_data: 'gw' }],
     [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbSupport, url: 'https://t.me/FaceRateSupport_bot' }],
@@ -1624,6 +1626,16 @@ async function handleCallback(env, cq) {
     await reply(b.promoAsk, { inline_keyboard: [[{ text: b.kbBack, callback_data: 'menu' }]] });
   } else if (data === 'myref') {
     await reply(await myPersonalRefText(env, tgid, L), { inline_keyboard: [[{ text: b.kbBack, callback_data: 'menu' }]] });
+  } else if (data === 'face') {
+    const sc = await faceScreen(env, tgid, L);
+    await reply(sc.text, sc.kb, { parse_mode: 'HTML' });
+  } else if (data === 'facetasks') {
+    const sc = await faceTasksScreen(env, tgid, L);
+    await reply(sc.text, sc.kb, { parse_mode: 'HTML' });
+  } else if (data.startsWith('faceclaim:')) {
+    const msg = await faceClaim(env, tgid, data.slice(10), L);
+    const sc = await faceTasksScreen(env, tgid, L);
+    await reply(msg + '\n\n' + sc.text, sc.kb, { parse_mode: 'HTML' });
   } else if (data === 'mysub') {
     const unlim = parseInt(await env.RATE_LIMIT.get(`unlim:${tgid}`) || '0', 10);
     const isRec = await env.RATE_LIMIT.get(`subrec:${tgid}`);
@@ -3788,6 +3800,122 @@ function b64Bytes(b64) {
   const a = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
   return a;
+}
+
+// ─────────────────────────── Раздел FACE в боте ───────────────────────────
+// Задания начисляют FACE «к выплате». Отправка — руками, из кошелька владельца:
+// автораздача требует приватного ключа в секретах воркера, а на нём лежит вся
+// эмиссия. См. /admin-face — список тех, кому пора отправить.
+export const FACE_TASKS = [
+  { id: 'wallet', amount: 10000,  check: (env, tgid) => env.RATE_LIMIT.get(`wallet:${tgid}`),
+    ru: 'Привязать TON-кошелёк', en: 'Link a TON wallet' },
+  { id: 'buy',    amount: 50000,  check: (env, tgid) => env.RATE_LIMIT.get(`everBought:${tgid}`),
+    ru: 'Любая покупка на FaceRate', en: 'Any purchase on FaceRate' },
+  { id: 'guide',  amount: 100000, check: (env, tgid) => env.RATE_LIMIT.get(`guide:${tgid}`),
+    ru: 'Купить гайд', en: 'Buy the guide' },
+];
+
+const FACE_T = {
+  ru: {
+    btn: '🟡 FACE',
+    noWallet: 'Кошелёк не привязан.\nПривяжи его на сайте — это займёт полминуты и сразу даёт 10 000 FACE.',
+    wallet: (a, bal) => `Кошелёк: <code>${a}</code>\nБаланс: <b>${bal} FACE</b>`,
+    unknown: 'Баланс сейчас не прочитать — сеть занята, загляни через минуту.',
+    holder: '\n\n✅ Холдерский доступ активен: 1 бесплатный полный анализ в сутки.',
+    notHolder: (min) => `\n\nДо холдерского доступа нужно ${min} FACE. Выполняй задания ниже.`,
+    pending: (n) => `\n\n⏳ Начислено к выплате: <b>${n} FACE</b>. Отправим вручную в течение суток.`,
+    tasks: '📋 <b>Задания</b>\n\nВыполни — и нажми «Забрать». Награда начисляется один раз за задание.',
+    done: '✅', todo: '⬜️',
+    claimOk: (n) => `Начислено ${n} FACE. Отправим на твой кошелёк вручную в течение суток.`,
+    claimNo: 'Задание пока не выполнено.',
+    claimDup: 'За это задание награда уже начислена.',
+    claimNoWallet: 'Сначала привяжи кошелёк — иначе отправлять некуда.',
+    kbLink: '🔗 Привязать кошелёк', kbTasks: '📋 Задания', kbClaim: 'Забрать',
+  },
+  en: {
+    btn: '🟡 FACE',
+    noWallet: 'No wallet linked.\nLink one on the site — takes half a minute and instantly gives 10,000 FACE.',
+    wallet: (a, bal) => `Wallet: <code>${a}</code>\nBalance: <b>${bal} FACE</b>`,
+    unknown: 'Cannot read the balance right now — try again in a minute.',
+    holder: '\n\n✅ Holder access active: 1 free full analysis per day.',
+    notHolder: (min) => `\n\nHolder access needs ${min} FACE. Complete the tasks below.`,
+    pending: (n) => `\n\n⏳ Pending payout: <b>${n} FACE</b>. Sent manually within a day.`,
+    tasks: '📋 <b>Tasks</b>\n\nComplete one, then hit "Claim". Each reward is granted once.',
+    done: '✅', todo: '⬜️',
+    claimOk: (n) => `${n} FACE credited. We will send it to your wallet manually within a day.`,
+    claimNo: 'Not completed yet.',
+    claimDup: 'Already claimed.',
+    claimNoWallet: 'Link a wallet first — there is nowhere to send otherwise.',
+    kbLink: '🔗 Link wallet', kbTasks: '📋 Tasks', kbClaim: 'Claim',
+  },
+};
+
+async function faceScreen(env, tgid, L) {
+  const f = FACE_T[L];
+  const hold = await isHolder(env, tgid);
+  const pending = parseInt(await env.RATE_LIMIT.get(`facepay:${tgid}`) || '0', 10);
+  let t;
+  if (!hold.address) t = f.noWallet;
+  else {
+    t = f.wallet(hold.address.slice(0, 6) + '…' + hold.address.slice(-4), hold.known ? hold.balance : '?');
+    if (!hold.known) t += '\n' + f.unknown;
+    else t += hold.holder ? f.holder : f.notHolder(FACE_HOLDER_MIN);
+  }
+  if (pending > 0) t += f.pending(pending);
+  const kb = { inline_keyboard: [] };
+  if (!hold.address) kb.inline_keyboard.push([{ text: f.kbLink, url: 'https://facerate.ru' }]);
+  kb.inline_keyboard.push([{ text: f.kbTasks, callback_data: 'facetasks' }]);
+  kb.inline_keyboard.push([{ text: BL[L].kbBack, callback_data: 'menu' }]);
+  return { text: t, kb };
+}
+
+async function faceTasksScreen(env, tgid, L) {
+  const f = FACE_T[L];
+  let t = f.tasks + '\n';
+  const kb = { inline_keyboard: [] };
+  for (const task of FACE_TASKS) {
+    const claimed = await env.RATE_LIMIT.get(`faceclaim:${tgid}:${task.id}`);
+    const ok = claimed ? true : !!(await task.check(env, tgid));
+    t += `\n${claimed ? f.done : f.todo} ${task[L]} — <b>${task.amount.toLocaleString('ru-RU')} FACE</b>`;
+    if (!claimed && ok) kb.inline_keyboard.push([{ text: `${f.kbClaim}: ${task[L]}`, callback_data: `faceclaim:${task.id}` }]);
+  }
+  kb.inline_keyboard.push([{ text: BL[L].kbBack, callback_data: 'face' }]);
+  return { text: t, kb };
+}
+
+export async function faceClaim(env, tgid, id, L) {
+  const f = FACE_T[L];
+  const task = FACE_TASKS.find((x) => x.id === id);
+  if (!task) return f.claimNo;
+  if (await env.RATE_LIMIT.get(`faceclaim:${tgid}:${id}`)) return f.claimDup;
+  if (!(await task.check(env, tgid))) return f.claimNo;
+  // Награда без привязанного кошелька бессмысленна — отправлять будет некуда,
+  // а начисление повиснет в списке выплат навсегда.
+  if (!(await env.RATE_LIMIT.get(`wallet:${tgid}`))) return f.claimNoWallet;
+  await env.RATE_LIMIT.put(`faceclaim:${tgid}:${id}`, '1');
+  const cur = parseInt(await env.RATE_LIMIT.get(`facepay:${tgid}`) || '0', 10);
+  await env.RATE_LIMIT.put(`facepay:${tgid}`, String(cur + task.amount));
+  return f.claimOk(task.amount.toLocaleString('ru-RU'));
+}
+
+// Кому и сколько отправить руками. Защищено секретом вебхука.
+async function adminFace(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
+  if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return cors('Forbidden', 403);
+  // Пометить выплаченным: ?paid=<tgid>
+  const paid = url.searchParams.get('paid');
+  if (paid) { await env.RATE_LIMIT.delete(`facepay:${paid}`); return json({ ok: true, paid }); }
+  const list = await env.RATE_LIMIT.list({ prefix: 'facepay:' });
+  const out = [];
+  for (const k of list.keys) {
+    const tgid = k.name.slice(8);
+    const amount = parseInt(await env.RATE_LIMIT.get(k.name) || '0', 10);
+    if (!amount) continue;
+    out.push({ tgid, amount, address: await env.RATE_LIMIT.get(`wallet:${tgid}`) });
+  }
+  out.sort((a, b) => b.amount - a.amount);
+  return json({ count: out.length, total: out.reduce((s, x) => s + x.amount, 0), payouts: out });
 }
 
 // ─────────────────────────── Утилиты ───────────────────────────
