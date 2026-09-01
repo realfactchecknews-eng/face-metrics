@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Кошелёк — FaceRate</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="favicon.svg">
+<style>
+  :root { --gold:#c4a46b; --bg:#0d0b0a; --card:#161311; --line:rgba(196,164,107,.25); }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:var(--bg); color:#f0ece6; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:24px; text-align:center; gap:18px;
+  }
+  img.pill { width:88px; height:88px; border-radius:50%; border:1px solid var(--line); }
+  h1 { font-size:22px; font-weight:600; }
+  p { color:#a09a92; font-size:15px; line-height:1.55; max-width:380px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; width:100%; max-width:380px; }
+  .row { display:flex; justify-content:space-between; gap:12px; font-size:14px; padding:7px 0; }
+  .row span:first-child { color:#a09a92; }
+  code { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--gold); word-break:break-all; }
+  button {
+    background:var(--gold); color:#151210; border:none; border-radius:12px; padding:15px 28px;
+    font-size:16px; font-weight:600; cursor:pointer; width:100%; max-width:380px; font-family:inherit;
+  }
+  button:disabled { opacity:.55; }
+  button.ghost { background:none; color:var(--gold); border:1px solid var(--line); }
+  .ok { color:#7fd18a; } .err { color:#e08a7a; }
+</style>
+</head>
+<body>
+
+<img class="pill" src="https://realfactchecknews-eng.github.io/facerate-assets/gold-pill-dark.png" alt="">
+<h1>TON-кошелёк</h1>
+<p id="intro">Подключи кошелёк, чтобы получать FACE и холдерский доступ. Подпись бесплатная, транзакция не отправляется.</p>
+
+<div class="card" id="card" style="display:none">
+  <div class="row"><span>Кошелёк</span><code id="addr"></code></div>
+  <div class="row"><span>Баланс</span><b id="bal">…</b></div>
+  <div class="row"><span>Статус</span><b id="status">…</b></div>
+</div>
+
+<button id="btn">Подключить кошелёк</button>
+<p id="msg"></p>
+
+<script src="vendor/tonconnect/tonconnect-ui.min.js"></script>
+<script>
+var API = "https://api.facerate.online";
+var tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+var btn = document.getElementById("btn");
+var msg = document.getElementById("msg");
+var token = null, ui = null;
+
+function say(text, cls) { msg.textContent = text; msg.className = cls || ""; }
+
+function post(path, body) {
+  return fetch(API + path, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }).then(function(r){ return r.json(); });
+}
+
+function render(st) {
+  if (!st || !st.wallet) return;
+  document.getElementById("card").style.display = "";
+  document.getElementById("addr").textContent = st.wallet.slice(0, 6) + "…" + st.wallet.slice(-4);
+  document.getElementById("bal").textContent = (st.faceBalance || 0) + " FACE";
+  document.getElementById("status").textContent = st.holder ? "✅ Холдер" : "нужно " + (st.holderMin || 100000);
+  document.getElementById("intro").textContent = "Кошелёк привязан. Можно подключить другой — старая привязка снимется.";
+  btn.textContent = "Сменить кошелёк";
+  btn.classList.add("ghost");
+}
+
+// Вход по подписи мини-аппа: внутри Telegram отдельный логин не нужен.
+if (tg && tg.initData) {
+  post("/auth-webapp", { initData: tg.initData }).then(function(st){
+    if (st.error) { say("Не удалось войти: открой страницу из бота.", "err"); btn.disabled = true; return; }
+    token = st.token; render(st);
+  }).catch(function(){ say("Нет связи с сервером.", "err"); btn.disabled = true; });
+} else {
+  say("Открой эту страницу кнопкой в боте @faceratepay_bot.", "err");
+  btn.disabled = true;
+}
+
+btn.addEventListener("click", function() {
+  if (!token) return;
+  btn.disabled = true; say("");
+  post("/wallet/challenge", { token: token })
+    .then(function(ch) {
+      if (!ch || ch.error || !ch.payload) throw new Error("challenge");
+      if (!ui) ui = new window.TON_CONNECT_UI.TonConnectUI({ manifestUrl: location.origin + "/tonconnect-manifest.json" });
+      ui.setConnectRequestParameters({ state: "ready", value: { tonProof: ch.payload } });
+      // Уже подключённый кошелёк повторно ton_proof не отдаёт — отключаем и просим заново.
+      return ui.disconnect().catch(function(){}).then(function() {
+        return new Promise(function(resolve, reject) {
+          var done = false;
+          var un = ui.onStatusChange(function(w) {
+            if (!w || done) return;
+            var pr = w.connectItems && w.connectItems.tonProof;
+            if (pr && pr.proof) { done = true; un(); resolve({ address: w.account.address, proof: pr.proof }); }
+            else if (w.account) { done = true; un(); reject(new Error("noproof")); }
+          });
+          ui.openModal();
+          setTimeout(function(){ if (!done) { done = true; un(); reject(new Error("timeout")); } }, 180000);
+        });
+      });
+    })
+    .then(function(res) { return post("/wallet/link", { token: token, address: res.address, proof: res.proof }); })
+    .then(function(out) {
+      if (out.error) { say(out.text || "Не удалось привязать кошелёк.", "err"); return; }
+      say(out.holder ? "Готово. Холдерский доступ активен." :
+          out.known === false ? "Кошелёк привязан, баланс прочитаем чуть позже." :
+          "Кошелёк привязан. На нём " + (out.balance || 0) + " FACE.", "ok");
+      return post("/me", { token: token }).then(render);
+    })
+    .catch(function(e) {
+      var m = e && e.message;
+      if (m === "noproof") say("Кошелёк не отдал подпись. Обнови Tonkeeper.", "err");
+      else if (m === "timeout") say("Подключение отменено.", "err");
+      else say("Не удалось подключить кошелёк.", "err");
+    })
+    .then(function(){ btn.disabled = false; });
+});
+</script>
+</body>
+</html>

@@ -119,6 +119,7 @@ export default {
       if (path === '/wallet/unlink')    return await walletUnlink(request, env);
       if (path === '/admin-wallets')    return await adminWallets(request, env);
       if (path === '/admin-face')       return await adminFace(request, env);
+      if (path === '/auth-webapp')      return await authWebApp(request, env);
       if (path === '/buy')        return await buy(request, env);
       if (path === '/sendcard')   return await sendCard(request, env);
       if (path === '/feedback')   return await submitFeedback(request, env);
@@ -3836,6 +3837,37 @@ function b64Bytes(b64) {
   return a;
 }
 
+// Вход из мини-аппа Telegram. initData подписана ботом (HMAC), поэтому
+// внутри бота логиниться заново не нужно — сессию выдаём сразу.
+async function authWebApp(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const initData = String(body.initData || '');
+  if (!initData || !env.TG_BOT_TOKEN) return json({ error: 'auth' });
+
+  const p = new URLSearchParams(initData);
+  const hash = p.get('hash');
+  p.delete('hash');
+  const check = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n');
+
+  const enc = new TextEncoder();
+  const hmac = async (keyBytes, msg) => {
+    const k = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return new Uint8Array(await crypto.subtle.sign('HMAC', k, enc.encode(msg)));
+  };
+  const secret = await hmac(enc.encode('WebAppData'), env.TG_BOT_TOKEN);
+  const sig = await hmac(secret, check);
+  const hex = [...sig].map((b) => b.toString(16).padStart(2, '0')).join('');
+  if (hex !== hash) return json({ error: 'auth', text: 'Подпись Telegram не сошлась.' });
+  if (Date.now() / 1000 - Number(p.get('auth_date') || 0) > 86400) return json({ error: 'auth', text: 'Сессия устарела.' });
+
+  let u; try { u = JSON.parse(p.get('user') || '{}'); } catch { u = {}; }
+  if (!u.id) return json({ error: 'auth' });
+  const token = crypto.randomUUID() + '-' + crypto.randomUUID();
+  const user = { id: u.id, first_name: u.first_name || '', username: u.username || '', photo_url: u.photo_url || '' };
+  await env.RATE_LIMIT.put(`sess:${token}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 30 });
+  return json(await statusFor(env, user, token));
+}
+
 // ─────────────────────────── Раздел FACE в боте ───────────────────────────
 // Задания начисляют FACE «к выплате». Отправка — руками, из кошелька владельца:
 // автораздача требует приватного ключа в секретах воркера, а на нём лежит вся
@@ -3852,7 +3884,7 @@ export const FACE_TASKS = [
 const FACE_T = {
   ru: {
     btn: '💲 FACE',
-    noWallet: 'Кошелёк не привязан.\nПривяжи его на сайте — это займёт полминуты и сразу даёт 10 000 FACE.',
+    noWallet: 'Кошелёк не привязан.\nЖми кнопку ниже — привязка займёт полминуты и сразу даёт 10 000 FACE.',
     wallet: (a, bal) => `Кошелёк: <code>${a}</code>\nБаланс: <b>${bal} FACE</b>`,
     unknown: 'Баланс сейчас не прочитать — сеть занята, загляни через минуту.',
     holder: '\n\n✅ Холдерский доступ активен: 1 бесплатный полный анализ в сутки.',
@@ -3864,11 +3896,11 @@ const FACE_T = {
     claimNo: 'Задание пока не выполнено.',
     claimDup: 'За это задание награда уже начислена.',
     claimNoWallet: 'Сначала привяжи кошелёк — иначе отправлять некуда.',
-    kbLink: '🔗 Привязать кошелёк', kbTasks: '📋 Задания', kbClaim: 'Забрать',
+    kbLink: '🔗 Привязать кошелёк', kbRelink: '🔄 Сменить кошелёк', kbTasks: '📋 Задания', kbClaim: 'Забрать',
   },
   en: {
     btn: '💲 FACE',
-    noWallet: 'No wallet linked.\nLink one on the site — takes half a minute and instantly gives 10,000 FACE.',
+    noWallet: 'No wallet linked.\nTap the button below — takes half a minute and instantly gives 10,000 FACE.',
     wallet: (a, bal) => `Wallet: <code>${a}</code>\nBalance: <b>${bal} FACE</b>`,
     unknown: 'Cannot read the balance right now — try again in a minute.',
     holder: '\n\n✅ Holder access active: 1 free full analysis per day.',
@@ -3880,7 +3912,7 @@ const FACE_T = {
     claimNo: 'Not completed yet.',
     claimDup: 'Already claimed.',
     claimNoWallet: 'Link a wallet first — there is nowhere to send otherwise.',
-    kbLink: '🔗 Link wallet', kbTasks: '📋 Tasks', kbClaim: 'Claim',
+    kbLink: '🔗 Link wallet', kbRelink: '🔄 Change wallet', kbTasks: '📋 Tasks', kbClaim: 'Claim',
   },
 };
 
@@ -3897,7 +3929,7 @@ async function faceScreen(env, tgid, L) {
   }
   if (pending > 0) t += f.pending(pending);
   const kb = { inline_keyboard: [] };
-  if (!hold.address) kb.inline_keyboard.push([{ text: f.kbLink, url: 'https://facerate.ru' }]);
+  kb.inline_keyboard.push([{ text: hold.address ? f.kbRelink : f.kbLink, web_app: { url: 'https://facerate.ru/wallet.html' } }]);
   kb.inline_keyboard.push([{ text: f.kbTasks, callback_data: 'facetasks' }]);
   kb.inline_keyboard.push([{ text: BL[L].kbBack, callback_data: 'menu' }]);
   return { text: t, kb };
