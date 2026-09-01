@@ -1311,6 +1311,13 @@ async function tgWebhook(request, env) {
           .map((k) => env.RATE_LIMIT.put(k, authVal, { expirationTtl: 600 }))
       );
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.loginOk, reply_markup: menuKb(L) });
+    } else if (code === 'face') {
+      // Ссылка из канала ведёт прямо в раздел FACE, а не в общее меню.
+      const sc = await faceScreen(env, tgid, L);
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: sc.text, reply_markup: sc.kb, parse_mode: 'HTML' });
+    } else if (code === 'facetasks') {
+      const sc = await faceTasksScreen(env, tgid, L);
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: sc.text, reply_markup: sc.kb, parse_mode: 'HTML' });
     } else if (/^ref_[a-z0-9_-]{1,40}$/i.test(code)) {
       const gotBonus = await attributeReferral(env, tgid, code.slice(4).toUpperCase());
       const greetText = gotBonus ? (L === 'ru' ? b.hello + '\n\n🎁 Тебе начислен +1 бесплатный анализ за переход по реферальной ссылке!' : b.hello + '\n\n🎁 You got +1 free analysis for joining via a referral link!') : b.hello;
