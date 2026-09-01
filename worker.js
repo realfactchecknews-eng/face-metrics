@@ -120,6 +120,7 @@ export default {
       if (path === '/admin-wallets')    return await adminWallets(request, env);
       if (path === '/admin-face')       return await adminFace(request, env);
       if (path === '/auth-webapp')      return await authWebApp(request, env);
+      if (path === '/giveaway')         return await giveawayApi(request, env);
       if (path === '/buy')        return await buy(request, env);
       if (path === '/sendcard')   return await sendCard(request, env);
       if (path === '/feedback')   return await submitFeedback(request, env);
@@ -584,6 +585,12 @@ async function runGiveawayDraw(env) {
     const wL = await userLang(env, winnerId);
     await tgApi(env, 'sendMessage', { chat_id: winnerId, text: BL[wL].gwWinMsg(gw.credits) }).catch(() => {});
   }
+  // Раньше итоги жили только в сообщении админу: giveaway:current удалялся, и посмотреть,
+  // кто выиграл в прошлый раз, было негде. Держим последние 10 розыгрышей.
+  const past = await getList(env, 'giveaway:past');
+  past.unshift({ id: gw.id, at: Date.now(), winners: picked, prizes: gw.prizes || [],
+                 credits: gw.credits, entries: gw.entries.length });
+  await putList(env, 'giveaway:past', past.slice(0, 10), 60 * 60 * 24 * 365);
   await env.RATE_LIMIT.delete('giveaway:current');
   return { ok: true, gw, picked, unsubSkipped, totalEntries: gw.entries.length };
 }
@@ -1035,7 +1042,7 @@ const BL = {
     unsubNone: 'Subscription not found.',
     gw: '🎉 Giveaways of free analyses and unlimited passes happen in ' + CHANNEL + '.\n\nCatch promo codes in posts and enter them here via «🎁 Enter promo code». First come, first served.',
     kbChannel: '📢 Open channel',
-    kbGwJoin: '🙋 Enter the giveaway',
+    kbGwJoin: '🙋 Enter the giveaway', kbGwOpen: '🏆 Open giveaway',
     gwActive: (n, c, d) => `🎉 Giveaway is on!\n\n🏆 ${n} winner(s), ${c} free analyses each\n⏳ Draw: ${d}\n\nTo enter: subscribe to ${CHANNEL} and tap the button below.`,
     gwNeedSub: `❌ You need to be subscribed to ${CHANNEL} to enter. Subscribe, then tap the button again.`,
     gwJoined: (n) => `✅ You're in! ${n} people are entered so far. Good luck — winners get notified right here.`,
@@ -1100,7 +1107,7 @@ const BL = {
     unsubNone: 'Подписка не найдена.',
     gw: '🎉 Розыгрыши бесплатных анализов и безлимитов проходят в канале ' + CHANNEL + '.\n\nЛови промокоды в постах и вводи их здесь через «🎁 Ввести промокод». Кто успел — того и анализы.',
     kbChannel: '📢 Открыть канал',
-    kbGwJoin: '🙋 Участвовать в розыгрыше',
+    kbGwJoin: '🙋 Участвовать в розыгрыше', kbGwOpen: '🏆 Открыть розыгрыш',
     gwActive: (n, c, d) => `🎉 Идёт розыгрыш!\n\n🏆 Победителей: ${n}, приз каждому: ${c} бесплатных анализов\n⏳ Итоги: ${d}\n\nЧтобы участвовать: подпишись на ${CHANNEL} и жми кнопку ниже.`,
     gwNeedSub: `❌ Чтобы участвовать, нужна подписка на ${CHANNEL}. Подпишись и нажми кнопку ещё раз.`,
     gwJoined: (n) => `✅ Ты участвуешь! Всего участников: ${n}. Держи кулачки — победителям напишем прямо сюда.`,
@@ -1749,7 +1756,7 @@ async function handleCallback(env, cq) {
     if (gw && gw.endTs > Date.now()) {
       await reply(
         b.gwActive(gw.winners, gw.credits, fmtDate(gw.endTs, L)),
-        { inline_keyboard: [[{ text: b.kbGwJoin, callback_data: 'gw:join' }], [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbBack, callback_data: 'menu' }]] },
+        { inline_keyboard: [[{ text: b.kbGwOpen, web_app: { url: 'https://facerate.ru/giveaway.html?v=1' } }], [{ text: b.kbGwJoin, callback_data: 'gw:join' }], [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbBack, callback_data: 'menu' }]] },
       );
     } else {
       await reply(
@@ -3888,11 +3895,11 @@ function b64Bytes(b64) {
 
 // Вход из мини-аппа Telegram. initData подписана ботом (HMAC), поэтому
 // внутри бота логиниться заново не нужно — сессию выдаём сразу.
-async function authWebApp(request, env) {
-  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
-  const initData = String(body.initData || '');
-  if (!initData || !env.TG_BOT_TOKEN) return json({ error: 'auth' });
-
+// Проверка подписи Telegram WebApp. Вынесена из authWebApp, потому что тем же способом
+// авторизуется мини-приложение розыгрыша: дублировать HMAC в двух местах — верный способ
+// однажды поправить его только в одном.
+async function verifyWebApp(env, initData) {
+  if (!initData || !env.TG_BOT_TOKEN) return null;
   const p = new URLSearchParams(initData);
   const hash = p.get('hash');
   p.delete('hash');
@@ -3906,15 +3913,95 @@ async function authWebApp(request, env) {
   const secret = await hmac(enc.encode('WebAppData'), env.TG_BOT_TOKEN);
   const sig = await hmac(secret, check);
   const hex = [...sig].map((b) => b.toString(16).padStart(2, '0')).join('');
-  if (hex !== hash) return json({ error: 'auth', text: 'Подпись Telegram не сошлась.' });
-  if (Date.now() / 1000 - Number(p.get('auth_date') || 0) > 86400) return json({ error: 'auth', text: 'Сессия устарела.' });
+  if (hex !== hash) return null;
+  if (Date.now() / 1000 - Number(p.get('auth_date') || 0) > 86400) return null;
 
   let u; try { u = JSON.parse(p.get('user') || '{}'); } catch { u = {}; }
-  if (!u.id) return json({ error: 'auth' });
+  if (!u.id) return null;
+  return { id: u.id, first_name: u.first_name || '', username: u.username || '', photo_url: u.photo_url || '' };
+}
+
+async function authWebApp(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const user = await verifyWebApp(env, String(body.initData || ''));
+  if (!user) return json({ error: 'auth' });
   const token = crypto.randomUUID() + '-' + crypto.randomUUID();
-  const user = { id: u.id, first_name: u.first_name || '', username: u.username || '', photo_url: u.photo_url || '' };
   await env.RATE_LIMIT.put(`sess:${token}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 30 });
   return json(await statusFor(env, user, token));
+}
+
+// ─────────────────────────── Мини-приложение розыгрыша ───────────────────────────
+// Один эндпоинт на все действия: состояние, участие и админские операции. Отдельные
+// роуты на каждое действие тут ничего не дают — авторизация и загрузка розыгрыша всё
+// равно общие. Логика розыгрыша не дублируется: используются те же getGiveaway/
+// saveGiveaway/runGiveawayDraw, что и команды бота.
+async function giveawayApi(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const user = await verifyWebApp(env, String(body.initData || ''));
+  if (!user) return json({ error: 'auth' });
+  const tgid = user.id;
+  const isAdmin = user.id === FACE_ADMIN_TGID || ADMIN_USERNAMES.includes(user.username || '');
+  const action = String(body.action || 'state');
+
+  if (action === 'join') {
+    const gw = await getGiveaway(env);
+    if (!gw || gw.endTs <= Date.now()) return json({ error: 'none', text: 'Розыгрыш уже закончился.' });
+    if (!gw.entries.includes(tgid)) {
+      if (!(await isSubscribed(env, tgid, true))) {
+        return json({ error: 'sub', text: 'Сначала подпишись на канал.', channel: CHANNEL });
+      }
+      gw.entries.push(tgid);
+      await saveGiveaway(env, gw);
+    }
+  }
+
+  if (isAdmin && action === 'create') {
+    const winners = Math.max(1, Math.min(50, parseInt(body.winners, 10) || 1));
+    const credits = Math.max(0, Math.min(100, parseInt(body.credits, 10) || 0));
+    const days = Math.max(1, Math.min(60, parseInt(body.days, 10) || 7));
+    const prizes = Array.isArray(body.prizes)
+      ? body.prizes.slice(0, winners).map((p) => String(p).slice(0, 120)) : [];
+    const gw = { id: crypto.randomUUID().slice(0, 8), endTs: Date.now() + days * 864e5,
+                 credits, winners, prizes, entries: [] };
+    await saveGiveaway(env, gw);
+  }
+
+  if (isAdmin && action === 'draw') {
+    const r = await runGiveawayDraw(env);
+    if (!r.ok) return json({ error: 'draw', text: r.reason === 'empty' ? 'Никто не участвовал.' : 'Активного розыгрыша нет.' });
+  }
+
+  if (isAdmin && action === 'cancel') await env.RATE_LIMIT.delete('giveaway:current');
+
+  const gw = await getGiveaway(env);
+  const past = await getList(env, 'giveaway:past');
+  // Победителям подставляем @username, чтобы в мини-приложении не светились голые id.
+  if (isAdmin) {
+    for (const p of past.slice(0, 3)) {
+      if (p.names) continue;
+      p.names = [];
+      for (const id of p.winners) p.names.push((await userName(env, id)) || String(id));
+    }
+  }
+  return json({
+    ok: true, isAdmin,
+    channel: CHANNEL,
+    subscribed: await isSubscribed(env, tgid),
+    giveaway: gw && gw.endTs > Date.now()
+      ? { id: gw.id, endTs: gw.endTs, credits: gw.credits, winners: gw.winners,
+          prizes: gw.prizes || [], entries: gw.entries.length, joined: gw.entries.includes(tgid) }
+      : null,
+    past: past.slice(0, isAdmin ? 10 : 3),
+  });
+}
+
+// Имя для показа в итогах: @username, если бот его видел, иначе имя, иначе id.
+async function userName(env, tgid) {
+  try {
+    const r = await tgApi(env, 'getChat', { chat_id: tgid });
+    if (r?.ok) return r.result.username ? '@' + r.result.username : (r.result.first_name || String(tgid));
+  } catch { /* пользователь мог заблокировать бота */ }
+  return null;
 }
 
 // ─────────────────────────── Раздел FACE в боте ───────────────────────────

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Розыгрыш — FaceRate</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="favicon.svg">
+<style>
+  :root { --gold:#c4a46b; --bg:#0d0b0a; --card:#161311; --line:rgba(196,164,107,.25); --dim:#a09a92; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:var(--bg); color:#f0ece6; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    min-height:100vh; padding:22px 18px 40px; display:flex; flex-direction:column;
+    align-items:center; gap:16px; text-align:center;
+  }
+  h1 { font-size:23px; font-weight:600; letter-spacing:.01em; }
+  h2 { font-size:15px; font-weight:600; color:var(--gold); align-self:flex-start; margin-top:6px; }
+  p { color:var(--dim); font-size:14.5px; line-height:1.55; max-width:400px; }
+  .wrap { width:100%; max-width:400px; display:flex; flex-direction:column; gap:14px; align-items:center; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; width:100%; text-align:left; }
+  .prize { display:flex; gap:12px; align-items:flex-start; padding:9px 0; border-bottom:1px solid rgba(196,164,107,.12); }
+  .prize:last-child { border-bottom:none; }
+  .prize .pl { font-size:20px; line-height:1.2; width:26px; flex:none; }
+  .prize .pt { font-size:14.5px; line-height:1.45; }
+  .timer { font-size:30px; font-weight:600; color:var(--gold); font-variant-numeric:tabular-nums; }
+  .sub { font-size:12.5px; color:var(--dim); letter-spacing:.04em; text-transform:uppercase; }
+  .row { display:flex; justify-content:space-between; gap:12px; font-size:14px; padding:6px 0; }
+  .row span:first-child { color:var(--dim); }
+  button {
+    background:var(--gold); color:#151210; border:none; border-radius:12px; padding:15px 24px;
+    font-size:16px; font-weight:600; cursor:pointer; width:100%; font-family:inherit;
+  }
+  button:disabled { opacity:.5; }
+  button.ghost { background:none; color:var(--gold); border:1px solid var(--line); }
+  button.danger { background:none; color:#e08a7a; border:1px solid rgba(224,138,122,.35); }
+  input {
+    width:100%; background:#0f0d0c; border:1px solid var(--line); border-radius:10px;
+    padding:11px 13px; color:#f0ece6; font-size:15px; font-family:inherit; margin-top:6px;
+  }
+  label { font-size:12.5px; color:var(--dim); display:block; margin-top:10px; text-align:left; }
+  .joined { color:#7fd18a; font-weight:600; }
+  .err { color:#e08a7a; }
+  .past { font-size:13.5px; color:var(--dim); line-height:1.6; }
+  .past b { color:#f0ece6; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Розыгрыш</h1>
+  <p id="intro">Загружаем…</p>
+
+  <div id="live" class="hide" style="width:100%;display:flex;flex-direction:column;gap:14px;align-items:center">
+    <div class="card" style="text-align:center">
+      <div class="timer" id="timer">—</div>
+      <div class="sub">до итогов</div>
+    </div>
+    <div class="card" id="prizes"></div>
+    <div class="card">
+      <div class="row"><span>Участников</span><b id="entries">—</b></div>
+      <div class="row"><span>Победителей</span><b id="winners">—</b></div>
+      <div class="row"><span>Каждому</span><b id="credits">—</b></div>
+    </div>
+    <button id="join">Участвовать</button>
+  </div>
+
+  <div id="pastBox" class="card hide">
+    <h2 style="margin:0 0 8px">Прошлые розыгрыши</h2>
+    <div class="past" id="past"></div>
+  </div>
+
+  <div id="admin" class="hide" style="width:100%;display:flex;flex-direction:column;gap:12px">
+    <h2>Панель админа</h2>
+    <div class="card">
+      <label>Победителей<input id="aWinners" type="number" value="3" min="1" max="50"></label>
+      <label>Анализов каждому<input id="aCredits" type="number" value="5" min="0" max="100"></label>
+      <label>Длительность, дней<input id="aDays" type="number" value="7" min="1" max="60"></label>
+      <label>Приз за 1 место<input id="aP1" placeholder="Ведение — 90 дней"></label>
+      <label>Приз за 2 место<input id="aP2" placeholder="100 000 FACE"></label>
+      <label>Приз за 3 место<input id="aP3" placeholder="5 анализов"></label>
+    </div>
+    <button id="create" class="ghost">Запустить розыгрыш</button>
+    <button id="draw" class="ghost">Подвести итоги сейчас</button>
+    <button id="cancel" class="danger">Отменить активный</button>
+  </div>
+
+  <p id="msg"></p>
+</div>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+var API = "https://api.facerate.online";
+var tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+// Тот же приём, что в wallet.html: если SDK не загрузился, initData лежит в хеше адреса.
+function initData() {
+  if (tg && tg.initData) return tg.initData;
+  var m = location.hash.match(/tgWebAppData=([^&]*)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
+function $(id) { return document.getElementById(id); }
+function say(t, bad) { $("msg").textContent = t || ""; $("msg").className = bad ? "err" : ""; }
+
+function call(action, extra) {
+  var b = { initData: initData(), action: action || "state" };
+  for (var k in (extra || {})) b[k] = extra[k];
+  return fetch(API + "/giveaway", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b),
+  }).then(function(r) { return r.json(); });
+}
+
+var endTs = 0, tick = null;
+function renderTimer() {
+  var left = endTs - Date.now();
+  if (left <= 0) { $("timer").textContent = "идёт розыгрыш"; clearInterval(tick); return; }
+  var d = Math.floor(left / 864e5), h = Math.floor(left / 36e5) % 24, m = Math.floor(left / 6e4) % 60;
+  $("timer").textContent = d > 0 ? d + " д " + h + " ч" : h + " ч " + m + " мин";
+}
+
+var MEDALS = ["🥇", "🥈", "🥉"];
+function render(st) {
+  if (st.error === "auth") { $("intro").textContent = "Открой эту страницу из бота FaceRate."; return; }
+  $("admin").className = st.isAdmin ? "" : "hide";
+
+  if (st.giveaway) {
+    var g = st.giveaway;
+    $("intro").className = "hide";
+    $("live").className = "";
+    endTs = g.endTs; renderTimer();
+    clearInterval(tick); tick = setInterval(renderTimer, 30000);
+
+    var pr = g.prizes && g.prizes.length ? g.prizes : ["" + g.credits + " анализов"];
+    $("prizes").innerHTML = pr.map(function(t, i) {
+      return '<div class="prize"><div class="pl">' + (MEDALS[i] || "•") + '</div><div class="pt">' + t + "</div></div>";
+    }).join("");
+
+    $("entries").textContent = g.entries;
+    $("winners").textContent = g.winners;
+    $("credits").textContent = g.credits + " анализов";
+
+    var b = $("join");
+    if (g.joined) { b.textContent = "Ты в игре"; b.disabled = true; b.className = "ghost joined"; }
+    else if (!st.subscribed) { b.textContent = "Подписаться на канал"; b.disabled = false; b.className = ""; }
+    else { b.textContent = "Участвовать"; b.disabled = false; b.className = ""; }
+  } else {
+    $("live").className = "hide";
+    $("intro").className = "";
+    $("intro").textContent = st.isAdmin ? "Активного розыгрыша нет — запусти ниже."
+                                        : "Сейчас розыгрыша нет. Следи за каналом, анонс будет там.";
+  }
+
+  if (st.past && st.past.length) {
+    $("pastBox").className = "card";
+    $("past").innerHTML = st.past.map(function(p) {
+      var who = (p.names || p.winners).join(", ");
+      return "<div><b>" + new Date(p.at).toLocaleDateString("ru-RU") + "</b> — " +
+             p.entries + " участников, победители: " + who + "</div>";
+    }).join("");
+  }
+}
+
+function refresh(action, extra) {
+  return call(action, extra).then(function(st) {
+    if (st.error === "sub") { say(st.text, true); if (tg) tg.openTelegramLink("https://t.me/" + String(st.channel || "").replace("@", "")); return; }
+    if (st.error) { say(st.text || "Ошибка", true); return; }
+    say(""); render(st);
+  }).catch(function() { say("Сеть не отвечает", true); });
+}
+
+$("join").onclick = function() { say("…"); refresh("join"); };
+$("create").onclick = function() {
+  var prizes = [$("aP1").value, $("aP2").value, $("aP3").value].filter(Boolean);
+  say("…");
+  refresh("create", { winners: $("aWinners").value, credits: $("aCredits").value, days: $("aDays").value, prizes: prizes });
+};
+$("draw").onclick = function() { if (confirm("Подвести итоги сейчас?")) { say("…"); refresh("draw"); } };
+$("cancel").onclick = function() { if (confirm("Отменить активный розыгрыш?")) { say("…"); refresh("cancel"); } };
+
+refresh();
+</script>
+</body>
+</html>
