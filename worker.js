@@ -1451,6 +1451,33 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
+  // ── Админ: пост в канал с кнопкой-ссылкой. Клиент Telegram кнопки к постам канала
+  // не добавляет, а пускать в канал стороннего бота ради этого — отдавать чужому сервису
+  // право публикации. Свой бот там уже админ (иначе не проверял бы подписки).
+  // Как пользоваться: пишешь боту текст поста обычным сообщением, потом отвечаешь на него
+  //   /post Текст кнопки | https://ссылка
+  // Идёт copyMessage, а не sendMessage: так сохраняется ровно то форматирование, эмодзи и
+  // разметка, которые ты набрал в клиенте, — их не нужно переэкранировать.
+  if (text.startsWith('/post') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const src = msg.reply_to_message;
+    const m = text.slice(5).match(/^\s*(\S.*?)\s*\|\s*(https:\/\/\S+)\s*$/);
+    if (!src || !m) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text:
+        'Как постить в канал с кнопкой:\n\n1) Пришли мне текст поста обычным сообщением\n'
+        + '2) Ответь на него командой:\n/post Текст кнопки | https://ссылка\n\n'
+        + 'Например:\n/post 🏆 Участвовать | https://t.me/faceratepay_bot/giveaway' });
+      return new Response('ok');
+    }
+    const r = await tgApi(env, 'copyMessage', {
+      chat_id: CHANNEL, from_chat_id: chat, message_id: src.message_id,
+      reply_markup: { inline_keyboard: [[{ text: m[1].slice(0, 64), url: m[2] }]] },
+    });
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: r?.ok
+      ? `✅ Опубликовано в ${CHANNEL} с кнопкой «${m[1]}».`
+      : `⚠️ Не вышло: ${r?.description || 'неизвестная ошибка'}` });
+    return new Response('ok');
+  }
+
   // ── Админ: /newgiveaway победителей приз_анализов дней — запускает розыгрыш
   // с явным участием (кнопка «Участвовать» + живая проверка подписки). Отдаёт готовый
   // текст для поста в канал (с диплинком на бота), постить туда — руками, как и промокоды.
