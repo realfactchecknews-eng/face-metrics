@@ -2914,13 +2914,19 @@ function connectTonWallet() {
       if (out.error) { toast(out.text || "Не удалось привязать кошелёк"); return; }
       toast(out.holder
         ? "Кошелёк привязан. Холдерский доступ активен."
-        : "Кошелёк привязан. Токенов FACE пока нет — доступ включится, когда появятся.");
+        : "Привязан " + shortAddr(out.address) + ", на нём " + (out.balance || 0) + " FACE. Нужно от "
+          + (_lastAccountStatus && _lastAccountStatus.holderMin || 100000) + ".");
+      console.log("[wallet] привязан", out.address, "баланс FACE:", out.balance);
       refreshAccount();
     })
     .catch(function(e) {
-      if (e && e.message === "noproof") toast("Кошелёк не отдал подпись. Попробуй другой кошелёк.");
-      else if (e && e.message === "timeout") toast("Подключение отменено.");
-      else toast("Не удалось подключить кошелёк.");
+      var m = e && e.message;
+      console.error("[wallet]", m, e);
+      if (m === "noproof") toast("Кошелёк подключился, но не отдал подпись. Обнови Tonkeeper до последней версии.");
+      else if (m === "timeout") toast("Подключение отменено или окно закрыто.");
+      else if (m === "challenge") toast("Сервер не выдал код подписи. Перезайди через Telegram.");
+      else if (m === "script") toast("Не загрузилась библиотека кошелька. Проверь интернет и обнови страницу.");
+      else toast("Не удалось подключить кошелёк: " + (m || "неизвестная ошибка"));
     })
     .then(function(){ renderWalletBtn(_lastAccountStatus); });
 }
