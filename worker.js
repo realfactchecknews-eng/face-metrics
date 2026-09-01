@@ -114,6 +114,10 @@ export default {
       if (path === '/auth')       return await authTg(request, env);
       if (path === '/authpoll')   return await authPoll(request, env);
       if (path === '/me')         return await me(request, env);
+      if (path === '/wallet/challenge') return await walletChallenge(request, env);
+      if (path === '/wallet/link')      return await walletLink(request, env);
+      if (path === '/wallet/unlink')    return await walletUnlink(request, env);
+      if (path === '/admin-wallets')    return await adminWallets(request, env);
       if (path === '/buy')        return await buy(request, env);
       if (path === '/sendcard')   return await sendCard(request, env);
       if (path === '/feedback')   return await submitFeedback(request, env);
@@ -216,9 +220,15 @@ async function analyze(request, env) {
   // Who Moggs (сравнение двух лиц) НЕ входит в бесплатную квоту — только безлимит или платные кредиты.
   const freeUsable = freeAvail && !body.compare;
 
+  // Холдер FACE: 1 бесплатный анализ в СУТКИ (обычный бесплатный — 1 в неделю).
+  const hold = await isHolder(env, tgid);
+  const dayKey = `qd:${tgid}:${today}`;
+  const dayUsed = parseInt(await env.RATE_LIMIT.get(dayKey) || '0', 10);
+
   let mode = null;
   if (isMeasure) mode = 'measure';
   else if (unlimUntil > Date.now()) mode = 'unlim';
+  else if (hold.holder && dayUsed < HOLDER_FREE_PER_DAY) mode = 'holder';
   else if (freeUsable) mode = 'free';
   else if (credits > 0) mode = 'paid';
   else if (!subscribed) {
@@ -232,7 +242,7 @@ async function analyze(request, env) {
 
   // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
   // Не блокирует уже оплативших (unlim/paid), чтобы платёж не пропадал впустую при наплыве трафика.
-  if (env.RATE_LIMIT && mode === 'free') {
+  if (env.RATE_LIMIT && (mode === 'free' || mode === 'holder')) {
     const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
     if (g >= GLOBAL_DAILY_CAP) {
       return json({ error: 'global', text: 'Дневной лимит бесплатных анализов исчерпан. Загляните завтра или купи кредиты.', packs: PACKS });
@@ -381,6 +391,8 @@ async function analyze(request, env) {
   if (mode === 'free') {
     await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
     freeLeft = FREE_PER_WEEK - freeUsed - 1;
+  } else if (mode === 'holder') {
+    await env.RATE_LIMIT.put(dayKey, String(dayUsed + 1), { expirationTtl: 60 * 60 * 30 });
   } else if (mode === 'paid') {
     creditsLeft = credits - 1;
     // Кешбэк лояльности: каждые CASHBACK_EVERY потраченных ПЛАТНЫХ кредита (накопительно,
@@ -492,8 +504,12 @@ async function statusFor(env, user, token, fresh) {
   const freeLeft = subscribed && await freeQuotaAvailable(env, user.id, buyer) ? 1 : 0;
   const credits = parseInt(await env.RATE_LIMIT.get(`credits:${user.id}`) || '0', 10);
   const unlimUntil = parseInt(await env.RATE_LIMIT.get(`unlim:${user.id}`) || '0', 10);
+  const hold = await isHolder(env, user.id);
+  const dayUsed = parseInt(await env.RATE_LIMIT.get(`qd:${user.id}:${new Date().toISOString().slice(0, 10)}`) || '0', 10);
   return {
     token, user, subscribed, freeLeft,
+    wallet: hold.address, faceBalance: hold.balance, holder: hold.holder, holderMin: FACE_HOLDER_MIN,
+    holderFreeLeft: hold.holder ? Math.max(0, HOLDER_FREE_PER_DAY - dayUsed) : 0,
     credits, channel: CHANNEL, packs: PACKS, methods: enabledMethods(env),
     saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0,
     unlimUntil: unlimUntil > Date.now() ? unlimUntil : 0,
@@ -3547,6 +3563,187 @@ async function partnerAdmin(request, env) {
     return json({ partners });
   }
   return json({ error: 'unknown action' });
+}
+
+// ─────────────────────────── Кошелёк TON и холдеры FACE ───────────────────────────
+// Привязка кошелька через TON Connect ton_proof: пользователь подписывает строку,
+// транзакций не делает. Баланс FACE читается в момент запроса — продал токены,
+// холдерский уровень пропал. Никаких «застолбил один раз навсегда».
+const FACE_JETTON = 'EQDcxb_AjNwLnnf331cfF3zYILyLqp1b7fS8hm2qLTqqIyjb';
+const FACE_HOLDER_MIN = 100000;          // порог холдера, целых FACE
+const HOLDER_FREE_PER_DAY = 1;           // бесплатных анализов в сутки холдеру
+const TONPROOF_TTL = 15 * 60;            // сколько живёт выданный payload и годна подпись
+const ALLOWED_DOMAINS = ['facerate.ru', 'www.facerate.ru', 'localhost'];
+
+// Выдаём одноразовый payload. Без него подпись принять нельзя — иначе чужую
+// старую подпись можно переиграть (replay).
+async function walletChallenge(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const sess = await getSession(env, body.token);
+  if (!sess) return json({ error: 'auth' });
+  const payload = [...crypto.getRandomValues(new Uint8Array(24))].map(b => b.toString(16).padStart(2, '0')).join('');
+  await env.RATE_LIMIT.put(`wproof:${payload}`, String(sess.id), { expirationTtl: TONPROOF_TTL });
+  return json({ payload });
+}
+
+// Проверка ton_proof по спецификации TON Connect:
+//   msg  = "ton-proof-item-v2/" + workchain(int32 BE) + addrHash(32B) + domainLen(uint32 LE)
+//          + domain + timestamp(uint64 LE) + payload
+//   full = sha256( 0xffff + "ton-connect" + sha256(msg) )
+// Подпись ed25519 проверяется публичным ключом кошелька (его отдаёт tonapi).
+async function walletLink(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const sess = await getSession(env, body.token);
+  if (!sess) return json({ error: 'auth' });
+  const tgid = sess.id;
+  const { address, proof } = body || {};
+  if (!address || !proof?.signature || !proof?.payload) return json({ error: 'bad', text: 'Нет данных подписи.' });
+
+  // payload должен быть нашим, невыдохшимся и выданным этому же аккаунту
+  const owner = await env.RATE_LIMIT.get(`wproof:${proof.payload}`);
+  if (owner !== String(tgid)) return json({ error: 'bad', text: 'Подпись устарела, попробуй ещё раз.' });
+
+  const domain = proof.domain?.value || '';
+  if (!ALLOWED_DOMAINS.includes(domain)) return json({ error: 'bad', text: 'Неверный домен подписи.' });
+  const ts = Number(proof.timestamp || 0);
+  if (!ts || Math.abs(Date.now() / 1000 - ts) > TONPROOF_TTL) return json({ error: 'bad', text: 'Подпись устарела, попробуй ещё раз.' });
+
+  const [wcStr, hashHex] = String(address).split(':');
+  if (hashHex?.length !== 64) return json({ error: 'bad', text: 'Неверный адрес кошелька.' });
+
+  const digest = await tonProofDigest({ wc: parseInt(wcStr, 10), hashHex, domain, ts, payload: proof.payload });
+
+  const pub = await walletPublicKey(address);
+  if (!pub) return json({ error: 'bad', text: 'Не удалось получить ключ кошелька, попробуй позже.' });
+  const sig = b64Bytes(proof.signature);
+  if (!(await ed25519Verify(pub, sig, digest))) return json({ error: 'bad', text: 'Подпись не прошла проверку.' });
+
+  // Один кошелёк — один аккаунт, в обе стороны. Иначе одну и ту же раздачу
+  // соберут пять раз с одного кошелька.
+  const taken = await env.RATE_LIMIT.get(`walletown:${address}`);
+  if (taken && taken !== String(tgid)) return json({ error: 'taken', text: 'Этот кошелёк уже привязан к другому аккаунту.' });
+  const prev = await env.RATE_LIMIT.get(`wallet:${tgid}`);
+  if (prev && prev !== address) await env.RATE_LIMIT.delete(`walletown:${prev}`);
+
+  await env.RATE_LIMIT.put(`wallet:${tgid}`, address);
+  await env.RATE_LIMIT.put(`walletown:${address}`, String(tgid));
+  await env.RATE_LIMIT.delete(`wproof:${proof.payload}`);
+  // Для ручной раздачи: список привязок за сутки, чтобы не выгружать весь KV.
+  await env.RATE_LIMIT.put(`wnew:${new Date().toISOString().slice(0, 10)}:${tgid}`,
+    JSON.stringify({ address, at: Date.now(), user: sess.username || null }), { expirationTtl: 60 * 60 * 24 * 30 });
+
+  const bal = await faceBalance(env, address, true);
+  return json({ ok: true, address, balance: bal, holder: bal >= FACE_HOLDER_MIN });
+}
+
+// Байтовая раскладка сообщения ton_proof. Вынесена отдельно: порядок и endianness
+// полей ломаются незаметно, а проверяются только тестом (см. test_tonproof.mjs).
+export async function tonProofDigest({ wc, hashHex, domain, ts, payload }) {
+  const enc = new TextEncoder();
+  const domainBytes = enc.encode(domain);
+  const payloadBytes = enc.encode(payload);
+  const prefix = enc.encode('ton-proof-item-v2/');
+  const msg = new Uint8Array(prefix.length + 4 + 32 + 4 + domainBytes.length + 8 + payloadBytes.length);
+  const dv = new DataView(msg.buffer);
+  let o = 0;
+  msg.set(prefix, o); o += prefix.length;
+  dv.setInt32(o, wc, false); o += 4;                       // workchain, big-endian
+  msg.set(hexBytes(hashHex), o); o += 32;
+  dv.setUint32(o, domainBytes.length, true); o += 4;       // длина домена, little-endian
+  msg.set(domainBytes, o); o += domainBytes.length;
+  dv.setBigUint64(o, BigInt(ts), true); o += 8;
+  msg.set(payloadBytes, o);
+
+  const inner = new Uint8Array(await crypto.subtle.digest('SHA-256', msg));
+  const full = new Uint8Array(2 + 11 + 32);
+  full.set([0xff, 0xff], 0);
+  full.set(enc.encode('ton-connect'), 2);
+  full.set(inner, 13);
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', full));
+}
+
+async function walletUnlink(request, env) {
+  let body; try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const sess = await getSession(env, body.token);
+  if (!sess) return json({ error: 'auth' });
+  const addr = await env.RATE_LIMIT.get(`wallet:${sess.id}`);
+  if (addr) { await env.RATE_LIMIT.delete(`walletown:${addr}`); await env.RATE_LIMIT.delete(`wallet:${sess.id}`); }
+  return json({ ok: true });
+}
+
+// Публичный ключ кошелька из tonapi (32 байта).
+async function walletPublicKey(address) {
+  try {
+    const r = await fetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}/publickey`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.public_key ? hexBytes(d.public_key) : null;
+  } catch { return null; }
+}
+
+export async function ed25519Verify(pub, sig, data) {
+  for (const alg of ['Ed25519', 'NODE-ED25519']) {
+    try {
+      const key = await crypto.subtle.importKey('raw', pub, { name: alg, namedCurve: 'NODE-ED25519' }, false, ['verify']);
+      return await crypto.subtle.verify({ name: alg }, key, sig, data);
+    } catch { /* пробуем следующее имя алгоритма */ }
+  }
+  return false;
+}
+
+// Баланс FACE в целых токенах. Кэш 10 минут — иначе на каждый анализ ходим в tonapi.
+async function faceBalance(env, address, fresh) {
+  const key = `bal:${address}`;
+  if (!fresh) {
+    const c = await env.RATE_LIMIT.get(key);
+    if (c !== null) return parseFloat(c);
+  }
+  let bal = 0;
+  try {
+    const r = await fetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}/jettons/${FACE_JETTON}`);
+    if (r.ok) {
+      const d = await r.json();
+      bal = Number(BigInt(d.balance || '0') / 10n ** 9n);
+    }
+  } catch { /* tonapi лежит — считаем, что баланса нет, доступ просто не выдаём */ }
+  await env.RATE_LIMIT.put(key, String(bal), { expirationTtl: 600 });
+  return bal;
+}
+
+// Холдер или нет — на момент запроса.
+async function isHolder(env, tgid) {
+  const addr = await env.RATE_LIMIT.get(`wallet:${tgid}`);
+  if (!addr) return { holder: false, address: null, balance: 0 };
+  const bal = await faceBalance(env, addr);
+  return { holder: bal >= FACE_HOLDER_MIN, address: addr, balance: bal };
+}
+
+// Выгрузка привязок за день — чтобы вручную разослать токены новым.
+// Защищена тем же секретом, что и статистика.
+async function adminWallets(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
+  if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return cors('Forbidden', 403);
+  const day = url.searchParams.get('day') || new Date().toISOString().slice(0, 10);
+  const list = await env.RATE_LIMIT.list({ prefix: `wnew:${day}:` });
+  const out = [];
+  for (const k of list.keys) {
+    const raw = await env.RATE_LIMIT.get(k.name);
+    if (raw) out.push({ tgid: k.name.split(':')[2], ...JSON.parse(raw) });
+  }
+  return json({ day, count: out.length, wallets: out });
+}
+
+export function hexBytes(hex) {
+  const a = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < a.length; i++) a[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return a;
+}
+function b64Bytes(b64) {
+  const s = atob(b64);
+  const a = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
+  return a;
 }
 
 // ─────────────────────────── Утилиты ───────────────────────────
