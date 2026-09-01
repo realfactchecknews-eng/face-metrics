@@ -3958,7 +3958,7 @@ async function faceScreen(env, tgid, L) {
   }
   if (pending > 0) t += f.pending(pending);
   const kb = { inline_keyboard: [] };
-  kb.inline_keyboard.push([{ text: hold.address ? f.kbRelink : f.kbLink, web_app: { url: 'https://facerate.ru/wallet.html' } }]);
+  kb.inline_keyboard.push([{ text: hold.address ? f.kbRelink : f.kbLink, web_app: { url: 'https://facerate.ru/wallet.html?v=2' } }]);
   kb.inline_keyboard.push([{ text: f.kbTasks, callback_data: 'facetasks' }]);
   kb.inline_keyboard.push([{ text: BL[L].kbBack, callback_data: 'menu' }]);
   return { text: t, kb };
