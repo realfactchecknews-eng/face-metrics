@@ -36,4 +36,8 @@ for (const id of ['live', 'admin', 'pastBox']) {
   assert.ok(tag.includes('class="') && tag.includes('hide'), `${id}: должен стартовать скрытым`);
   assert.ok(!/style="[^"]*display/.test(tag), `${id}: инлайновый display перебьёт .hide`);
 }
+// Раскладка задана по id (#live, #admin) — это сильнее класса, поэтому .hide обязано
+// быть !important, иначе блок останется видимым. Ровно это и ломалось дважды.
+assert.match(html, /\.hide\s*\{[^}]*display\s*:\s*none\s*!important/,
+  '.hide должен перебивать раскладку по id');
 console.log('скрытые блоки: проверка прошла');
