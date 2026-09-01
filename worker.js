@@ -1353,6 +1353,26 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
+  // ── Админ: /facepay — все заявки на выплату FACE одним списком ──
+  if (text.startsWith('/facepay') && !text.startsWith('/facepaid')
+      && (msg.from.id === FACE_ADMIN_TGID || ADMIN_USERNAMES.includes(msg.from.username || ''))) {
+    const rows = await pendingFacePayouts(env);
+    let out;
+    if (!rows.length) out = 'Заявок на выплату нет.';
+    else {
+      const total = rows.reduce((a, r) => a + r.amount, 0);
+      out = `💲 <b>К выплате: ${rows.length} шт, ${total.toLocaleString('ru-RU')} FACE</b>\n`;
+      // Telegram режет сообщения на 4096 символах — показываем первые 20,
+      // остальные видно в /admin-face. С таким объёмом раздачи это не предел.
+      for (const r of rows.slice(0, 20)) {
+        out += `\n<b>${r.amount.toLocaleString('ru-RU')} FACE</b> — <code>${r.tgid}</code>\n<code>${r.address || 'кошелёк отвязан'}</code>\n/facepaid ${r.tgid}\n`;
+      }
+      if (rows.length > 20) out += `\n…и ещё ${rows.length - 20}.`;
+    }
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: out, parse_mode: 'HTML' });
+    return new Response('ok');
+  }
+
   // ── Админ: /facepaid <tgid> — пометить начисление FACE отправленным ──
   if (text.startsWith('/facepaid') && (msg.from.id === FACE_ADMIN_TGID || ADMIN_USERNAMES.includes(msg.from.username || ''))) {
     const m = text.match(/^\/facepaid\s+(\d+)/);
@@ -3932,14 +3952,8 @@ async function notifyFacePayout(env, tgid, task, total, user) {
   } catch { /* уведомление не критично, начисление уже записано */ }
 }
 
-// Кому и сколько отправить руками. Защищено секретом вебхука.
-async function adminFace(request, env) {
-  const url = new URL(request.url);
-  const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
-  if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return cors('Forbidden', 403);
-  // Пометить выплаченным: ?paid=<tgid>
-  const paid = url.searchParams.get('paid');
-  if (paid) { await env.RATE_LIMIT.delete(`facepay:${paid}`); return json({ ok: true, paid }); }
+// Все незакрытые начисления, по убыванию суммы. Один источник и для бота, и для эндпоинта.
+async function pendingFacePayouts(env) {
   const list = await env.RATE_LIMIT.list({ prefix: 'facepay:' });
   const out = [];
   for (const k of list.keys) {
@@ -3948,7 +3962,18 @@ async function adminFace(request, env) {
     if (!amount) continue;
     out.push({ tgid, amount, address: await env.RATE_LIMIT.get(`wallet:${tgid}`) });
   }
-  out.sort((a, b) => b.amount - a.amount);
+  return out.sort((a, b) => b.amount - a.amount);
+}
+
+// Кому и сколько отправить руками. Защищено секретом вебхука.
+async function adminFace(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
+  if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return cors('Forbidden', 403);
+  // Пометить выплаченным: ?paid=<tgid>
+  const paid = url.searchParams.get('paid');
+  if (paid) { await env.RATE_LIMIT.delete(`facepay:${paid}`); return json({ ok: true, paid }); }
+  const out = await pendingFacePayouts(env);
   return json({ count: out.length, total: out.reduce((s, x) => s + x.amount, 0), payouts: out });
 }
 
