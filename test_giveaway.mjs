@@ -26,3 +26,14 @@ assert.equal(prizes(['a', 'b', 'c', 'd'], 3).length, 3, 'лишние призы
 assert.equal(prizes(['x'.repeat(500)], 1)[0].length, 120, 'длина приза ограничена');
 
 console.log('все проверки прошли');
+
+// Регрессия: инлайновый display перебивал класс .hide, и админская форма была
+// видна всем. Проверяем, что на скрываемых блоках нет атрибута style с display.
+import { readFileSync } from 'node:fs';
+const html = readFileSync(new URL('./giveaway.html', import.meta.url), 'utf8');
+for (const id of ['live', 'admin', 'pastBox']) {
+  const tag = html.match(new RegExp(`<div id="${id}"[^>]*>`))[0];
+  assert.ok(tag.includes('class="') && tag.includes('hide'), `${id}: должен стартовать скрытым`);
+  assert.ok(!/style="[^"]*display/.test(tag), `${id}: инлайновый display перебьёт .hide`);
+}
+console.log('скрытые блоки: проверка прошла');

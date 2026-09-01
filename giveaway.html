@@ -43,6 +43,11 @@
   .err { color:#e08a7a; }
   .past { font-size:13.5px; color:var(--dim); line-height:1.6; }
   .past b { color:#f0ece6; }
+  #live, #admin { width:100%; display:flex; flex-direction:column; }
+  #live { gap:14px; align-items:center; }
+  #admin { gap:12px; }
+  /* Инлайновый style="display:flex" сильнее класса, и .hide на таком блоке не работает —
+     поэтому раскладка живёт здесь, а не в атрибуте. */
   .hide { display:none; }
 </style>
 </head>
@@ -52,7 +57,7 @@
   <h1>Розыгрыш</h1>
   <p id="intro">Загружаем…</p>
 
-  <div id="live" class="hide" style="width:100%;display:flex;flex-direction:column;gap:14px;align-items:center">
+  <div id="live" class="hide">
     <div class="card" style="text-align:center">
       <div class="timer" id="timer">—</div>
       <div class="sub">до итогов</div>
@@ -71,7 +76,7 @@
     <div class="past" id="past"></div>
   </div>
 
-  <div id="admin" class="hide" style="width:100%;display:flex;flex-direction:column;gap:12px">
+  <div id="admin" class="hide">
     <h2>Панель админа</h2>
     <div class="card">
       <label>Победителей<input id="aWinners" type="number" value="3" min="1" max="50"></label>
