@@ -1607,7 +1607,8 @@ async function handleCallback(env, cq) {
     if (unlim > Date.now()) t += b.statusUnlim(fmtDate(unlim, L));
     t += b.statusCredits(credits);
     t += sub ? b.statusSub(freeAvail ? 1 : 0) : b.statusNoSub;
-    await reply(t, menuKb(L));
+    t += await faceStatusLine(env, tgid, L);
+    await reply(t, menuKb(L), { parse_mode: 'HTML' });
   } else if (data === 'shop') {
     // Шаг 1: выбор способа оплаты.
     await reply(b.payPick, methodKb(L, env));
@@ -3950,6 +3951,36 @@ const FACE_T = {
     kbLink: '🔗 Link wallet', kbRelink: '🔄 Change wallet', kbTasks: '📋 Tasks', kbClaim: 'Claim',
   },
 };
+
+// Строчка про FACE для экрана «Мой статус». Отдельно, чтобы статус холдера
+// не приходилось собирать в двух местах по-разному.
+async function faceStatusLine(env, tgid, L) {
+  const hold = await isHolder(env, tgid);
+  const pending = parseInt(await env.RATE_LIMIT.get(`facepay:${tgid}`) || '0', 10);
+  const n = (x) => x.toLocaleString(L === 'ru' ? 'ru-RU' : 'en-US');
+  let t;
+  if (!hold.address) {
+    t = L === 'ru'
+      ? '\n\n💲 FACE: кошелёк не привязан. Привязка даёт 10 000 FACE — жми «💲 FACE» в меню.'
+      : '\n\n💲 FACE: no wallet linked. Linking one gives 10,000 FACE — tap "💲 FACE" in the menu.';
+  } else if (!hold.known) {
+    t = L === 'ru' ? '\n\n💲 FACE: баланс сейчас не прочитать, загляни через минуту.'
+                   : '\n\n💲 FACE: cannot read the balance right now, try again in a minute.';
+  } else if (hold.holder) {
+    t = L === 'ru'
+      ? `\n\n💲 <b>Холдер FACE</b> — ${n(hold.balance)} FACE.\nЭто 1 бесплатный полный анализ каждый день.`
+      : `\n\n💲 <b>FACE holder</b> — ${n(hold.balance)} FACE.\nThat is 1 free full analysis every day.`;
+  } else {
+    t = L === 'ru'
+      ? `\n\n💲 FACE: ${n(hold.balance)} из ${n(FACE_HOLDER_MIN)}. До холдерского доступа не хватает ${n(FACE_HOLDER_MIN - hold.balance)} — забери за задания.`
+      : `\n\n💲 FACE: ${n(hold.balance)} of ${n(FACE_HOLDER_MIN)}. ${n(FACE_HOLDER_MIN - hold.balance)} short of holder access — earn it with tasks.`;
+  }
+  if (pending > 0) {
+    t += L === 'ru' ? `\n⏳ Начислено к выплате: ${n(pending)} FACE.`
+                    : `\n⏳ Pending payout: ${n(pending)} FACE.`;
+  }
+  return t;
+}
 
 async function faceScreen(env, tgid, L) {
   const f = FACE_T[L];
