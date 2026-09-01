@@ -1353,6 +1353,19 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
+  // ── Админ: /facepaid <tgid> — пометить начисление FACE отправленным ──
+  if (text.startsWith('/facepaid') && (msg.from.id === FACE_ADMIN_TGID || ADMIN_USERNAMES.includes(msg.from.username || ''))) {
+    const m = text.match(/^\/facepaid\s+(\d+)/);
+    if (!m) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат: /facepaid <telegram id>' });
+    } else {
+      const amt = parseInt(await env.RATE_LIMIT.get(`facepay:${m[1]}`) || '0', 10);
+      await env.RATE_LIMIT.delete(`facepay:${m[1]}`);
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: amt ? `✅ ${m[1]}: ${amt.toLocaleString('ru-RU')} FACE помечено выплаченным.` : `У ${m[1]} нет начислений к выплате.` });
+    }
+    return new Response('ok');
+  }
+
   // ── Админ: /addpromo КОД использований credits=N | hours=H | discount=N ──
   if (text.startsWith('/addpromo') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
     const m = text.match(/^\/addpromo\s+(\S+)\s+(\d+)\s+(credits|hours|discount)=(\d+)/i);
@@ -1633,7 +1646,7 @@ async function handleCallback(env, cq) {
     const sc = await faceTasksScreen(env, tgid, L);
     await reply(sc.text, sc.kb, { parse_mode: 'HTML' });
   } else if (data.startsWith('faceclaim:')) {
-    const msg = await faceClaim(env, tgid, data.slice(10), L);
+    const msg = await faceClaim(env, tgid, data.slice(10), L, cq.from);
     const sc = await faceTasksScreen(env, tgid, L);
     await reply(msg + '\n\n' + sc.text, sc.kb, { parse_mode: 'HTML' });
   } else if (data === 'mysub') {
@@ -3582,7 +3595,8 @@ async function partnerAdmin(request, env) {
 // транзакций не делает. Баланс FACE читается в момент запроса — продал токены,
 // холдерский уровень пропал. Никаких «застолбил один раз навсегда».
 const FACE_JETTON = 'EQDcxb_AjNwLnnf331cfF3zYILyLqp1b7fS8hm2qLTqqIyjb';
-const FACE_HOLDER_MIN = 100000;          // порог холдера, целых FACE
+const FACE_HOLDER_MIN = 100000;
+const FACE_ADMIN_TGID = 1031760975;      // кому падают уведомления о выплатах          // порог холдера, целых FACE
 const HOLDER_FREE_PER_DAY = 1;           // бесплатных анализов в сутки холдеру
 const TONPROOF_TTL = 15 * 60;            // сколько живёт выданный payload и годна подпись
 const ALLOWED_DOMAINS = ['facerate.ru', 'www.facerate.ru', 'localhost'];
@@ -3817,7 +3831,7 @@ export const FACE_TASKS = [
 
 const FACE_T = {
   ru: {
-    btn: '🟡 FACE',
+    btn: '💲 FACE',
     noWallet: 'Кошелёк не привязан.\nПривяжи его на сайте — это займёт полминуты и сразу даёт 10 000 FACE.',
     wallet: (a, bal) => `Кошелёк: <code>${a}</code>\nБаланс: <b>${bal} FACE</b>`,
     unknown: 'Баланс сейчас не прочитать — сеть занята, загляни через минуту.',
@@ -3833,7 +3847,7 @@ const FACE_T = {
     kbLink: '🔗 Привязать кошелёк', kbTasks: '📋 Задания', kbClaim: 'Забрать',
   },
   en: {
-    btn: '🟡 FACE',
+    btn: '💲 FACE',
     noWallet: 'No wallet linked.\nLink one on the site — takes half a minute and instantly gives 10,000 FACE.',
     wallet: (a, bal) => `Wallet: <code>${a}</code>\nBalance: <b>${bal} FACE</b>`,
     unknown: 'Cannot read the balance right now — try again in a minute.',
@@ -3883,7 +3897,7 @@ async function faceTasksScreen(env, tgid, L) {
   return { text: t, kb };
 }
 
-export async function faceClaim(env, tgid, id, L) {
+export async function faceClaim(env, tgid, id, L, user) {
   const f = FACE_T[L];
   const task = FACE_TASKS.find((x) => x.id === id);
   if (!task) return f.claimNo;
@@ -3894,8 +3908,28 @@ export async function faceClaim(env, tgid, id, L) {
   if (!(await env.RATE_LIMIT.get(`wallet:${tgid}`))) return f.claimNoWallet;
   await env.RATE_LIMIT.put(`faceclaim:${tgid}:${id}`, '1');
   const cur = parseInt(await env.RATE_LIMIT.get(`facepay:${tgid}`) || '0', 10);
-  await env.RATE_LIMIT.put(`facepay:${tgid}`, String(cur + task.amount));
+  const total = cur + task.amount;
+  await env.RATE_LIMIT.put(`facepay:${tgid}`, String(total));
+  await notifyFacePayout(env, tgid, task, total, user);
   return f.claimOk(task.amount.toLocaleString('ru-RU'));
+}
+
+// Уведомление админу: кому, сколько и на какой адрес слать. Без него о новой
+// выплате можно узнать только вручную дёрнув /admin-face.
+async function notifyFacePayout(env, tgid, task, total, user) {
+  if (!env.TG_BOT_TOKEN) return;                       // в тестах токена нет — молча пропускаем
+  const addr = await env.RATE_LIMIT.get(`wallet:${tgid}`);
+  const who = user?.username ? '@' + user.username : (user?.first_name || 'id ' + tgid);
+  const text = `💲 <b>Новое начисление FACE</b>\n\n`
+    + `${who} (<code>${tgid}</code>)\n`
+    + `Задание: ${task.ru}\n`
+    + `Начислено: <b>${task.amount.toLocaleString('ru-RU')} FACE</b>\n`
+    + `Всего к выплате: <b>${total.toLocaleString('ru-RU')} FACE</b>\n\n`
+    + `Кошелёк:\n<code>${addr}</code>\n\n`
+    + `После отправки пометь выплаченным:\n<code>/facepaid ${tgid}</code>`;
+  try {
+    await tgApi(env, 'sendMessage', { chat_id: FACE_ADMIN_TGID, text, parse_mode: 'HTML' });
+  } catch { /* уведомление не критично, начисление уже записано */ }
 }
 
 // Кому и сколько отправить руками. Защищено секретом вебхука.
