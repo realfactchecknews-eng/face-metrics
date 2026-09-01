@@ -143,9 +143,11 @@ export default {
 
 // Разовый вызов (защищён тем же секретом, что и сам вебхук) — перерегистрирует вебхук с
 // allowed_updates, включающим chat_boost (Telegram не шлёт его по умолчанию). Нужно вызвать
-// один раз после деплоя этой фичи: curl -X POST "<WORKER_URL>/setup-webhook?secret=<TG_WEBHOOK_SECRET>".
+// один раз после деплоя этой фичи:
+//   curl -X POST <WORKER_URL>/setup-webhook -H 'Content-Type: application/json' -d '{"secret":"<TG_WEBHOOK_SECRET>"}'
+// Секрет только в теле: при включённой observability query-строка попадает в хранимые логи.
 async function setupWebhook(request, env) {
-  const secret = new URL(request.url).searchParams.get('secret');
+  const secret = (await request.clone().json().catch(() => ({}))).secret;
   if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return new Response('forbidden', { status: 403 });
   const r = await tgApi(env, 'setWebhook', {
     url: 'https://face-metrics-ai.realfactchecknews.workers.dev/tg-webhook',
@@ -1923,15 +1925,9 @@ async function grantPack(env, tgid, pack, L, sp) {
 }
 
 // ─────────────────────────── Бот техподдержки (отдельный токен) ───────────────────────────
-// Временное объявление о задержках на стороне Lava.top (с 24.08.2026). Когда починят —
-// стереть константу и убрать ${PAY_DELAY.xx} из hello/faq и строку из SUP_FAQ.
-const PAY_DELAY = {
-  ru: '\u26a0\ufe0f Сейчас на стороне платёжной системы задержки: оплата картой и СБП доходит до получаса. Деньги не теряются, анализы начисляются автоматически — просто подожди и обнови страницу.',
-  en: '\u26a0\ufe0f The payment provider is currently slow: card and SBP payments can take up to 30 minutes to arrive. Nothing is lost — credits are added automatically, just wait and refresh the page.',
-};
 const SUP = {
   en: {
-    hello: PAY_DELAY.en + '\n\n👋 FaceRate Support. Ask your question — I’ll answer right away. Or pick an option below.',
+    hello: '👋 FaceRate Support. Ask your question — I’ll answer right away. Or pick an option below.',
     menu: 'How can I help?',
     human: '🧑 Call an operator', kbFaq: '📖 FAQ', kbSite: '🌐 Open FaceRate', kbBuy: '⭐ Buy / prices',
     kbLang: '🌍 Язык: Русский', kbBack: '← Menu',
@@ -1939,10 +1935,10 @@ const SUP = {
     sent: '✅ Sent to the operator. Please wait for a reply.',
     noAdmin: 'Operator is temporarily unavailable, please try later.',
     langSet: '🌍 Language set: English.',
-    faq: PAY_DELAY.en + '\n\n❓ FAQ\n\n• Free analysis — subscribe to @wwwfacerateru (1/week).\n• Paid — Telegram Stars or crypto in the payments bot.\n• No access after paying? Refresh facerate.ru; if it persists — tap “Call an operator”.\n• Paid but can’t run the analysis? Refresh the page and wait — payments can take up to 30 minutes right now.\n• Paid but no full report? Refresh the page and run the analysis again.\n• Got an error? Try another photo or switch your VPN.\n• Promo codes — button in the payments bot; codes drop in channel giveaways.\n• Privacy — your photo is used only for the analysis and is not published.\n\nStill stuck? Just type your question here.',
+    faq: '❓ FAQ\n\n• Free analysis — subscribe to @wwwfacerateru (1/week).\n• Paid — Telegram Stars or crypto in the payments bot.\n• No access after paying? Refresh facerate.ru; if it persists — tap “Call an operator”.\n• Paid but can’t run the analysis? Refresh the page and wait a couple of minutes.\n• Paid but no full report? Refresh the page and run the analysis again.\n• Got an error? Try another photo or switch your VPN.\n• Promo codes — button in the payments bot; codes drop in channel giveaways.\n• Privacy — your photo is used only for the analysis and is not published.\n\nStill stuck? Just type your question here.',
   },
   ru: {
-    hello: PAY_DELAY.ru + '\n\n👋 Поддержка FaceRate. Задай вопрос — отвечу сразу. Или выбери пункт ниже.',
+    hello: '👋 Поддержка FaceRate. Задай вопрос — отвечу сразу. Или выбери пункт ниже.',
     menu: 'Чем помочь?',
     human: '🧑 Позвать оператора', kbFaq: '📖 FAQ', kbSite: '🌐 Открыть FaceRate', kbBuy: '⭐ Купить / тарифы',
     kbLang: '🌍 Language: English', kbBack: '← Меню',
@@ -1950,7 +1946,7 @@ const SUP = {
     sent: '✅ Отправлено оператору. Дождись ответа.',
     noAdmin: 'Оператор временно недоступен, попробуй позже.',
     langSet: '🌍 Язык переключён: русский.',
-    faq: PAY_DELAY.ru + '\n\n❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в неделю).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Оплатил, но анализ не делается? Обнови страницу и подожди — сейчас оплата может идти до получаса.\n• Оплатил, а полного разбора нет? Обнови страницу и сделай анализ заново.\n• Выскочила ошибка? Попробуй другое фото или смени VPN.\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
+    faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в неделю).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Оплатил, но анализ не делается? Обнови страницу и подожди пару минут.\n• Оплатил, а полного разбора нет? Обнови страницу и сделай анализ заново.\n• Выскочила ошибка? Попробуй другое фото или смени VPN.\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
   },
 };
 function supMenuKb(L, isAdmin) {
@@ -2167,9 +2163,8 @@ const SUP_FAQ = {
 - Платно: пакеты «1 анализ», «5 анализов», «безлимит на день», «безлимит на месяц». Оплата — Telegram Stars или криптой (через CryptoBot), цена в звёздах или рублях.
 - Вход на сайте — через Telegram. После оплаты доступ появляется автоматически, обнови страницу.
 - Промокоды: в боте кнопка «Ввести промокод»; коды бывают в розыгрышах в канале.
-ВАЖНО СЕЙЧАС: на стороне платёжной системы задержки — оплата картой и СБП доходит до получаса. Деньги не теряются, начисление автоматическое. Если человек пишет, что оплатил и ничего нет, — скажи про это и попроси подождать полчаса, оператора не зови.
 Готовые ответы — на эти три вопроса отвечай сразу, оператора не зови:
-- «Оплатил, а анализ сделать не могу» → обновите страницу и подождите — сейчас оплата может идти до получаса.
+- «Оплатил, а анализ сделать не могу» → обновите страницу и подождите пару минут.
 - «Оплатил, а полного разбора нет» → обновите страницу и сделайте анализ заново.
 - «Выскочила ошибка» → попробуйте другое фото или смените VPN.
 Отвечай кратко (2–4 предложения), на русском. Если вопрос про возврат денег, проблему с оплатой, баг или что-то, в чём не уверен — не выдумывай, а попроси нажать «Позвать оператора».`,
@@ -2179,9 +2174,8 @@ Facts:
 - Paid: packages "1 analysis", "5 analyses", "day unlimited", "month unlimited". Payment via Telegram Stars or crypto (CryptoBot), priced in stars or rubles.
 - Login on the site is via Telegram. After payment access appears automatically — refresh the page.
 - Promo codes: the bot has an "Enter promo code" button; codes appear in channel giveaways.
-IMPORTANT RIGHT NOW: the payment provider is slow — card and SBP payments can take up to 30 minutes to arrive. Nothing is lost, credits are added automatically. If someone says they paid and got nothing, tell them this and ask them to wait 30 minutes; do not call an operator.
 Canned answers — answer these three directly, do not call an operator:
-- "Paid but can't run the analysis" → refresh the page and wait — payments can take up to 30 minutes right now.
+- "Paid but can't run the analysis" → refresh the page and wait a couple of minutes.
 - "Paid but no full report" → refresh the page and run the analysis again.
 - "Got an error" → try another photo or switch your VPN.
 Answer briefly (2–4 sentences), in English. For refunds, payment issues, bugs, or anything you’re unsure about — do not make things up; ask them to tap "Call an operator".`,
@@ -3836,7 +3830,10 @@ async function isHolder(env, tgid) {
 // Защищена тем же секретом, что и статистика.
 async function adminWallets(request, env) {
   const url = new URL(request.url);
-  const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
+  // Секрет только из тела POST. Раньше принимали и ?secret= из query — но при включённой
+  // observability в логи пишется полный URL запроса, то есть каждый админский вызов клал
+  // секрет в хранимые логи открытым текстом.
+  const secret = (await request.clone().json().catch(() => ({}))).secret;
   const adminSecret = env.FACE_ADMIN_SECRET || env.TG_WEBHOOK_SECRET;
   if (!adminSecret || secret !== adminSecret) return cors('Forbidden', 403);
   const day = url.searchParams.get('day') || new Date().toISOString().slice(0, 10);
@@ -4127,7 +4124,10 @@ async function pendingFacePayouts(env) {
 // Кому и сколько отправить руками. Защищено секретом вебхука.
 async function adminFace(request, env) {
   const url = new URL(request.url);
-  const secret = url.searchParams.get('secret') || (await request.clone().json().catch(() => ({}))).secret;
+  // Секрет только из тела POST. Раньше принимали и ?secret= из query — но при включённой
+  // observability в логи пишется полный URL запроса, то есть каждый админский вызов клал
+  // секрет в хранимые логи открытым текстом.
+  const secret = (await request.clone().json().catch(() => ({}))).secret;
   const adminSecret = env.FACE_ADMIN_SECRET || env.TG_WEBHOOK_SECRET;
   if (!adminSecret || secret !== adminSecret) return cors('Forbidden', 403);
   // Пометить выплаченным: ?paid=<tgid>
