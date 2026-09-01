@@ -3685,8 +3685,8 @@ async function walletLink(request, env) {
     JSON.stringify({ address, at: Date.now(), user: sess.username || null }), { expirationTtl: 60 * 60 * 24 * 30 });
 
   const bal = await faceBalance(env, address, true);
-  if (bal === null) return json({ ok: true, address, balance: null, holder: false, known: false });
-  return json({ ok: true, address, balance: bal, holder: bal >= FACE_HOLDER_MIN, known: true });
+  if (bal === null) return json({ ok: true, address: rawToFriendly(address), balance: null, holder: false, known: false });
+  return json({ ok: true, address: rawToFriendly(address), balance: bal, holder: bal >= FACE_HOLDER_MIN, known: true });
 }
 
 // Байтовая раскладка сообщения ton_proof. Вынесена отдельно: порядок и endianness
@@ -3805,8 +3805,9 @@ async function isHolder(env, tgid) {
   const addr = await env.RATE_LIMIT.get(`wallet:${tgid}`);
   if (!addr) return { holder: false, address: null, balance: 0, known: true };
   const bal = await faceBalance(env, addr);
-  if (bal === null) return { holder: false, address: addr, balance: 0, known: false };
-  return { holder: bal >= FACE_HOLDER_MIN, address: addr, balance: bal, known: true };
+  const friendly = rawToFriendly(addr);
+  if (bal === null) return { holder: false, address: friendly, balance: 0, known: false };
+  return { holder: bal >= FACE_HOLDER_MIN, address: friendly, balance: bal, known: true };
 }
 
 // Выгрузка привязок за день — чтобы вручную разослать токены новым.
@@ -3820,9 +3821,37 @@ async function adminWallets(request, env) {
   const out = [];
   for (const k of list.keys) {
     const raw = await env.RATE_LIMIT.get(k.name);
-    if (raw) out.push({ tgid: k.name.split(':')[2], ...JSON.parse(raw) });
+    if (raw) { const w = JSON.parse(raw); out.push({ tgid: k.name.split(':')[2], ...w, address: rawToFriendly(w.address) }); }
   }
   return json({ day, count: out.length, wallets: out });
+}
+
+// Сырой адрес (0:hex) → привычный UQ…/EQ…. Кошельки сырой формат не принимают:
+// вставить его в поле «Отправить» нельзя, Tonkeeper ругается на формат сети.
+// non-bounceable (UQ) — правильный вариант для перевода на кошелёк человека.
+export function rawToFriendly(raw, bounceable) {
+  if (!raw || !raw.includes(':')) return raw;                 // уже дружественный — не трогаем
+  const [wcStr, hashHex] = raw.split(':');
+  const wc = parseInt(wcStr, 10);
+  const buf = new Uint8Array(36);
+  buf[0] = bounceable ? 0x11 : 0x51;
+  buf[1] = wc < 0 ? 0xff : wc;
+  buf.set(hexBytes(hashHex), 2);
+  const crc = crc16(buf.subarray(0, 34));
+  buf[34] = crc >> 8; buf[35] = crc & 0xff;
+  let bin = '';
+  for (const b of buf) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+// CRC16/XMODEM — контрольная сумма адреса по стандарту TON.
+function crc16(data) {
+  let crc = 0;
+  for (const b of data) {
+    crc ^= b << 8;
+    for (let i = 0; i < 8; i++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
 }
 
 export function hexBytes(hex) {
@@ -3970,7 +3999,7 @@ export async function faceClaim(env, tgid, id, L, user) {
 // выплате можно узнать только вручную дёрнув /admin-face.
 async function notifyFacePayout(env, tgid, task, total, user) {
   if (!env.TG_BOT_TOKEN) return;                       // в тестах токена нет — молча пропускаем
-  const addr = await env.RATE_LIMIT.get(`wallet:${tgid}`);
+  const addr = rawToFriendly(await env.RATE_LIMIT.get(`wallet:${tgid}`));
   const who = user?.username ? '@' + user.username : (user?.first_name || 'id ' + tgid);
   const text = `💲 <b>Новое начисление FACE</b>\n\n`
     + `${who} (<code>${tgid}</code>)\n`
@@ -3992,7 +4021,7 @@ async function pendingFacePayouts(env) {
     const tgid = k.name.slice(8);
     const amount = parseInt(await env.RATE_LIMIT.get(k.name) || '0', 10);
     if (!amount) continue;
-    out.push({ tgid, amount, address: await env.RATE_LIMIT.get(`wallet:${tgid}`) });
+    out.push({ tgid, amount, address: rawToFriendly(await env.RATE_LIMIT.get(`wallet:${tgid}`)) });
   }
   return out.sort((a, b) => b.amount - a.amount);
 }
