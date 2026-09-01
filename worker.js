@@ -3614,7 +3614,12 @@ async function walletLink(request, env) {
   const digest = await tonProofDigest({ wc: parseInt(wcStr, 10), hashHex, domain, ts, payload: proof.payload });
 
   const pub = await walletPublicKey(address);
-  if (!pub) return json({ error: 'bad', text: 'Не удалось получить ключ кошелька, попробуй позже.' });
+  if (!pub) {
+    const active = await accountActive(address);
+    return json({ error: 'bad', address, text: active === false
+      ? 'Кошелёк ещё не активирован в сети: с него не уходило ни одной транзакции, поэтому подпись проверить нечем. Пополни его на любую сумму, отправь что-нибудь с него — и попробуй снова.'
+      : 'Не удалось получить ключ кошелька из блокчейна. Попробуй через минуту.' });
+  }
   const sig = b64Bytes(proof.signature);
   if (!(await ed25519Verify(pub, sig, digest))) return json({ error: 'bad', text: 'Подпись не прошла проверку.' });
 
@@ -3671,13 +3676,38 @@ async function walletUnlink(request, env) {
   return json({ ok: true });
 }
 
-// Публичный ключ кошелька из tonapi (32 байта).
+// Публичный ключ кошелька (32 байта). Берём ИЗ БЛОКЧЕЙНА, а не из ответа кошелька:
+// иначе подписать чужой адрес можно было бы своим ключом. Два источника — tonapi
+// иногда отдаёт 429, и тогда привязка падала бы на ровном месте.
 async function walletPublicKey(address) {
   try {
     const r = await fetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}/publickey`);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.public_key) return hexBytes(d.public_key);
+    }
+  } catch { /* пробуем второй источник */ }
+  try {
+    const r = await fetch('https://toncenter.com/api/v2/runGetMethod', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address, method: 'get_public_key', stack: [] }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const v = d?.result?.stack?.[0]?.[1];      // BigInt ключа в hex
+      if (v) return hexBytes(BigInt(v).toString(16).padStart(64, '0'));
+    }
+  } catch { /* ключа нет — значит кошелёк не активирован */ }
+  return null;
+}
+
+// Активен ли кошелёк в блокчейне. У неактивированного (ни одной исходящей
+// транзакции) публичного ключа в сети нет — подпись проверить нечем.
+async function accountActive(address) {
+  try {
+    const r = await fetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}`);
     if (!r.ok) return null;
-    const d = await r.json();
-    return d.public_key ? hexBytes(d.public_key) : null;
+    return (await r.json()).status === 'active';
   } catch { return null; }
 }
 
