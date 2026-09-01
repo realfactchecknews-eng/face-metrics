@@ -1387,9 +1387,8 @@ async function tgWebhook(request, env) {
     if (!m) {
       await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат: /facepaid <telegram id>' });
     } else {
-      const amt = parseInt(await env.RATE_LIMIT.get(`facepay:${m[1]}`) || '0', 10);
-      await env.RATE_LIMIT.delete(`facepay:${m[1]}`);
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: amt ? `✅ ${m[1]}: ${amt.toLocaleString('ru-RU')} FACE помечено выплаченным.` : `У ${m[1]} нет начислений к выплате.` });
+      const amt = await markFacePaid(env, m[1]);
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: amt ? `✅ ${m[1]}: ${amt.toLocaleString('ru-RU')} FACE помечено выплаченным, человек уведомлён.` : `У ${m[1]} нет начислений к выплате.` });
     }
     return new Response('ok');
   }
@@ -4020,6 +4019,26 @@ async function notifyFacePayout(env, tgid, task, total, user) {
   } catch { /* уведомление не критично, начисление уже записано */ }
 }
 
+// Пометить выплаченным и сказать человеку, что токены ушли. Один путь для команды
+// в боте и для эндпоинта — иначе уведомление легко забыть в одном из них.
+async function markFacePaid(env, tgid) {
+  const amount = parseInt(await env.RATE_LIMIT.get(`facepay:${tgid}`) || '0', 10);
+  if (!amount) return 0;
+  await env.RATE_LIMIT.delete(`facepay:${tgid}`);
+  await env.RATE_LIMIT.delete(`bal:${await env.RATE_LIMIT.get(`wallet:${tgid}`)}`); // чтобы холдерский статус подхватился сразу
+  if (env.TG_BOT_TOKEN) {
+    const L = await userLang(env, tgid);
+    const n = amount.toLocaleString(L === 'ru' ? 'ru-RU' : 'en-US');
+    const text = L === 'ru'
+      ? `💲 <b>${n} FACE отправлены на твой кошелёк.</b>\n\nПроверь баланс в кошельке — обычно приходит за пару минут. Холдерский доступ включится автоматически, как только токенов станет достаточно.`
+      : `💲 <b>${n} FACE sent to your wallet.</b>\n\nCheck your wallet — it usually arrives within a couple of minutes. Holder access turns on automatically once you hold enough.`;
+    try {
+      await tgApi(env, 'sendMessage', { chat_id: tgid, text, parse_mode: 'HTML' });
+    } catch { /* юзер мог заблокировать бота — начисление всё равно закрыто */ }
+  }
+  return amount;
+}
+
 // Все незакрытые начисления, по убыванию суммы. Один источник и для бота, и для эндпоинта.
 async function pendingFacePayouts(env) {
   const list = await env.RATE_LIMIT.list({ prefix: 'facepay:' });
@@ -4040,7 +4059,7 @@ async function adminFace(request, env) {
   if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) return cors('Forbidden', 403);
   // Пометить выплаченным: ?paid=<tgid>
   const paid = url.searchParams.get('paid');
-  if (paid) { await env.RATE_LIMIT.delete(`facepay:${paid}`); return json({ ok: true, paid }); }
+  if (paid) return json({ ok: true, paid, amount: await markFacePaid(env, paid) });
   const out = await pendingFacePayouts(env);
   return json({ count: out.length, total: out.reduce((s, x) => s + x.amount, 0), payouts: out });
 }
