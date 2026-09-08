@@ -1431,22 +1431,36 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
-  // ── Админ: /testgrant ПАК — выдать пак себе без оплаты.
+  // ── Админ: /testgrant ПАК [tgid] — выдать пак без оплаты себе или другому.
   // Зовёт ТУ ЖЕ grantPack(), что и настоящий платёж, поэтому проверяет всю выдачу
   // целиком: отправку PDF, начисление анализов, открытие ведения, старт плана.
   // Не проверяется только сам приём денег (Stars/Lava/CryptoBot).
+  // Второй аргумент — кому выдать: так вручаются призы розыгрыша. Руками через KV
+  // это делать нельзя: у гайда пять шагов (флаг, кредиты, gstart, guidelist, файл),
+  // и половина из них молча забудется.
   if (text.startsWith('/testgrant') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
-    const id = (text.split(/\s+/)[1] || '').trim();
+    const parts = text.split(/\s+/);
+    const id = (parts[1] || '').trim();
+    const target = /^\d+$/.test(parts[2] || '') ? parts[2] : String(msg.from.id);
     const pack = PACKS[id];
     if (!pack) {
       await tgApi(env, 'sendMessage', { chat_id: chat,
-        text: 'Формат: /testgrant guide\n\nДоступные паки: ' + Object.keys(PACKS).join(', ') });
+        text: 'Формат: /testgrant ПАК [tgid]\n\nСебе:    /testgrant guide\nДругому: /testgrant guide 1772090749\n\nДоступные паки: ' + Object.keys(PACKS).join(', ') });
     } else {
-      const lang = await userLang(env, msg.from.id);
-      const note = await grantPack(env, msg.from.id, pack, lang, null);
+      const lang = await userLang(env, target);
+      const note = await grantPack(env, target, pack, lang, null);
+      const toSelf = target === String(msg.from.id);
+      // Получателю — обычное подтверждение выдачи. Без него человек видит только
+      // прилетевший файл и не понимает, откуда он взялся.
+      if (!toSelf) {
+        await tgApi(env, 'sendMessage', { chat_id: target, parse_mode: 'HTML',
+          text: (lang === 'ru' ? `🎁 <b>Тебе начислен приз:</b> ${escHtml(pack.label)}\n\n${note}`
+                               : `🎁 <b>You received:</b> ${escHtml(pack.labelEn || pack.label)}\n\n${note}`) }).catch(() => {});
+      }
       await tgApi(env, 'sendMessage', { chat_id: chat, parse_mode: 'HTML',
-        text: `🧪 <b>Выдано без оплаты:</b> ${escHtml(pack.label)}\n\n${note}\n\n`
-            + `<i>Это тестовая выдача. В translog она не пишется, выручку не портит.</i>` });
+        text: `🧪 <b>Выдано без оплаты:</b> ${escHtml(pack.label)}\n`
+            + `Кому: <code>${escHtml(target)}</code>${toSelf ? ' (себе)' : ''}\n\n${note}\n\n`
+            + `<i>В translog не пишется, выручку не портит.</i>` });
     }
     return new Response('ok');
   }
