@@ -53,4 +53,13 @@ assert.equal(r.length, 3, 'ровно три пункта');
 assert.ok(!r.some((x) => /HARDMAX/i.test(x)), 'хардмакс сюда не попадает');
 assert.equal(r[0], 'Стрижка с объёмом сверху.', 'режется по первому предложению');
 
+// Кнопка не должна выставлять счёт напрямую: buyPack по умолчанию уходит в звёзды
+// без выбора способа оплаты и предлагает купить гайд тем, у кого он уже есть.
+const render = src.match(/^function renderPotential[\s\S]*?^\}/m)[0];
+assert.ok(!/buyPack\(/.test(render), 'кнопка не зовёт buyPack напрямую');
+assert.match(render, /fmOpenView\("progress"\)/, 'кнопка ведёт в раздел ведения');
+assert.match(render, /potBtnOwned/, 'у владельца гайда своя подпись кнопки');
+assert.match(src, /guide: \(await env/.test(readFileSync(new URL('./worker.js', import.meta.url), 'utf8')) ? /./ : /НЕТ_ФЛАГА_guide_В_statusFor/,
+  'statusFor отдаёт флаг guide');
+
 console.log('потенциал: все проверки прошли');

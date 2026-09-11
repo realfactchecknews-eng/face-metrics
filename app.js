@@ -89,6 +89,7 @@ var I18N = {
     potNow: "now", potMax: "reachable",
     potNote: "Bone does not change — this gain comes from skin, grooming and what reads on the jaw. None of it needs a surgeon.",
     potBtn: "Get the 90-day plan →",
+    potBtnOwned: "Open coaching →",
     detailEyebrow: "DETAILED BREAKDOWN",
     pwEyebrow: "SCAN COMPLETE",
     lastReportEyebrow: "PREVIOUS REPORT",
@@ -206,6 +207,7 @@ var I18N = {
     potNow: "сейчас", potMax: "достижимо",
     potNote: "Кость не меняется — этот рост берётся из кожи, груминга и того, что читается на челюсти. Всё это делается без врача.",
     potBtn: "Забрать план на 90 дней →",
+    potBtnOwned: "Открыть ведение →",
     detailEyebrow: "ДЕТАЛЬНЫЙ АНАЛИЗ",
     pwEyebrow: "СКАНИРОВАНИЕ ЗАВЕРШЕНО",
     lastReportEyebrow: "ПРОШЛЫЙ ОТЧЁТ",
@@ -1961,6 +1963,7 @@ function renderPotential(parsed) {
   var pot = computePotential(parsed);
   if (pot === null) { box.classList.add("hidden"); box.innerHTML = ""; return; }
   var recs = shortRecs(parsed.recommendations || []);
+  var owned = !!(_lastAccountStatus && _lastAccountStatus.guide);
   box.innerHTML =
     '<span class="eyebrow">' + t("potEyebrow") + '</span>' +
     '<div class="pot-row">' +
@@ -1970,10 +1973,15 @@ function renderPotential(parsed) {
     '</div>' +
     '<p class="pot-note">' + t("potNote") + '</p>' +
     (recs.length ? '<ul class="pot-list"><li>' + recs.map(esc).join('</li><li>') + '</li></ul>' : '') +
-    '<button id="potGuideBtn" class="pot-btn" type="button">' + t("potBtn") + '</button>';
+    '<button id="potGuideBtn" class="pot-btn" type="button">' + t(owned ? "potBtnOwned" : "potBtn") + '</button>';
   box.classList.remove("hidden");
   var b = document.getElementById("potGuideBtn");
-  if (b) b.addEventListener("click", function(){ buyPack("guide", b); });
+  // Ведём в раздел «Ведение», а не на счёт: там уже есть и описание того, что входит,
+  // и выбор способа оплаты. Прямой buyPack выставлял счёт сразу в звёздах, без выбора,
+  // и предлагал купить гайд тем, у кого он уже куплен.
+  if (b) b.addEventListener("click", function(){
+    if (window.fmOpenView) window.fmOpenView("progress");
+  });
 }
 
 function renderAIReport(text, skipSideEffects, isTeaser) {

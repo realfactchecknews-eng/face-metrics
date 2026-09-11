@@ -511,6 +511,8 @@ async function statusFor(env, user, token, fresh) {
   const dayUsed = parseInt(await env.RATE_LIMIT.get(`qd:${user.id}:${new Date().toISOString().slice(0, 10)}`) || '0', 10);
   return {
     token, user, subscribed, freeLeft,
+    // Куплен ли гайд — сайту нужно, чтобы не предлагать купить то, что уже есть.
+    guide: (await env.RATE_LIMIT.get(`guide:${user.id}`)) === '1',
     wallet: hold.address, faceBalance: hold.balance, holder: hold.holder, holderMin: FACE_HOLDER_MIN,
     holderFreeLeft: hold.holder ? Math.max(0, HOLDER_FREE_PER_DAY - dayUsed) : 0,
     credits, channel: CHANNEL, packs: PACKS, methods: enabledMethods(env),
