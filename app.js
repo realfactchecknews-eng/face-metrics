@@ -85,6 +85,10 @@ var I18N = {
     scanning: "Scanning face geometry…",
     scoreEyebrow: "OVERALL SCORE · PSL RATING",
     recsEyebrow: "LOOKSMAXXING RECOMMENDATIONS",
+    potEyebrow: "YOUR POTENTIAL",
+    potNow: "now", potMax: "reachable",
+    potNote: "Bone does not change — this gain comes from skin, grooming and what reads on the jaw. None of it needs a surgeon.",
+    potBtn: "Get the 90-day plan →",
     detailEyebrow: "DETAILED BREAKDOWN",
     pwEyebrow: "SCAN COMPLETE",
     lastReportEyebrow: "PREVIOUS REPORT",
@@ -198,6 +202,10 @@ var I18N = {
     scanning: "Сканирование геометрии лица…",
     scoreEyebrow: "ОБЩАЯ ОЦЕНКА · PSL РЕЙТИНГ",
     recsEyebrow: "РЕКОМЕНДАЦИИ ПО ЛУКСМАКСИНГУ",
+    potEyebrow: "ТВОЙ ПОТЕНЦИАЛ",
+    potNow: "сейчас", potMax: "достижимо",
+    potNote: "Кость не меняется — этот рост берётся из кожи, груминга и того, что читается на челюсти. Всё это делается без врача.",
+    potBtn: "Забрать план на 90 дней →",
     detailEyebrow: "ДЕТАЛЬНЫЙ АНАЛИЗ",
     pwEyebrow: "СКАНИРОВАНИЕ ЗАВЕРШЕНО",
     lastReportEyebrow: "ПРОШЛЫЙ ОТЧЁТ",
@@ -1895,6 +1903,7 @@ function parseAIReport(text) {
   // категорий, и держался ВЫШЕ модельного: модель сама делает поправку на общую гармонию,
   // которую средневзвешенное теряет. Оставляем его сверкой в консоли.
   result.overallComputed = computeOverall(byKey);
+  result.byKey = byKey;
   var recsM = text.match(/РЕКОМЕНДАЦИИ:\s*\n([\s\S]+?)$/);
   if (recsM) {
     result.recommendations = recsM[1].split("\n")
@@ -1904,6 +1913,67 @@ function parseAIReport(text) {
       .filter(Boolean);
   }
   return result;
+}
+
+/* Потенциальный балл: сколько будет, если выжать то, что действительно меняется.
+   Кость (симметрия, глаза, мидфейс, нос, губы) не трогаем вообще — обещать по ней
+   рост значит врать. Кожа и груминг подтягиваются полностью, джоулайн частично:
+   его читаемость зависит от жира и отёка, а не только от гониального угла.
+   Считаем ДЕЛЬТУ через computeOverall и прибавляем её к показанному баллу: сам балл
+   приходит из перцентиля и живёт на своей шкале, смешивать их нельзя. */
+var POTENTIAL_CEILING = { "КОЖА": 8.5, "ГРУМИНГ_STYLE": 8.5 };
+// Прибавка к джоулайну тоже упирается в потолок: у кого челюсть уже читается,
+// сбрасывать нечего, и дорисовывать ему десятку — обман.
+var POTENTIAL_BONUS   = { "ДЖОУЛАЙН_MANDIBLE": { up: 0.8, max: 8.5 } };
+
+function computePotential(parsed) {
+  if (typeof parsed.overall !== "number" || !parsed.byKey) return null;
+  var now = computeOverall(parsed.byKey);
+  if (now === null) return null;                       // тизер: восьми категорий нет
+  var better = {};
+  for (var k in parsed.byKey) {
+    var v = parsed.byKey[k];
+    if (POTENTIAL_CEILING[k]) v = Math.max(v, POTENTIAL_CEILING[k]);
+    else if (POTENTIAL_BONUS[k]) v = Math.max(v, Math.min(v + POTENTIAL_BONUS[k].up, POTENTIAL_BONUS[k].max));
+    better[k] = v;
+  }
+  var up = computeOverall(better) - now;
+  // Ниже 0.2 блок обещает то, чего человек не заметит, и превращается в чистую
+  // рекламу гайда. В таком случае честнее его не показывать вовсе.
+  if (up < 0.2) return null;
+  return Math.min(9, Math.round((parsed.overall + up) * 10) / 10);
+}
+
+// Три коротких пункта из софтмакса: в блоке потенциала нужен не план, а доказательство,
+// что рост берётся из конкретных действий. Режем по первому предложению.
+function shortRecs(recs) {
+  return recs
+    .filter(function(r){ return /^SOFTMAX/i.test(r); })
+    .map(function(r){ return r.replace(/^SOFTMAX\s*—\s*/i, ""); })
+    .map(function(r){ var m = r.match(/^(.+?[.!?])(\s|$)/); return (m ? m[1] : r).trim(); })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function renderPotential(parsed) {
+  var box = document.getElementById("potentialBox");
+  if (!box) return;
+  var pot = computePotential(parsed);
+  if (pot === null) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+  var recs = shortRecs(parsed.recommendations || []);
+  box.innerHTML =
+    '<span class="eyebrow">' + t("potEyebrow") + '</span>' +
+    '<div class="pot-row">' +
+      '<div class="pot-cell"><b>' + parsed.overall.toFixed(1) + '</b><i>' + t("potNow") + '</i></div>' +
+      '<div class="pot-arrow" aria-hidden="true">&rarr;</div>' +
+      '<div class="pot-cell pot-cell-hi"><b>' + pot.toFixed(1) + '</b><i>' + t("potMax") + '</i></div>' +
+    '</div>' +
+    '<p class="pot-note">' + t("potNote") + '</p>' +
+    (recs.length ? '<ul class="pot-list"><li>' + recs.map(esc).join('</li><li>') + '</li></ul>' : '') +
+    '<button id="potGuideBtn" class="pot-btn" type="button">' + t("potBtn") + '</button>';
+  box.classList.remove("hidden");
+  var b = document.getElementById("potGuideBtn");
+  if (b) b.addEventListener("click", function(){ buyPack("guide", b); });
 }
 
 function renderAIReport(text, skipSideEffects, isTeaser) {
@@ -1988,6 +2058,7 @@ function renderAIReport(text, skipSideEffects, isTeaser) {
     var vb = document.getElementById("videoBtn");
     if (vb) vb.classList.remove("hidden");
   }
+  renderPotential(parsed);
 
   // Отчёт готов — звук, сохранение, кнопка «Поделиться».
   // skipSideEffects=true при восстановлении сохранённого отчёта после рефреша страницы —

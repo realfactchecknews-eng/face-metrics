@@ -2984,3 +2984,51 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   .tips-box .consent-actions .btn-primary{ width:100%; order:1; }
   .tips-box .consent-actions .btn-reset{ width:100%; order:2; }
 }
+
+
+/* ── Блок потенциала под рекомендациями ───────────────────────────────
+   Показывает, сколько балл может вырасти на том, что человек меняет сам,
+   и ведёт к гайду. Цифры набраны крупно: это единственное место в отчёте,
+   где мы обещаем будущее, и оно должно читаться раньше текста. */
+.pot-card { text-align: center; }
+.pot-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 18px; margin: 16px 0 6px;
+}
+.pot-cell { display: flex; flex-direction: column; gap: 2px; min-width: 84px; }
+.pot-cell b {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 2.9rem; line-height: 1; font-weight: 300; color: var(--text-dim);
+}
+.pot-cell i {
+  font-style: normal; font-size: .66rem; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--text-dim); opacity: .7;
+}
+.pot-cell-hi b { color: var(--accent); }
+.pot-arrow { color: var(--accent); font-size: 1.4rem; opacity: .55; }
+.pot-note {
+  font-size: .82rem; line-height: 1.6; color: var(--text-dim);
+  max-width: 34rem; margin: 10px auto 0;
+}
+.pot-list {
+  list-style: none; padding: 0; margin: 14px auto 0; max-width: 34rem;
+  text-align: left; display: flex; flex-direction: column; gap: 7px;
+}
+.pot-list li {
+  position: relative; padding-left: 18px;
+  font-size: .84rem; line-height: 1.55; color: var(--text);
+}
+.pot-list li::before {
+  content: "+"; position: absolute; left: 0; top: 0; color: var(--accent); opacity: .8;
+}
+.pot-btn {
+  margin-top: 18px; width: 100%; max-width: 22rem;
+  background: var(--accent); color: #151210; border: none; border-radius: 10px;
+  padding: 14px 22px; font-family: inherit; font-size: .94rem; font-weight: 600;
+  cursor: pointer; letter-spacing: .01em;
+}
+.pot-btn:disabled { opacity: .6; }
+@media (max-width: 600px) {
+  .pot-cell b { font-size: 2.3rem; }
+  .pot-row { gap: 12px; }
+}
