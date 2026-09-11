@@ -1005,6 +1005,7 @@ const BL = {
     menu: 'FaceRate menu:',
     kbStatus: '💎 My status', kbShop: '⭐ Buy analyses / unlimited', kbOrders: '📦 My orders', kbPromo: '🎁 Enter promo code',
     kbMyRef: '🔗 My referral link',
+    kbAnalyze: '🔍 Run an analysis', kbAllMenu: '📋 Full menu',
     kbSub: '🔄 My subscription', kbGw: '🎉 Giveaways', kbSite: '🌐 Open FaceRate', kbLang: '🌍 Язык: Русский',
     kbFree: '📄 Free chapter of the guide', kbFreeCheck: '✅ I subscribed',
     freeNeedSub: 'The free chapter «Myths and dangerous practices» goes to channel subscribers.\n\nSubscribe, then tap «I subscribed» and I will send the file right away.',
@@ -1026,7 +1027,9 @@ const BL = {
     shop1: (s) => `1 analysis — ${s}⭐`, shop5: (s) => `5 — ${s}⭐`,
     shopD: (s) => `🔥 Day unlimited — ${s}⭐`, shopM: (s) => `👑 Month unlimited — ${s}⭐`,
     loginOk: '✅ Logged in! Go back to the site — the page will pick up your account automatically.',
-    hello: '🖤 FaceRate — AI face rating by looksmaxxing canons.\n\nSubscribe to ' + CHANNEL + ' = 1 free analysis per week.',
+    hello: '🖤 <b>FaceRate — AI reads your face across 8 parameters</b>\n\n'
+      + 'Upload a photo and get a score, a breakdown of every parameter and specific things to change.\n\n'
+      + 'Your first analysis is free.',
     statusHead: '💎 Your status:\n',
     statusUnlim: (d) => `👑 Unlimited until ${d}\n`,
     statusCredits: (n) => `⭐ Credits: ${n}\n`,
@@ -1079,6 +1082,7 @@ const BL = {
     menu: 'Меню FaceRate:',
     kbStatus: '💎 Мой статус', kbShop: '⭐ Купить анализы / безлимит', kbOrders: '📦 Мои заказы', kbPromo: '🎁 Ввести промокод',
     kbMyRef: '🔗 Моя реферальная ссылка',
+    kbAnalyze: '🔍 Сделать анализ', kbAllMenu: '📋 Всё меню',
     kbSub: '🔄 Моя подписка', kbGw: '🎉 Розыгрыши', kbSite: '🌐 Открыть FaceRate', kbLang: '🌍 Language: English',
     kbFree: '📄 Бесплатная глава гайда', kbFreeCheck: '✅ Я подписался',
     freeNeedSub: 'Глава «Мифы и опасные практики» уходит подписчикам канала.\n\nПодпишись и нажми «Я подписался», файл придёт сразу.',
@@ -1100,7 +1104,9 @@ const BL = {
     shop1: (s) => `1 анализ — ${s}⭐`, shop5: (s) => `5 — ${s}⭐`,
     shopD: (s) => `🔥 Безлимит на день — ${s}⭐`, shopM: (s) => `👑 Безлимит на месяц — ${s}⭐`,
     loginOk: '✅ Вход выполнен! Возвращайся на сайт — страница подхватит аккаунт сама.',
-    hello: '🖤 FaceRate — AI-оценка лица по канонам луксмаксинга.\n\nПодписка на ' + CHANNEL + ' = 1 бесплатный анализ в неделю.',
+    hello: '🖤 <b>FaceRate — ИИ разбирает твоё лицо по 8 параметрам</b>\n\n'
+      + 'Загружаешь фото — получаешь балл, разбор по каждому параметру и конкретные рекомендации, что менять.\n\n'
+      + 'Первый разбор бесплатный.',
     statusHead: '💎 Твой статус:\n',
     statusUnlim: (d) => `👑 Безлимит до ${d}\n`,
     statusCredits: (n) => `⭐ Кредиты: ${n}\n`,
@@ -1155,9 +1161,20 @@ function fmtDate(ms, L) {
   return new Date(ms).toLocaleString(L === 'ru' ? 'ru-RU' : 'en-US', { timeZone: 'Europe/Moscow', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' (MSK)';
 }
 
-function menuKb(L) {
+// short=true — экран для того, кто пришёл впервые. Одиннадцать кнопок в первую секунду
+// читаются как панель приборов: из них десять про то, чего у новичка ещё нет (заказы,
+// промокод, рефералка, розыгрыши). Показываем дверь, остальное — по кнопке «Всё меню».
+function menuKb(L, short) {
   const b = BL[L];
+  if (short) {
+    return { inline_keyboard: [
+      [{ text: b.kbAnalyze, url: 'https://facerate.ru' }],
+      [{ text: b.kbStatus, callback_data: 'status' }],
+      [{ text: b.kbAllMenu, callback_data: 'menu' }],
+    ]};
+  }
   return { inline_keyboard: [
+    [{ text: b.kbAnalyze, url: 'https://facerate.ru' }],
     [{ text: b.kbStatus, callback_data: 'status' }],
     [{ text: b.kbShop, callback_data: 'shop' }],
     [{ text: b.kbOrders, callback_data: 'orders' }],
@@ -1166,7 +1183,7 @@ function menuKb(L) {
     [{ text: FACE_T[L].btn, callback_data: 'face' }],
     [{ text: b.kbFree, callback_data: 'free' }],
     [{ text: b.kbSub, callback_data: 'mysub' }, { text: b.kbGw, callback_data: 'gw' }],
-    [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbSupport, url: 'https://t.me/FaceRateSupport_bot' }],
+    [{ text: b.kbSupport, url: 'https://t.me/FaceRateSupport_bot' }],
     [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
   ]};
 }
@@ -1309,7 +1326,10 @@ async function tgWebhook(request, env) {
   const msg = upd.message;
   if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
   const chat = msg.chat.id, tgid = msg.from.id;
-  // Метка "этот tgid когда-либо писал боту" — нужна только для рассылок (/broadcast), без TTL.
+  // Метка "этот tgid когда-либо писал боту" — нужна для рассылок (/broadcast), без TTL.
+  // Читаем ДО записи: это же единственный признак, по которому видно новичка,
+  // а после put он есть у всех.
+  const isNewUser = env.RATE_LIMIT ? !(await env.RATE_LIMIT.get(`user:${tgid}`)) : false;
   if (env.RATE_LIMIT) await env.RATE_LIMIT.put(`user:${tgid}`, '1');
   const L = await userLang(env, tgid);
   const b = BL[L];
@@ -1348,7 +1368,7 @@ async function tgWebhook(request, env) {
     } else if (/^ref_[a-z0-9_-]{1,40}$/i.test(code)) {
       const gotBonus = await attributeReferral(env, tgid, code.slice(4).toUpperCase());
       const greetText = gotBonus ? (L === 'ru' ? b.hello + '\n\n🎁 Тебе начислен +1 бесплатный анализ за переход по реферальной ссылке!' : b.hello + '\n\n🎁 You got +1 free analysis for joining via a referral link!') : b.hello;
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: greetText, reply_markup: menuKb(L) });
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: greetText, reply_markup: menuKb(L, isNewUser), parse_mode: 'HTML' });
     } else if (code === 'shop') {
       // Диплинк из постов про акцию/цены — сразу к выбору способа оплаты, минуя меню.
       await tgApi(env, 'sendMessage', { chat_id: chat, text: b.payPick, reply_markup: methodKb(L, env) });
@@ -1378,7 +1398,7 @@ async function tgWebhook(request, env) {
         await tgApi(env, 'sendMessage', { chat_id: chat, text: b.gwNone, reply_markup: menuKb(L) });
       }
     } else {
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: b.hello, reply_markup: menuKb(L) });
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: b.hello, reply_markup: menuKb(L, isNewUser), parse_mode: 'HTML' });
     }
     return new Response('ok');
   }
