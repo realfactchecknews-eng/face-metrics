@@ -3032,3 +3032,32 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   .pot-cell b { font-size: 2.3rem; }
   .pot-row { gap: 12px; }
 }
+
+
+/* ── Индикатор замера в «Ведении» ─────────────────────────────────────
+   Прогресс неизвестен: ответ приходит одним куском через 20-40 секунд.
+   Полоса наливается асимптотически и не доходит до конца сама — дорисовывать
+   её до 100% раньше ответа значит врать, а замирание на 92% честно читается
+   как «ещё считаем». */
+.pgm-card { text-align: center; }
+.pgm-phase {
+  font-size: .88rem; color: var(--text); margin-bottom: 12px;
+  min-height: 1.2em; transition: opacity .2s;
+}
+.pgm-bar {
+  height: 3px; border-radius: 2px; overflow: hidden;
+  background: rgba(196, 164, 107, .16);
+}
+.pgm-bar i {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, rgba(196,164,107,.5), var(--accent));
+  animation: pgmFill 42s cubic-bezier(.14, .72, .2, 1) forwards;
+}
+@keyframes pgmFill { to { width: 92%; } }
+.pgm-hint {
+  margin-top: 10px; font-size: .72rem; letter-spacing: .04em;
+  color: var(--text-dim); opacity: .75;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pgm-bar i { animation-duration: 1s; width: 92%; }
+}

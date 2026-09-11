@@ -4689,6 +4689,19 @@ async function progressCallback(env, cq) {
   const [, done, week] = cq.data.split(':');
   const tgid = cq.from.id;
 
+  // Кнопка живёт в истории переписки, и нажать её можно сколько угодно раз. Без этой
+  // проверки десять тычков давали десять недель серии: wdone писался, но не читался.
+  const already = await env.RATE_LIMIT.get(`wdone:${tgid}:${week}`);
+  if (already !== null) {
+    await tgApi(env, 'answerCallbackQuery', {
+      callback_query_id: cq.id, show_alert: false,
+      text: already === '1' ? 'Эта неделя уже отмечена как сделанная.' : 'Ответ за эту неделю уже записан.',
+    }).catch(() => {});
+    return new Response('ok');
+  }
+  // Пишем ответ ДО начисления: если дальше что-то упадёт, повторный клик не удвоит серию.
+  await env.RATE_LIMIT.put(`wdone:${tgid}:${week}`, done, { expirationTtl: 180 * 86400 });
+
   let streak = parseInt(await env.RATE_LIMIT.get(`streak:${tgid}`) || '0', 10);
   let best   = parseInt(await env.RATE_LIMIT.get(`best:${tgid}`) || '0', 10);
 
@@ -4703,15 +4716,18 @@ async function progressCallback(env, cq) {
   } else {
     // Серию обнуляем, но без нравоучений: пристыдить = потерять человека.
     await env.RATE_LIMIT.put(`streak:${tgid}`, '0');
-    text = best > 1
-      ? `Бывает. Серия обнулилась, твой рекорд - ${best} ${plural(best, 'неделя', 'недели', 'недель')}. Начинаем заново со следующей.`
-      : `Бывает. Неделя не обязана быть идеальной, пропуск одной ничего не ломает - главное не бросать совсем.`;
+    // И не отправляем ждать неделю: план идёт по календарю от даты покупки, задание
+    // никуда не делось. Повторяем его тут же, чтобы у человека было что делать сегодня,
+    // а не «попробуй в следующий раз».
+    const p = PLAN[Math.min(Math.max(parseInt(week, 10) || 1, 1), PLAN_WEEKS) - 1];
+    text = (best > 1
+      ? `Бывает. Серия обнулилась, твой рекорд - ${best} ${plural(best, 'неделя', 'недели', 'недель')}.`
+      : `Бывает. Неделя не обязана быть идеальной, пропуск одной ничего не ломает.`)
+      + (p ? `\n\nЖдать неделю не надо - задание открыто, начни с сегодня:\n\n<b>${p.t}.</b> ${p.task}\n\n<b>Как понять, что сделано.</b> ${p.check}` : '');
   }
 
   await tgApi(env, 'answerCallbackQuery', { callback_query_id: cq.id }).catch(() => {});
-  await tgApi(env, 'sendMessage', { chat_id: tgid, text }).catch(() => {});
-  // Лог для админ-статистики: видно, на какой неделе люди отваливаются.
-  await env.RATE_LIMIT.put(`wdone:${tgid}:${week}`, done, { expirationTtl: 180 * 86400 });
+  await tgApi(env, 'sendMessage', { chat_id: tgid, text, parse_mode: 'HTML' }).catch(() => {});
   return new Response('ok');
 }
 

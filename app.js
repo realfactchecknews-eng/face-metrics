@@ -4441,11 +4441,44 @@ function pgSyncGo(){
 }
 
 async function doMeasure(forcePay){
+/* Индикатор замера. Раньше висела строка «Замер идёт, это 20-40 секунд…» без движения,
+   и человек не понимал, идёт процесс или всё зависло. Полоса наливается сама, средствами
+   CSS: точного прогресса у нас нет (ответ приходит одним куском), но движение важнее
+   точности — оно отвечает на вопрос «оно работает?». Фазы меняем текстом, чтобы
+   ожидание читалось как последовательность шагов, а не как пустая пауза. */
+var PG_PHASES = [
+  'Отправляем фото…', 'Размечаем геометрию лица…', 'Сравниваем с прошлым замером…',
+  'Считаем изменения по 8 параметрам…', 'Собираем разбор…',
+];
+var pgPhaseTimer = null;
+
+function pgMeasureIdle() {
+  if (pgPhaseTimer) { clearInterval(pgPhaseTimer); pgPhaseTimer = null; }
+}
+
+function pgMeasureBusy(host) {
+  pgMeasureIdle();
+  host.innerHTML =
+    '<div class="card pgm-card">' +
+      '<div class="pgm-phase" id="pgmPhase">' + PG_PHASES[0] + '</div>' +
+      '<div class="pgm-bar"><i></i></div>' +
+      '<div class="pgm-hint">Обычно 20-40 секунд. Не закрывай вкладку.</div>' +
+    '</div>';
+  var i = 0;
+  pgPhaseTimer = setInterval(function() {
+    i += 1;
+    var el = document.getElementById('pgmPhase');
+    if (!el) { pgMeasureIdle(); return; }           // экран уже сменился
+    el.textContent = PG_PHASES[Math.min(i, PG_PHASES.length - 1)];
+    if (i >= PG_PHASES.length - 1) pgMeasureIdle(); // дальше просто ждём
+  }, 6000);
+}
+
   if (!measureFile) { alert('Сначала выбери фото'); return; }
   if (!forcePay) closeShot();
 
   const host = document.getElementById('dynHost');
-  host.innerHTML = '<div class="card"><div class="card-s">Замер идёт, это 20-40 секунд…</div></div>';
+  pgMeasureBusy(host);
 
   let d;
   try {
@@ -4463,6 +4496,7 @@ async function doMeasure(forcePay){
     try { d = JSON.parse(raw); }
     catch { d = { error: 'server', text: raw.slice(0, 200) || ('HTTP ' + r.status) }; }
   } catch (e) {
+    pgMeasureIdle();
     host.innerHTML = '<div class="card"><div class="card-s">Запрос не дошёл: ' +
       (e && e.message ? e.message : 'сеть недоступна') +
       '. Попробуй ещё раз — если повторится, напиши в поддержку.</div></div>';
