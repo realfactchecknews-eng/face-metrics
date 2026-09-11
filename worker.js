@@ -61,15 +61,13 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // верни type:'sub' и period:2592000 — но сначала активируй подписки бота в @BotFather,
   // иначе Telegram вернёт SUBSCRIPTION_EXPORT_MISSING.
   m1: { type: 'unlim',  hours: 720,  stars: 999,  rub: 999,  lavaRub: 999,  label: 'Безлимит на месяц', labelEn: 'Month unlimited', oldStars: 999, oldRub: 999, oldLavaRub: 999 },
-  // Гайд + ведение 90 дней. Цена в дыре между d1 (299) и m1 (999), чтобы не
-  // конкурировать с месячным безлимитом.
-  // Цена гайда после запуска 999 ₽ / 749 ⭐, сейчас действует цена запуска 399 / 279.
-  // launch:true показывает зачёркнутую старую цену независимо от недельной акции
-  // (SALE_ENDS_AT). Закончить промо = убрать launch и вернуть rub/stars/lavaRub
-  // к значениям old*.
+  // Гайд + ведение 90 дней. Цена запуска 399 действовала до 11.09.2026, теперь
+  // полная — 999. launch снят: он рисовал зачёркнутую старую цену, а зачёркивать
+  // больше нечего (old* равны текущей, packsKb рисует только при old > cur).
+  // Одна звезда = один рубль, как и у остальных тарифов.
   // В Lava.top оффер гайда должен быть isDynamicPrice, иначе там цена останется
   // прежней: сумму воркер передаёт сам.
-  guide: { type: 'guide', credits: 5, stars: 399, rub: 399, lavaRub: 399, launch: true,
+  guide: { type: 'guide', credits: 5, stars: 999, rub: 999, lavaRub: 999,
            label: 'Гайд + ведение 90 дней', labelEn: 'Guide + 90-day coaching',
            oldStars: 999, oldRub: 999, oldLavaRub: 999 },
 };
