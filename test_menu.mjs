@@ -18,7 +18,7 @@ for (const L of ['ru', 'en']) {
   const short = menuKb(L, true).inline_keyboard;
   const full  = menuKb(L, false).inline_keyboard;
 
-  assert.equal(short.length, 3, `${L}: новичку — три кнопки`);
+  assert.ok(short.length <= 4, `${L}: новичку — не больше четырёх кнопок`);
   assert.equal(short[0][0].url, 'https://facerate.ru', `${L}: первая кнопка ведёт на анализ`);
   assert.equal(full[0][0].url, 'https://facerate.ru', `${L}: и в полном меню анализ первый`);
   assert.ok(full.length > short.length, `${L}: полное меню шире короткого`);
@@ -29,5 +29,9 @@ for (const L of ['ru', 'en']) {
 
   // приветствие обязано объяснять действие, а не только называть сервис
   assert.match(BL[L].hello, /8/, `${L}: в приветствии есть суть — 8 параметров`);
+  // и называть условие бесплатного разбора: без подписки его не будет
+  assert.match(BL[L].hello, /@wwwfacerateru/, `${L}: в приветствии есть канал`);
+  assert.ok(short.some((r) => r.some((btn) => btn.url === 'https://t.me/wwwfacerateru')),
+    `${L}: у новичка есть кнопка канала`);
 }
 console.log('меню и приветствие: все проверки прошли');

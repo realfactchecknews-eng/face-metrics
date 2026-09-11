@@ -1029,7 +1029,7 @@ const BL = {
     loginOk: '✅ Logged in! Go back to the site — the page will pick up your account automatically.',
     hello: '🖤 <b>FaceRate — AI reads your face across 8 parameters</b>\n\n'
       + 'Upload a photo and get a score, a breakdown of every parameter and specific things to change.\n\n'
-      + 'Your first analysis is free.',
+      + '🎁 Subscribe to ' + CHANNEL + ' — and one analysis a week is free.',
     statusHead: '💎 Your status:\n',
     statusUnlim: (d) => `👑 Unlimited until ${d}\n`,
     statusCredits: (n) => `⭐ Credits: ${n}\n`,
@@ -1106,7 +1106,7 @@ const BL = {
     loginOk: '✅ Вход выполнен! Возвращайся на сайт — страница подхватит аккаунт сама.',
     hello: '🖤 <b>FaceRate — ИИ разбирает твоё лицо по 8 параметрам</b>\n\n'
       + 'Загружаешь фото — получаешь балл, разбор по каждому параметру и конкретные рекомендации, что менять.\n\n'
-      + 'Первый разбор бесплатный.',
+      + '🎁 Подпишись на ' + CHANNEL + ' — и один разбор в неделю бесплатно.',
     statusHead: '💎 Твой статус:\n',
     statusUnlim: (d) => `👑 Безлимит до ${d}\n`,
     statusCredits: (n) => `⭐ Кредиты: ${n}\n`,
@@ -1169,6 +1169,7 @@ function menuKb(L, short) {
   if (short) {
     return { inline_keyboard: [
       [{ text: b.kbAnalyze, url: 'https://facerate.ru' }],
+      [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }],
       [{ text: b.kbStatus, callback_data: 'status' }],
       [{ text: b.kbAllMenu, callback_data: 'menu' }],
     ]};
