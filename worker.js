@@ -1009,6 +1009,15 @@ const BL = {
     kbFree: '📄 Free chapter of the guide', kbFreeCheck: '✅ I subscribed',
     freeNeedSub: 'The free chapter «Myths and dangerous practices» goes to channel subscribers.\n\nSubscribe, then tap «I subscribed» and I will send the file right away.',
     freeUpsell: 'In the full version there are 13 more chapters and 90 days of coaching: a check-in every 10 days, a chart across 8 parameters, a weekly task from me and 5 analyses on your balance.',
+    guideAbout: '📕 <b>Guide + 90 days of coaching</b>\n\n'
+      + 'A 25-page guide on what actually changes a face and what only gets sold to you — bone, soft tissue and grooming, separated honestly.\n\n'
+      + '<b>What you get:</b>\n'
+      + '• The guide as a PDF, yours to keep\n'
+      + '• A progress check-in every 10 days for 90 days\n'
+      + '• A chart across all 8 parameters, so you see what moved\n'
+      + '• A task for the week, every Monday\n'
+      + '• 5 analyses on your balance right away\n\n'
+      + 'The coaching starts the moment you pay and runs for 90 days.',
     freeOkCaption: '📄 FaceRate · Myths and dangerous practices. One chapter from the guide, free.',
     freeSoon: 'The free chapter is being prepared, it will be here shortly.',
     kbSupport: '💬 Support',
@@ -1074,6 +1083,15 @@ const BL = {
     kbFree: '📄 Бесплатная глава гайда', kbFreeCheck: '✅ Я подписался',
     freeNeedSub: 'Глава «Мифы и опасные практики» уходит подписчикам канала.\n\nПодпишись и нажми «Я подписался», файл придёт сразу.',
     freeUpsell: 'В полной версии ещё 13 глав и ведение на 90 дней: замер раз в 10 дней, график по 8 параметрам, задание на неделю от меня и 5 анализов на счёт.',
+    guideAbout: '📕 <b>Гайд + ведение 90 дней</b>\n\n'
+      + 'Гайд на 25 страниц о том, что реально меняет лицо, а что тебе просто продают: кость, мягкие ткани и оформление — разделены честно.\n\n'
+      + '<b>Что входит:</b>\n'
+      + '• Гайд файлом, остаётся у тебя навсегда\n'
+      + '• Замер прогресса раз в 10 дней — все 90 дней\n'
+      + '• График по всем 8 параметрам: видно, что сдвинулось\n'
+      + '• Задание на неделю каждый понедельник\n'
+      + '• 5 анализов на счёт сразу\n\n'
+      + 'Ведение стартует в момент оплаты и идёт 90 дней.',
     freeOkCaption: '📄 FaceRate · Мифы и опасные практики. Одна глава из гайда, бесплатно.',
     freeSoon: 'Отрывок готовится, скоро появится здесь.',
     kbSupport: '💬 Поддержка',
@@ -1219,7 +1237,9 @@ function packsKb(method, L, discPct) {
     return [{ text: label, callback_data: `pay:${id}:${method}` }];
   };
   const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : '')];
-  rows.push(row('guide', '📕 ', PACKS.guide.launch ? ' 🔥 ЦЕНА ЗАПУСКА' : ' НОВОЕ'));
+  // Гайд — единственный тариф, который не покупают не глядя: это не анализы, а
+  // 90 дней работы. Поэтому ведём на экран с составом, а не сразу на счёт.
+  rows.push([{ text: `📕 ${packLabel(PACKS.guide, L)} — ${price(PACKS.guide)} НОВОЕ`, callback_data: 'guide' }]);
   const cd = saleActive() ? saleCountdown(L) : null;
   if (cd) rows.unshift([{ text: (L === 'ru' ? `🔥 Цены недели! До повышения: ${cd}` : `🔥 Weekly prices! Ends in: ${cd}`), callback_data: 'noop' }]);
   if (discPct) rows.unshift([{ text: `🎁 Промо-скидка ${discPct}% уже применена`, callback_data: 'noop' }]);
@@ -1672,6 +1692,8 @@ async function handleCallback(env, cq) {
     t += sub ? b.statusSub(freeAvail ? 1 : 0) : b.statusNoSub;
     t += await faceStatusLine(env, tgid, L);
     await reply(t, menuKb(L), { parse_mode: 'HTML' });
+  } else if (data === 'guide') {
+    await reply(b.guideAbout, guideKb(L, env), { parse_mode: 'HTML' });
   } else if (data === 'shop') {
     // Шаг 1: выбор способа оплаты.
     await reply(b.payPick, methodKb(L, env));
