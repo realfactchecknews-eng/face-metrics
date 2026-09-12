@@ -1930,16 +1930,21 @@ var POTENTIAL_BONUS   = { "ДЖОУЛАЙН_MANDIBLE": { up: 0.8, max: 8.5 } };
 
 function computePotential(parsed) {
   if (typeof parsed.overall !== "number" || !parsed.byKey) return null;
-  var now = computeOverall(parsed.byKey);
-  if (now === null) return null;                       // тизер: восьми категорий нет
-  var better = {};
-  for (var k in parsed.byKey) {
-    var v = parsed.byKey[k];
-    if (POTENTIAL_CEILING[k]) v = Math.max(v, POTENTIAL_CEILING[k]);
-    else if (POTENTIAL_BONUS[k]) v = Math.max(v, Math.min(v + POTENTIAL_BONUS[k].up, POTENTIAL_BONUS[k].max));
-    better[k] = v;
+  var wTotal = 0, gain = 0;
+  for (var k in OVERALL_WEIGHTS) {
+    wTotal += OVERALL_WEIGHTS[k];
+    // В бесплатном тизере пять категорий из восьми закрыты. Считать рост только по
+    // открытым — занизить его втрое: закрыты как раз груминг и джоулайн, где рост и
+    // живёт. Поэтому неизвестной категории подставляем общий балл как текущий уровень.
+    var v = typeof parsed.byKey[k] === "number" ? parsed.byKey[k] : parsed.overall;
+    var up = POTENTIAL_CEILING[k]
+      ? Math.max(0, POTENTIAL_CEILING[k] - v)
+      : POTENTIAL_BONUS[k]
+        ? Math.max(0, Math.min(v + POTENTIAL_BONUS[k].up, POTENTIAL_BONUS[k].max) - v)
+        : 0;
+    gain += up * OVERALL_WEIGHTS[k];
   }
-  var up = computeOverall(better) - now;
+  var up = gain / wTotal;
   // Ниже 0.2 блок обещает то, чего человек не заметит, и превращается в чистую
   // рекламу гайда. В таком случае честнее его не показывать вовсе.
   if (up < 0.2) return null;

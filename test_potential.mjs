@@ -37,8 +37,17 @@ assert.equal(
 const top = computePotential({ overall: 8.9, byKey: cats({ "КОЖА": 2, "ГРУМИНГ_STYLE": 2 }) });
 assert.ok(top <= 9, `потолок 9.0, получили ${top}`);
 
-// тизер отдаёт три категории — считать нечего
-assert.equal(computePotential({ overall: 5.2, byKey: { "КОЖА": 5 } }), null, 'неполный набор → null');
+// Тизер отдаёт три категории из восьми, и блок всё равно должен показываться:
+// неизвестным категориям подставляется общий балл.
+const teaser = computePotential({ overall: 5.2, byKey: { "СИММЕТРИЯ": 5, "ГЛАЗА_CANTHAL_TILT": 5, "КОЖА": 5 } });
+assert.ok(teaser !== null, 'в тизере блок виден');
+const full = computePotential({ overall: 5.2, byKey: cats({}) });
+assert.ok(Math.abs(teaser - full) <= 0.2, `тизер не должен расходиться с полным: ${teaser} против ${full}`);
+
+// Но и в тизере, если расти некуда, обещать нечего.
+assert.equal(
+  computePotential({ overall: 8.7, byKey: { "СИММЕТРИЯ": 9, "ГЛАЗА_CANTHAL_TILT": 9, "КОЖА": 9 } }),
+  null, 'тизер у сильного лица тоже скрыт');
 assert.equal(computePotential({ overall: null, byKey: cats({}) }), null, 'нет балла → null');
 
 // краткие рекомендации: только софтмакс, по первому предложению, не больше трёх
