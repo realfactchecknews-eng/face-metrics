@@ -327,6 +327,12 @@ async function analyze(request, env) {
   // токены и не держать юзера лишние 1.4 секунды.
   // usedBackup — уходили ли на запасную модель. Одна попытка, не больше: если и она
   // отказалась, дело в самом кадре, а не в модели, и дальше жечь токены незачем.
+  // Дуэль: каждое лицо дополнительно оценивается отдельным запросом, параллельно с
+  // основным. Балл в паре модель раздвигает (замер 14.09: 5.9 в разборе, 6.9 в дуэли).
+  const ratesP = body.compare && typeof body.ratePrompt === 'string' && body.ratePrompt.length < 30000 && imgs.length === 2
+    ? rateFacesSeparately(env, MODEL_MAIN, imgs, body.ratePrompt)
+    : null;
+
   let data, lastErr = 'unknown', emptyKind = null, usedBackup = false;
   for (let attempt = 0; attempt < 4; attempt++) {
     let status = 0;
@@ -428,7 +434,31 @@ async function analyze(request, env) {
   // стоимость двух режимов было не с чем. Видно в `wrangler tail`.
   console.log('AI ok', JSON.stringify({ model, usedBackup, stable, isTeaser, usage: data.usage ?? null }));
 
-  return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback });
+  const rates = ratesP ? await ratesP : null;
+  return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback, rates });
+}
+
+// Оценка каждого лица дуэли отдельно: один запрос — одна фотография. Ошибка одного
+// запроса даёт null, и сайт возьмёт балл этого лица из общего ответа.
+async function rateFacesSeparately(env, model, images, ratePrompt) {
+  return Promise.all(images.slice(0, 2).map(async (b64) => {
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENROUTER_API_KEY}` },
+        body: JSON.stringify({
+          model, max_tokens: 1500, temperature: 0, top_p: 1, seed: 1337,
+          reasoning: { effort: 'low' },
+          messages: [{ role: 'user', content: [
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } },
+            { type: 'text', text: ratePrompt },
+          ]}],
+        }),
+      });
+      const d = await r.json();
+      return d?.choices?.[0]?.message?.content || null;
+    } catch { return null; }
+  }));
 }
 
 // ─────────────────────────── Вход через Telegram ───────────────────────────
