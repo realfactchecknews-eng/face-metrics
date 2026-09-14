@@ -256,7 +256,7 @@ async function analyze(request, env) {
   // Тизер (isTeaser, только новички без покупок): урезаем ответ ИИ до общего балла + 3 категорий,
   // без остальных 5 и без рекомендаций — экономит токены (меньше вывода) и мотивирует купить
   // полный разбор. Промпт после этого суффикса не меняем, просто просим модель не выводить лишнее.
-  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: ПЕРЦЕНТИЛЬ (the integer, exactly as instructed above -- this line is REQUIRED, never omit it), ОБЩИЙ_БАЛЛ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
+  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: РЕДКОСТЬ (the ЛУЧШЕ/ХУЖЕ 1 из N line, exactly as instructed above -- this line is REQUIRED, never omit it), ОБЩИЙ_БАЛЛ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
   const promptText = isMeasure
     ? buildMeasurePrompt(body, await progTexts(env, tgid))
     : (isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt);
