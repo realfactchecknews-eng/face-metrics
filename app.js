@@ -3918,6 +3918,15 @@ function pwRecheck(silent) {
 // ─── состояние раздела ───
 let PG = null;              // ответ /progress
 let POINTS = [];            // [{t, overall, cats, quality}]
+
+// Общий балл замера — PSL 0-8 (у новых точек scale: 8). Замеры до 14.09.2026 ставили
+// общий балл из 10: переводим их, иначе график покажет обвал на целый балл, которого
+// не было. Формула проходит через якоря прежней шкалы: 5.3→4.3, 6.2→4.9, 7.1→5.5, 8.2→6.2.
+// ponytail: линейная подгонка по якорям, точнее не сделать — старые фото не хранятся.
+function measureOverallPsl(p) {
+  if (p.scale === 8 || typeof p.overall !== 'number') return p.overall;
+  return Math.round((0.66 * p.overall + 0.8) * 10) / 10;
+}
 let CATS_HIST = {};         // {название: [баллы по замерам]}
 let CURRENT_WEEK = 1;
 let pgLoaded = false;
@@ -4365,7 +4374,7 @@ async function pgLoad(){
   // Раскладываем замеры в форму, удобную графику.
   POINTS = (d.points || []).map((p) => ({
     t: new Date(p.t).toISOString().slice(0, 10),
-    overall: p.overall, cats: p.cats || {}, q: p.quality || '',
+    overall: measureOverallPsl(p), cats: p.cats || {}, q: p.quality || '',
   }));
   CATS_HIST = {};
   for (const [key, ru] of Object.entries(CAT_RU)) {
