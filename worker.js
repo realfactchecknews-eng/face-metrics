@@ -256,7 +256,7 @@ async function analyze(request, env) {
   // Тизер (isTeaser, только новички без покупок): урезаем ответ ИИ до общего балла + 3 категорий,
   // без остальных 5 и без рекомендаций — экономит токены (меньше вывода) и мотивирует купить
   // полный разбор. Промпт после этого суффикса не меняем, просто просим модель не выводить лишнее.
-  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: ПЕРЦЕНТИЛЬ (the integer, exactly as instructed above -- this line is REQUIRED, never omit it), ОБЩИЙ_БАЛЛ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
+  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: РЕДКОСТЬ (the ЛУЧШЕ/ХУЖЕ 1 из N line, exactly as instructed above -- this line is REQUIRED, never omit it), ОБЩИЙ_БАЛЛ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
   const promptText = isMeasure
     ? buildMeasurePrompt(body, await progTexts(env, tgid))
     : (isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt);
@@ -327,6 +327,12 @@ async function analyze(request, env) {
   // токены и не держать юзера лишние 1.4 секунды.
   // usedBackup — уходили ли на запасную модель. Одна попытка, не больше: если и она
   // отказалась, дело в самом кадре, а не в модели, и дальше жечь токены незачем.
+  // Дуэль: каждое лицо дополнительно оценивается отдельным запросом, параллельно с
+  // основным. Балл в паре модель раздвигает (замер 14.09: 5.9 в разборе, 6.9 в дуэли).
+  const ratesP = body.compare && typeof body.ratePrompt === 'string' && body.ratePrompt.length < 30000 && imgs.length === 2
+    ? rateFacesSeparately(env, MODEL_MAIN, imgs, body.ratePrompt)
+    : null;
+
   let data, lastErr = 'unknown', emptyKind = null, usedBackup = false;
   for (let attempt = 0; attempt < 4; attempt++) {
     let status = 0;
@@ -428,7 +434,31 @@ async function analyze(request, env) {
   // стоимость двух режимов было не с чем. Видно в `wrangler tail`.
   console.log('AI ok', JSON.stringify({ model, usedBackup, stable, isTeaser, usage: data.usage ?? null }));
 
-  return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback });
+  const rates = ratesP ? await ratesP : null;
+  return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback, rates });
+}
+
+// Оценка каждого лица дуэли отдельно: один запрос — одна фотография. Ошибка одного
+// запроса даёт null, и сайт возьмёт балл этого лица из общего ответа.
+async function rateFacesSeparately(env, model, images, ratePrompt) {
+  return Promise.all(images.slice(0, 2).map(async (b64) => {
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENROUTER_API_KEY}` },
+        body: JSON.stringify({
+          model, max_tokens: 1500, temperature: 0, top_p: 1, seed: 1337,
+          reasoning: { effort: 'low' },
+          messages: [{ role: 'user', content: [
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } },
+            { type: 'text', text: ratePrompt },
+          ]}],
+        }),
+      });
+      const d = await r.json();
+      return d?.choices?.[0]?.message?.content || null;
+    } catch { return null; }
+  }));
 }
 
 // ─────────────────────────── Вход через Telegram ───────────────────────────
