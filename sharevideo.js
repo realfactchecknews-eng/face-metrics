@@ -176,9 +176,10 @@ function svScoreRing(c, cx, cy, r, value, p) {
   c.lineWidth = 5; c.lineCap = 'round';
   c.strokeStyle = 'rgba(255,255,255,.08)';
   c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke();
-  c.strokeStyle = value >= 7.5 ? SV_GOLD_HI : value >= 5.5 ? SV_TEXT : '#9a9a9a';
+  // Общий балл — PSL 0-8.
+  c.strokeStyle = value >= 6 ? SV_GOLD_HI : value >= 4.5 ? SV_TEXT : '#9a9a9a';
   c.beginPath();
-  c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (value / 10) * grow);
+  c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (value / 8) * grow);
   c.stroke();
   c.restore();
 }
