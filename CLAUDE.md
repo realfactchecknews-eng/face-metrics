@@ -1,5 +1,17 @@
 # face-metrics — Project Context for Claude
 
+> **Актуально на 15.09.2026 — читать первым, ниже много устаревшего.**
+> - Прод: **https://facerate.ru**, рабочая ветка **`master`** (не `claude/face-geometry-tool-*`).
+> - Воркер: **`https://api.facerate.online`** (`WORKER_URL` в `app.js`), модель анализа —
+>   `google/gemini-3.7-flash` (`MODEL_MAIN` в `worker.js`), запасная — `x-ai/grok-4.3`.
+> - Деплой: push в `master` → GitHub Actions выкатывает и Pages, и воркер сами.
+> - Общий балл — **PSL 0-8** (середина 4), категории — 0-10. Раздел README «Общий балл — PSL 0-8».
+> - Полный README — источник правды; раздел «Известные ограничения / TODO» — открытые задачи.
+> - Файл передачи между сессиями лежит у владельца локально:
+>   `~/Downloads/facerate/HANDOFF-2026-09-15.md` (в публичный репо не кладётся).
+> - При правке `app.js` / `style.css` поднимать `?v=` в `index.html`.
+
+
 ## What this is
 Static web app deployed on GitHub Pages (`gh-pages` branch).
 URL: `https://realfactchecknews-eng.github.io/face-metrics/`
