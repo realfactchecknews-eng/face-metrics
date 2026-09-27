@@ -294,7 +294,7 @@ async function analyze(request, env) {
   const MODEL_BACKUP = 'x-ai/grok-4.3';
   let model = MODEL_MAIN;
 
-  const buildBody = (withSeed) => {
+  const buildBody = (attempt) => {
     const b = {
       model,
       // ВАЖНО: reasoning-токены Grok (~700-950 даже на effort:'low') считаются в этот же лимит.
@@ -311,11 +311,20 @@ async function analyze(request, env) {
       session_id: sessionId,
       messages,
     };
-    // Пин провайдера: без него OpenRouter волен отдать тот же grok разным бэкендам,
-    // а seed на чужом бэкенде не соблюдается. Фолбэки оставляем — иначе при недоступности
-    // xAI юзер вместо отчёта получит ошибку.
-    if (stable && b.model.startsWith('x-ai/')) b.provider = { order: ['xai'], allow_fallbacks: true };
-    if (withSeed) b.seed = 1337;
+    // Пин провайдера. Без него OpenRouter раскидывает одинаковые запросы по разным
+    // бэкендам модели, и seed на чужом бэкенде не соблюдается.
+    // Замер 28.09.2026 на одном фото: «Google» трижды дал 5.9, «Google AI Studio» трижды 4.8 —
+    // одна модель, один seed, разница 1.1 балла. Отсюда жалобы «одно фото рейтит по-разному».
+    // AI Studio выбран владельцем: он же на 13% дешевле ($0.0076 против $0.0087 за анализ).
+    // order, а не only: если бэкенд ляжет, отчёт с другого лучше, чем ошибка на экране.
+    // Для google пин ставим ВСЕГДА, не глядя на stable: у части юзеров в кэше старый app.js,
+    // который этот флаг не шлёт, и без пина они снова получат разброс.
+    if (b.model.startsWith('google/')) b.provider = { order: ['google-ai-studio'], allow_fallbacks: true };
+    else if (stable && b.model.startsWith('x-ai/')) b.provider = { order: ['xai'], allow_fallbacks: true };
+    // seed на КАЖДОЙ попытке, свой на каждую. Раньше третья и четвёртая шли без seed вовсе,
+    // и одно фото давало 5.4 / 5.9 / 5.4. Смысл «расшатать» повтор сохраняется: seed другой,
+    // чем у неудачной попытки, но сам повтор воспроизводим.
+    b.seed = 1337 + attempt;
     return JSON.stringify(b);
   };
 
@@ -340,7 +349,7 @@ async function analyze(request, env) {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENROUTER_API_KEY}` },
-        body: buildBody(attempt < 2),
+        body: buildBody(attempt),
       });
       status = res.status;
       const raw = await res.text();
@@ -433,7 +442,9 @@ async function analyze(request, env) {
 
   // Расход токенов на успешном ответе: раньше писался только у пустых, и сравнить
   // стоимость двух режимов было не с чем. Видно в `wrangler tail`.
-  console.log('AI ok', JSON.stringify({ model, usedBackup, stable, isTeaser, usage: data.usage ?? null }));
+  // provider в логе обязателен: по жалобе «вчера было другое число» только он и показывает,
+  // на каком бэкенде считали. См. замер 28.09.2026.
+  console.log('AI ok', JSON.stringify({ model, provider: data.provider ?? null, usedBackup, stable, isTeaser, usage: data.usage ?? null }));
 
   const rates = ratesP ? await ratesP : null;
   return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback, rates });
@@ -450,6 +461,8 @@ async function rateFacesSeparately(env, model, images, ratePrompt) {
         body: JSON.stringify({
           model, max_tokens: 1500, temperature: 0, top_p: 1, seed: 1337,
           reasoning: { effort: 'low' },
+          // тот же пин, что в основном разборе — иначе баллы дуэли и анализа разъедутся
+          ...(model.startsWith('google/') ? { provider: { order: ['google-ai-studio'], allow_fallbacks: true } } : {}),
           messages: [{ role: 'user', content: [
             { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } },
             { type: 'text', text: ratePrompt },
