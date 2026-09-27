@@ -3061,3 +3061,10 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .pgm-bar i { animation-duration: 1s; width: 92%; }
 }
+
+/* Подпись «это повтор того же снимка» над отчётом. */
+.cached-note{
+  margin:0 0 14px; padding:10px 14px; border-radius:10px;
+  background:rgba(196,164,107,.08); border:1px solid rgba(196,164,107,.25);
+  color:var(--text-dim); font-size:.86rem; line-height:1.5;
+}
