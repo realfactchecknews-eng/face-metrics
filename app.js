@@ -88,6 +88,7 @@ var I18N = {
     potEyebrow: "YOUR POTENTIAL",
     potNow: "now", potMax: "reachable",
     potNote: "Bone does not change — this gain comes from skin, grooming and what reads on the jaw. None of it needs a surgeon.",
+    cachedNote: "Same photo as before — this is your previous report. No analysis was spent.",
     potBtn: "Get the 90-day plan →",
     potBtnOwned: "Open coaching →",
     detailEyebrow: "DETAILED BREAKDOWN",
@@ -206,6 +207,7 @@ var I18N = {
     potEyebrow: "ТВОЙ ПОТЕНЦИАЛ",
     potNow: "сейчас", potMax: "достижимо",
     potNote: "Кость не меняется — этот рост берётся из кожи, груминга и того, что читается на челюсти. Всё это делается без врача.",
+    cachedNote: "Это тот же снимок, что ты уже загружал — показываем прошлый разбор. Анализ не списан.",
     potBtn: "Забрать план на 90 дней →",
     potBtnOwned: "Открыть ведение →",
     detailEyebrow: "ДЕТАЛЬНЫЙ АНАЛИЗ",
@@ -826,6 +828,8 @@ resetBtn.addEventListener("click", function() {
 // Полностью обнуляет блок результатов, чтобы при анализе нового фото
 // не оставалось старого PSL-балла, категорий и заполненного кольца.
 function clearReport() {
+  var oldNote = document.getElementById("cachedNote");
+  if (oldNote) oldNote.remove();
   var aiReport = document.getElementById("aiReport");
   var aiError  = document.getElementById("aiError");
   var aiRecs   = document.getElementById("aiRecs");
@@ -1759,6 +1763,13 @@ async function callAI(metrics, shapeInfo) {
     if (data.error) { showGate(data); return; }
     renderAIReport(data.text || t("emptyAnswer"), false, !!data.teaser);
     aiReport.classList.remove("hidden");
+    // Повтор того же снимка: воркер отдал прошлый отчёт, модель не вызывалась.
+    // Без подписи человек решит, что сервис завис и показал старое.
+    if (data.cached) {
+      var note = document.createElement("p");
+      note.className = "cached-note"; note.id = "cachedNote"; note.textContent = t("cachedNote");
+      aiReport.insertBefore(note, aiReport.firstChild);
+    }
     // Обновляем чип квоты по факту списания.
     if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
     if (data.cashback) showCashbackToast();
@@ -1879,8 +1890,14 @@ function computeOverall(byKey) {
 var PSL_MID = 4;
 var PSL_MAX = 8;
 // Точки лестницы подобраны под целые баллы PSL: меняешь N — проверь test_rarity.mjs.
+// Ступени «1 из 3» и «1 из 4» добавлены 28.09.2026: между «обычным» (1 из 2 = PSL 4) и
+// «симпатичным» (1 из 6 = PSL 5) модели было некуда положить лицо чуть выше среднего,
+// и она округляла вверх — отсюда жалобы «обычным лицам ставит 5+». Замер на шести лицах:
+// ярек 5.2 → 4.8, остальные пять не сдвинулись.
 var RARITY_LADDER = [
   "- \u041b\u0423\u0427\u0428\u0415 1 \u0438\u0437 2: the average man, the middle of the street (PSL 4, MTN)",
+  "- \u041b\u0423\u0427\u0428\u0415 1 \u0438\u0437 3: a touch above average, nothing about the face makes you look twice (PSL 4.4)",
+  "- \u041b\u0423\u0427\u0428\u0415 1 \u0438\u0437 4: pleasant, tidy, still nobody turns around (PSL 4.7)",
   "- \u041b\u0423\u0427\u0428\u0415 1 \u0438\u0437 6: handsome, noticeably above the crowd (PSL 5, HTN)",
   "- \u041b\u0423\u0427\u0428\u0415 1 \u0438\u0437 44: model level, a fashion agency would sign him (PSL 6, Chadlite)",
   "- \u041b\u0423\u0427\u0428\u0415 1 \u0438\u0437 740: a top model or film star at his peak (PSL 7, Chad)",

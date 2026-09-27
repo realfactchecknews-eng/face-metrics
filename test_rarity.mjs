@@ -19,6 +19,8 @@ const { scoreFromRarity, canthalTiltDeg, pslTier } = new Function(`
 // PSL форума looksmax.org: шкала 0-8, середина 4, один балл — одно стандартное отклонение.
 const r = (s) => scoreFromRarity('РЕДКОСТЬ: ' + s);
 assert.equal(r('ЛУЧШЕ 1 из 2'), 4, 'обычное лицо — ровно 4');
+assert.equal(r('ЛУЧШЕ 1 из 3'), 4.4, 'ступень «чуть выше среднего» — 4.4, а не округление вверх до 5');
+assert.equal(r('ЛУЧШЕ 1 из 4'), 4.7, 'ступень «приятное лицо» — 4.7');
 assert.equal(r('ЛУЧШЕ 1 из 6'), 5, '+1 SD — HTN 5');
 assert.equal(r('ЛУЧШЕ 1 из 44'), 6, '+2 SD — Chadlite 6, модельный уровень');
 assert.equal(r('ЛУЧШЕ 1 из 740'), 7, '+3 SD — Chad 7');
@@ -32,12 +34,13 @@ assert.equal(r('ЛУЧШЕ 1 из 10 000'), r('ЛУЧШЕ 1 из 10000'), 'пр�
 assert.equal(r('ЛУЧШЕ 1 из 1'), 4, 'N меньше двух — середина, а не бесконечность');
 
 // Лестница из промпта монотонна и попадает в целые тиры.
-const ladder = ['ХУЖЕ 1 из 740', 'ХУЖЕ 1 из 44', 'ХУЖЕ 1 из 6', 'ЛУЧШЕ 1 из 2', 'ЛУЧШЕ 1 из 6',
+const ladder = ['ХУЖЕ 1 из 740', 'ХУЖЕ 1 из 44', 'ХУЖЕ 1 из 6', 'ЛУЧШЕ 1 из 2', 'ЛУЧШЕ 1 из 3', 'ЛУЧШЕ 1 из 4', 'ЛУЧШЕ 1 из 6',
   'ЛУЧШЕ 1 из 44', 'ЛУЧШЕ 1 из 740', 'ЛУЧШЕ 1 из 4300', 'ЛУЧШЕ 1 из 31000'];
 const scores = ladder.map(r);
 scores.slice(1).forEach((s, i) => assert.ok(s > scores[i], `${ladder[i + 1]} (${s}) должно быть выше ${ladder[i]} (${scores[i]})`));
 assert.deepEqual(ladder.map(r).map((x) => pslTier(x).label),
-  ['Subhuman', 'Sub-3', 'LTN', 'MTN', 'HTN', 'Chadlite', 'Chad', 'Adam-lite', 'True Adam'], 'каждая ступень — свой тир');
+  ['Subhuman', 'Sub-3', 'LTN', 'MTN', 'MTN', 'MTN', 'HTN', 'Chadlite', 'Chad', 'Adam-lite', 'True Adam'],
+  'новые ступени остаются в MTN — в этом и смысл: обычное лицо не должно попадать в HTN');
 assert.equal(pslTier(4.9).label, 'MTN', 'тир — по порогу, а не округлением');
 assert.ok(src.includes('1 \\u0438\\u0437 44: model level') || /1 \\u0438\\u0437 44: model level/.test(src), 'в промпте та же лестница, что в тесте');
 

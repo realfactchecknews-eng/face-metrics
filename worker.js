@@ -156,6 +156,15 @@ async function setupWebhook(request, env) {
   return json(r);
 }
 
+// Ключ кэша разбора: хэш фотографий + человек + язык + тизер.
+// Хэшируем base64 как есть: клиент кодирует канвас одинаково для одного и того же файла,
+// поэтому повторная загрузка того же снимка даёт тот же ключ.
+async function photoCacheKey(tgid, imgs, lang, isTeaser) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(imgs.join('|')));
+  const hex = [...new Uint8Array(buf)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `rep:${tgid}:${hex}:${lang === 'ru' ? 'ru' : 'en'}:${isTeaser ? 't' : 'f'}`;
+}
+
 // ─────────────────────────── Анализ ───────────────────────────
 async function analyze(request, env) {
   let body;
@@ -243,6 +252,33 @@ async function analyze(request, env) {
   // Те, кто хоть раз покупал, получают ПОЛНЫЙ бесплатный анализ раз в 3 дня — бонус лояльности.
   const isTeaser = mode === 'free' && !buyer;
 
+  const imgs = Array.isArray(body.images) && body.images.length
+    ? body.images
+    : (body.image ? [body.image] : []);
+
+  // ── Кэш по фото ──
+  // Повторная загрузка того же снимка не должна жечь токены: отдаём прошлый отчёт.
+  // Ключ привязан к человеку (чужой снимок нельзя прогнать по чужому кэшу), к языку
+  // (отчёт на другом языке - другой текст) и к тизеру (купивший полный разбор не должен
+  // получить обратно свой урезанный). Замеры гайда и дуэль не кэшируем - там каждый
+  // прогон по смыслу новый.
+  const cacheKey = !isMeasure && !body.compare && imgs.length
+    ? await photoCacheKey(tgid, imgs, body.lang, isTeaser)
+    : null;
+  if (cacheKey) {
+    const hit = await env.RATE_LIMIT.get(cacheKey);
+    if (hit) {
+      const seen = parseInt(await env.RATE_LIMIT.get(`gc:${today}`) || '0', 10);
+      await env.RATE_LIMIT.put(`gc:${today}`, String(seen + 1), { expirationTtl: 93600 });
+      console.log('AI cache hit', JSON.stringify({ tgid, isTeaser, lang: body.lang || 'en' }));
+      return json({
+        text: hit, mode: 'cached', cached: true, teaser: isTeaser,
+        creditsLeft: credits, freeLeft: subscribed ? Math.max(0, FREE_PER_WEEK - freeUsed) : 0,
+        subscribed, cashback: false,
+      });
+    }
+  }
+
   // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
   // Не блокирует уже оплативших (unlim/paid), чтобы платёж не пропадал впустую при наплыве трафика.
   if (env.RATE_LIMIT && (mode === 'free' || mode === 'holder')) {
@@ -261,9 +297,6 @@ async function analyze(request, env) {
     ? buildMeasurePrompt(body, await progTexts(env, tgid))
     : (isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt);
 
-  const imgs = Array.isArray(body.images) && body.images.length
-    ? body.images
-    : (body.image ? [body.image] : []);
   const messages = imgs.length
     ? [{ role: 'user', content: [
         ...imgs.map((b64) => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } })),
@@ -446,6 +479,10 @@ async function analyze(request, env) {
   // на каком бэкенде считали. См. замер 28.09.2026.
   console.log('AI ok', JSON.stringify({ model, provider: data.provider ?? null, usedBackup, stable, isTeaser, usage: data.usage ?? null }));
 
+  if (cacheKey) {
+    // 60 дней: за это время лицо меняется, и новый разбор уже честнее старого.
+    await env.RATE_LIMIT.put(cacheKey, data.choices[0].message.content, { expirationTtl: 60 * 24 * 3600 });
+  }
   const rates = ratesP ? await ratesP : null;
   return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback, rates });
 }
@@ -4473,6 +4510,8 @@ const PSL_MID = 4;
 const PSL_MAX = 8;
 const RARITY_LADDER = [
   '- ЛУЧШЕ 1 из 2: the average man, the middle of the street (PSL 4, MTN)',
+  '- ЛУЧШЕ 1 из 3: a touch above average, nothing about the face makes you look twice (PSL 4.4)',
+  '- ЛУЧШЕ 1 из 4: pleasant, tidy, still nobody turns around (PSL 4.7)',
   '- ЛУЧШЕ 1 из 6: handsome, noticeably above the crowd (PSL 5, HTN)',
   '- ЛУЧШЕ 1 из 44: model level, a fashion agency would sign him (PSL 6, Chadlite)',
   '- ЛУЧШЕ 1 из 740: a top model or film star at his peak (PSL 7, Chad)',
