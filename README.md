@@ -12,7 +12,11 @@ AI-ответами и панелью модератора.
   платежей — не путать, весь актуальный код только в `master`)
 - **Бэкап:** `realfactchecknews-eng/face-metrics-backup` (приватное зеркало `master`
   на случай, если основной репозиторий/аккаунт пострадает; обновлять вручную по мере
-  необходимости — автосинхронизации нет)
+  необходимости — автосинхронизации нет).
+  ⚠️ В зеркале **выключены GitHub Actions** (29.09.2026). Вместе с кодом туда уезжают и наши
+  workflow-файлы, а Pages там не настроены и секрета Cloudflare нет — при каждом обновлении
+  зеркала оба деплоя падали и владельцу приходили письма об ошибках. Вернуть, если понадобится:
+  `gh api -X PUT repos/realfactchecknews-eng/face-metrics-backup/actions/permissions -F enabled=true`
 - **Бот оплаты:** [@faceratepay_bot](https://t.me/faceratepay_bot)
 - **Бот поддержки:** [@FaceRateSupport_bot](https://t.me/FaceRateSupport_bot)
 - **Бот медийных партнёров:** [@FaceRateMedia_bot](https://t.me/FaceRateMedia_bot) — самостоятельная статистика по реферальным ссылкам
