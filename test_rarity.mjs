@@ -19,18 +19,18 @@ const { scoreFromRarity, canthalTiltDeg, pslTier } = new Function(`
 
 // PSL форума looksmax.org: шкала 0-8, середина 4, один балл — одно стандартное отклонение.
 const r = (s) => scoreFromRarity('РЕДКОСТЬ: ' + s);
-// Шкала по дата-шиту владельца: 4 + 0.64*z. Якоря листа MENS GUIDE воспроизводятся
-// с точностью 0.2 — Ди Каприо 6.0, Гослинг 4.6, Мэтт Бомер 7.6.
+// Шкала по дата-шиту владельца: 4 + 0.75*z. Наклон подобран по 52 лицам с листа
+// MENS GUIDE, у которых там проставлен PSL: смещение −0.14, средняя ошибка 0.39.
 assert.equal(r('ЛУЧШЕ 1 из 2'), 4, 'обычное лицо — ровно 4');
 assert.equal(r('ЛУЧШЕ 1 из 3'), 4.3, 'чуть выше среднего');
-assert.equal(r('ЛУЧШЕ 1 из 4'), 4.4, 'приятное лицо, но не оборачиваются');
-assert.equal(r('ЛУЧШЕ 1 из 6'), 4.6, 'привлекательный — начало HTN');
-assert.equal(r('ЛУЧШЕ 1 из 44'), 5.3, 'модельный уровень — начало Chadlite');
-assert.equal(r('ЛУЧШЕ 1 из 740'), 5.9, 'топ-модель или актёр на пике');
-assert.equal(r('ЛУЧШЕ 1 из 1000'), 6, 'молодой Ди Каприо по дата-шиту — ровно 6.0');
-assert.equal(r('ЛУЧШЕ 1 из 31000'), 6.6, 'Adam-lite');
-assert.equal(r('ХУЖЕ 1 из 6'), 3.4, 'ниже среднего — LTN');
-assert.equal(r('ХУЖЕ 1 из 44'), 2.7, 'явно непривлекательное — Sub-3');
+assert.equal(r('ЛУЧШЕ 1 из 4'), 4.5, 'приятное лицо, но не оборачиваются');
+assert.equal(r('ЛУЧШЕ 1 из 6'), 4.7, 'привлекательный — начало HTN');
+assert.equal(r('ЛУЧШЕ 1 из 44'), 5.5, 'модельный уровень — Chadlite');
+assert.equal(r('ЛУЧШЕ 1 из 740'), 6.2, 'топ-модель или актёр на пике');
+assert.equal(r('ЛУЧШЕ 1 из 1000'), 6.3, 'молодой Ди Каприо');
+assert.equal(r('ЛУЧШЕ 1 из 31000'), 7, 'Adam-lite');
+assert.equal(r('ХУЖЕ 1 из 6'), 3.3, 'ниже среднего — LTN');
+assert.equal(r('ХУЖЕ 1 из 44'), 2.5, 'явно непривлекательное — Sub-3');
 assert.ok(r('ЛУЧШЕ 1 из 10000000') <= 8 && r('ЛУЧШЕ 1 из 10000000') > 7, 'край шкалы не упирается в 8 раньше времени');
 assert.ok(r('ХУЖЕ 1 из 10000000') >= 0, 'ниже 0 не бывает');
 assert.equal(r('ЛУЧШЕ 1 из 10 000'), r('ЛУЧШЕ 1 из 10000'), 'пробелы в числе не ломают разбор');
@@ -42,7 +42,7 @@ const ladder = ['ХУЖЕ 1 из 740', 'ХУЖЕ 1 из 44', 'ХУЖЕ 1 из 6'
 const scores = ladder.map(r);
 scores.slice(1).forEach((s, i) => assert.ok(s > scores[i], `${ladder[i + 1]} (${s}) должно быть выше ${ladder[i]} (${scores[i]})`));
 assert.deepEqual(ladder.map(r).map((x) => pslTier(x).label),
-  ['Subhuman', 'Sub-3', 'LTN', 'MTN', 'MTN', 'MTN', 'HTN', 'Chadlite', 'Chad', 'Chad', 'Adam-lite'],
+  ['Subhuman', 'Sub-3', 'LTN', 'MTN', 'MTN', 'MTN', 'HTN', 'Chadlite', 'Chad', 'Adam-lite', 'Adam-lite'],
   'ступени ложатся на тиры из дата-шита: обычное лицо в MTN, модельный уровень с 5.3');
 assert.equal(pslTier(4.5).label, 'MTN', 'обычное лицо не попадает в HTN');
 assert.equal(pslTier(6).label, 'Chad', 'Ди Каприо по дата-шиту — Chad, а не Chadlite');
@@ -50,7 +50,7 @@ assert.equal(pslTier(4.59).label, 'MTN', 'тир — по порогу, а не 
 assert.ok(/1 \\u0438\\u0437 44: model benchmark/.test(src), 'в промпте та же лестница, что в тесте');
 
 assert.equal(scoreFromRarity('ОБЩИЙ_БАЛЛ: 4.1/8'), null, 'нет строки — null, дальше берётся балл модели');
-assert.equal(scoreFromRarity('RAR_B: ХУЖЕ 1 из 44', 'RAR_B'), 2.7, 'дуэль разбирается той же шкалой');
+assert.equal(scoreFromRarity('RAR_B: ХУЖЕ 1 из 44', 'RAR_B'), 2.5, 'дуэль разбирается той же шкалой');
 assert.equal(scoreFromRarity('RAR_A: ЛУЧШЕ 1 из 44', 'RAR_B'), null, 'метка чужого игрока не подхватывается');
 
 // Кантальный наклон: внешний уголок выше внутреннего — плюс, и завал головы не влияет.
