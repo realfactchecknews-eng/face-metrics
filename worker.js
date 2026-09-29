@@ -4478,9 +4478,9 @@ async function progSave(env, tgid, text) {
   // Замер с чужим лицом в историю не пишем: он испортит график и все сравнения.
   if (same === 'НЕТ') return;
   // scale: 8 — общий балл уже PSL 0-8. У замеров до 14.09.2026 поля нет, там было из 10.
-  // v: 2 — балл посчитан по шкале с наклоном 0.64 (с 29.09.2026). Точки без поля v
-  // считались по прежнему наклону 1.0, сайт пересчитывает их при показе.
-  list.push({ t: Date.now(), overall, scale: PSL_MAX, v: 2, cats, quality, same });
+  // sl — наклон шкалы, по которому посчитан балл. Наклон менялся дважды, и без этого
+  // поля старые точки на графике давали ступеньку. Сайт приводит их к текущему наклону.
+  list.push({ t: Date.now(), overall, scale: PSL_MAX, v: 2, sl: PSL_SLOPE, cats, quality, same });
   await env.RATE_LIMIT.put(`prog:${tgid}`, JSON.stringify(list.slice(-PROG_MAX)));
 
   // Полные тексты - только последние N, чтобы влезать в лимит значения KV.
@@ -4510,20 +4510,21 @@ async function progSave(env, tgid, text) {
    looksmax.org: середина 4, один балл — одно стандартное отклонение). Категории — 0-10. */
 const PSL_MID = 4;
 const PSL_MAX = 8;
-// Наклон шкалы — копия из app.js. 29.09.2026: 1.0 → 0.64 по дата-шиту владельца.
-const PSL_SLOPE = 0.64;
+// Наклон шкалы — копия из app.js. Подобран по 52 лицам с известным PSL из дата-шита:
+// 0.64 занижал (смещение −0.30), 0.75 даёт −0.14 при средней ошибке 0.39.
+const PSL_SLOPE = 0.75;
 const RARITY_LADDER = [
   '- ЛУЧШЕ 1 из 2: the average man, the middle of the street (PSL 4.0, MTN)',
   '- ЛУЧШЕ 1 из 3: a touch above average, nothing makes you look twice (PSL 4.3)',
-  '- ЛУЧШЕ 1 из 4: pleasant, tidy, still nobody turns around (PSL 4.4)',
-  '- ЛУЧШЕ 1 из 6: attractive, noticeably above the crowd (PSL 4.6, HTN)',
-  '- ЛУЧШЕ 1 из 44: model benchmark, an agency would sign him (PSL 5.3, Chadlite)',
-  '- ЛУЧШЕ 1 из 740: a working top model or a film star at his peak (PSL 5.9, Chad)',
-  '- ЛУЧШЕ 1 из 4300: one of the best-looking men in a whole country (PSL 6.2)',
-  '- ЛУЧШЕ 1 из 31000: the very top, a face people post as the ideal (PSL 6.6, Adam-lite)',
-  '- ХУЖЕ 1 из 6: below average, one or two clear weaknesses (PSL 3.4, LTN)',
-  '- ХУЖЕ 1 из 44: clearly unattractive, pronounced disproportion (PSL 2.7, Sub-3)',
-  '- ХУЖЕ 1 из 740: severe deformity (PSL 2.1)',
+  '- ЛУЧШЕ 1 из 4: pleasant, tidy, still nobody turns around (PSL 4.5)',
+  '- ЛУЧШЕ 1 из 6: attractive, noticeably above the crowd (PSL 4.7, HTN)',
+  '- ЛУЧШЕ 1 из 44: model benchmark, an agency would sign him (PSL 5.5, Chadlite)',
+  '- ЛУЧШЕ 1 из 740: a working top model or a film star at his peak (PSL 6.2, Chad)',
+  '- ЛУЧШЕ 1 из 4300: one of the best-looking men in a whole country (PSL 6.6, Adam-lite)',
+  '- ЛУЧШЕ 1 из 31000: the very top, a face people post as the ideal (PSL 7.0)',
+  '- ХУЖЕ 1 из 6: below average, one or two clear weaknesses (PSL 3.3, LTN)',
+  '- ХУЖЕ 1 из 44: clearly unattractive, pronounced disproportion (PSL 2.5, Sub-3)',
+  '- ХУЖЕ 1 из 740: severe deformity (PSL 1.8)',
 ].join('\n');
 
 // Обратная функция нормального распределения (приближение Acklam), копия из app.js.
@@ -4601,10 +4602,10 @@ const MEASURE_BASE = `Ты - измерительный инструмент д�
    При НЕ УВЕРЕН сравнивай осторожно и скажи, что именно вызывает сомнение.
 
 ДВЕ РАЗНЫЕ ШКАЛЫ, НЕ ПУТАЙ ИХ:
-- ОБЩИЙ_БАЛЛ - это PSL от 0 до 8. 4 - ровно средний мужчина, 4.6 - привлекательный
-  (лучше 1 из 6), 5.4 - модельный уровень, такого взяло бы агентство (1 из 44), 5.9 - топ-модель
-  или актёр на пике формы (1 из 740), 6.6 и выше - единицы на десятки тысяч, 8 - теоретический
-  предел. 3.4 - ниже среднего, 2.7 - явно непривлекательное лицо.
+- ОБЩИЙ_БАЛЛ - это PSL от 0 до 8. 4 - ровно средний мужчина, 4.7 - привлекательный
+  (лучше 1 из 6), 5.5 - модельный уровень, такого взяло бы агентство (1 из 44), 6.2 - топ-модель
+  или актёр на пике формы (1 из 740), 7 и выше - единицы на десятки тысяч, 8 - теоретический
+  предел. 3.3 - ниже среднего, 2.5 - явно непривлекательное лицо.
 - Восемь категорий - отдельная шкала от 0 до 10: 5 - обычная черта, 6 - хорошая,
   7 - модельная, 8 - одна из лучших, что встречаются, 9 и выше - почти никогда.
 

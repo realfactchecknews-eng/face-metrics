@@ -41,7 +41,7 @@ let sc = W.parseScores(report);
 assert.equal(sc.overall, 5.5, 'общий балл замера — «/8» модели: он с десятыми, график прогресса строится по нему');
 assert.deepEqual(sc.cats, { 'СИММЕТРИЯ': 6.5, 'КОЖА': 7 }, 'категории по-прежнему из 10');
 assert.equal(W.parseScores('ОБЩИЙ_БАЛЛ: 4.6/8\nКОЖА: 5/10').overall, 4.6, 'без строки редкости — ОБЩИЙ_БАЛЛ из 8');
-assert.equal(W.parseScores('РЕДКОСТЬ: ЛУЧШЕ 1 из 44\nКОЖА: 5/10').overall, 5.3, 'нет «/8» — запасной путь через редкость');
+assert.equal(W.parseScores('РЕДКОСТЬ: ЛУЧШЕ 1 из 44\nКОЖА: 5/10').overall, 5.5, 'нет «/8» — запасной путь через редкость');
 assert.equal(W.parseScores('ОБЩИЙ_БАЛЛ: 9.4/8').overall, 8, 'выше 8 не бывает, даже если модель ошиблась');
 
 const norm = W.normalizeMeasureText(report);
@@ -49,7 +49,7 @@ assert.ok(!/РЕДКОСТЬ/.test(norm), 'строка редкости не п
 assert.match(norm, /^ОБЩИЙ_БАЛЛ: 5\.5\/8$/m, 'балл модели с десятыми в тексте сохраняется');
 assert.equal(W.parseScores(norm).overall, 5.5, 'текст и график показывают одно число');
 const old10 = W.normalizeMeasureText('РЕДКОСТЬ: ЛУЧШЕ 1 из 44\nОБЩИЙ_БАЛЛ: 7.1/10\nКОЖА: 5/10');
-assert.match(old10, /^ОБЩИЙ_БАЛЛ: 5\.3\/8$/m, 'модель по привычке написала «/10» — ставим PSL по редкости');
+assert.match(old10, /^ОБЩИЙ_БАЛЛ: 5\.5\/8$/m, 'модель по привычке написала «/10» — ставим PSL по редкости');
 assert.equal(W.normalizeMeasureText('ОБЩИЙ_БАЛЛ: 4.6/8'), 'ОБЩИЙ_БАЛЛ: 4.6/8', 'без строки редкости текст не трогаем');
 
 assert.match(W.MEASURE_BASE, /ОБЩИЙ_БАЛЛ: X\/8/, 'промпт просит общий балл из 8');
@@ -67,8 +67,9 @@ assert.ok(!/[0-9]\s*\/\s*(8|10)\b/.test(tail), 'прошлые баллы скр
 assert.ok(!/ХУЖЕ 1 из 6/.test(tail), 'прошлая строка редкости скрыта');
 
 // Старые точки из 10 переводятся в PSL по якорям прежней шкалы, новые не трогаются.
-assert.equal(A.measureOverallPsl({ overall: 6.0, scale: 8, v: 2 }), 6.0, 'новая точка остаётся как есть');
-assert.equal(A.measureOverallPsl({ overall: 7.0, scale: 8 }), 5.9, 'точка по старому наклону сжимается к середине');
+assert.equal(A.measureOverallPsl({ overall: 6.0, scale: 8, v: 2, sl: 0.75 }), 6.0, 'точка на текущем наклоне не трогается');
+assert.equal(A.measureOverallPsl({ overall: 7.0, scale: 8 }), 6.3, 'точка с наклона 1.0 приводится к текущему');
+assert.equal(A.measureOverallPsl({ overall: 6.0, scale: 8, v: 2 }), 6.3, 'точка с наклона 0.64 растягивается до текущего');
 assert.equal(A.measureOverallPsl({ overall: 4.0, scale: 8 }), 4.0, 'середина шкалы при сжатии не двигается');
 assert.equal(A.measureOverallPsl({ overall: 5.3 }), 4.2, 'совсем старая точка из 10: сначала в PSL, потом сжатие');
 assert.equal(A.measureOverallPsl({ overall: null }), null);
