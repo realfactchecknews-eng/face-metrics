@@ -9,6 +9,8 @@ const { computePotential, shortRecs } = new Function(`
   ${pick(/var OVERALL_WEIGHTS = \{[\s\S]*?\n\};/)}
   ${pick(/^function computeOverall[\s\S]*?^\}/m)}
   ${pick(/var PSL_MAX = \d+;/)}
+  ${pick(/var PSL_MID = \d+;/)}
+  ${pick(/var CAT_PER_PSL = [\d.]+;/)}
   ${pick(/var POTENTIAL_CEILING[\s\S]*?var POTENTIAL_BONUS\s+= \{[^\n]*\n/)}
   ${pick(/^function computePotential[\s\S]*?^\}/m)}
   ${pick(/^function shortRecs[\s\S]*?^\}/m)}
@@ -35,10 +37,10 @@ assert.equal(
   computePotential({ overall: 6.6, byKey: cats({ "КОЖА": 9, "ГРУМИНГ_STYLE": 9, "ДЖОУЛАЙН_MANDIBLE": 9.5 }) }),
   null, 'расти некуда — блок скрыт');
 
-// потолок: PSL 7 (Chad) и не выше — уходом за кожей выше не дотянуть
-const top = computePotential({ overall: 6.9, byKey: cats({ "КОЖА": 2, "ГРУМИНГ_STYLE": 2 }) });
-assert.ok(top <= 7, `потолок PSL 7, получили ${top}`);
-assert.equal(computePotential({ overall: 7.2, byKey: cats({ "КОЖА": 2, "ГРУМИНГ_STYLE": 2 }) }), null, 'уже выше потолка — обещать нечего');
+// потолок: начало тира Chad (5.8) и не выше — уходом за кожей выше не дотянуть
+const top = computePotential({ overall: 5.5, byKey: cats({ "КОЖА": 2, "ГРУМИНГ_STYLE": 2 }) });
+assert.ok(top <= 5.8, `потолок PSL 5.8, получили ${top}`);
+assert.equal(computePotential({ overall: 6.0, byKey: cats({ "КОЖА": 2, "ГРУМИНГ_STYLE": 2 }) }), null, 'уже выше потолка — обещать нечего');
 
 // Тизер отдаёт три категории из восьми, и блок всё равно должен показываться:
 // неизвестным категориям подставляется общий балл.
@@ -49,13 +51,13 @@ assert.ok(Math.abs(teaser - full) <= 0.2, `тизер не должен расх
 
 // Но и в тизере, если расти некуда, обещать нечего: лицо уже у потолка PSL 7.
 assert.equal(
-  computePotential({ overall: 7.1, byKey: { "СИММЕТРИЯ": 9, "ГЛАЗА_CANTHAL_TILT": 9, "КОЖА": 9 } }),
+  computePotential({ overall: 5.9, byKey: { "СИММЕТРИЯ": 9, "ГЛАЗА_CANTHAL_TILT": 9, "КОЖА": 9 } }),
   null, 'тизер у сильного лица тоже скрыт');
 
 // Пропущенная категория в тизере — это уровень PSL + 1, а не сам PSL: иначе PSL 6.7
 // выдавался за категорию 6.7 и лицу модельного уровня обещался рост по грумингу.
-const strongTeaser = computePotential({ overall: 6.5, byKey: { "СИММЕТРИЯ": 8, "ГЛАЗА_CANTHAL_TILT": 8, "КОЖА": 8.5 } });
-const strongFull = computePotential({ overall: 6.5, byKey: cats({ "СИММЕТРИЯ": 8, "ГЛАЗА_CANTHAL_TILT": 8, "КОЖА": 8.5, "МИДФЕЙС_MAXILLA": 7.5, "ДЖОУЛАЙН_MANDIBLE": 7.5, "НОС_NOSE": 7.5, "ГУБЫ_СКУЛЫ": 7.5, "ГРУМИНГ_STYLE": 7.5 }) });
+const strongTeaser = computePotential({ overall: 5.0, byKey: { "СИММЕТРИЯ": 8, "ГЛАЗА_CANTHAL_TILT": 8, "КОЖА": 8.5 } });
+const strongFull = computePotential({ overall: 5.0, byKey: cats({ "СИММЕТРИЯ": 8, "ГЛАЗА_CANTHAL_TILT": 8, "КОЖА": 8.5, "МИДФЕЙС_MAXILLA": 7.5, "ДЖОУЛАЙН_MANDIBLE": 7.5, "НОС_NOSE": 7.5, "ГУБЫ_СКУЛЫ": 7.5, "ГРУМИНГ_STYLE": 7.5 }) });
 assert.equal(strongTeaser, strongFull, `у сильного лица тизер и полный отчёт совпадают: ${strongTeaser} против ${strongFull}`);
 assert.equal(computePotential({ overall: null, byKey: cats({}) }), null, 'нет балла → null');
 
