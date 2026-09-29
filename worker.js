@@ -4478,7 +4478,9 @@ async function progSave(env, tgid, text) {
   // Замер с чужим лицом в историю не пишем: он испортит график и все сравнения.
   if (same === 'НЕТ') return;
   // scale: 8 — общий балл уже PSL 0-8. У замеров до 14.09.2026 поля нет, там было из 10.
-  list.push({ t: Date.now(), overall, scale: PSL_MAX, cats, quality, same });
+  // v: 2 — балл посчитан по шкале с наклоном 0.64 (с 29.09.2026). Точки без поля v
+  // считались по прежнему наклону 1.0, сайт пересчитывает их при показе.
+  list.push({ t: Date.now(), overall, scale: PSL_MAX, v: 2, cats, quality, same });
   await env.RATE_LIMIT.put(`prog:${tgid}`, JSON.stringify(list.slice(-PROG_MAX)));
 
   // Полные тексты - только последние N, чтобы влезать в лимит значения KV.
@@ -4508,18 +4510,20 @@ async function progSave(env, tgid, text) {
    looksmax.org: середина 4, один балл — одно стандартное отклонение). Категории — 0-10. */
 const PSL_MID = 4;
 const PSL_MAX = 8;
+// Наклон шкалы — копия из app.js. 29.09.2026: 1.0 → 0.64 по дата-шиту владельца.
+const PSL_SLOPE = 0.64;
 const RARITY_LADDER = [
-  '- ЛУЧШЕ 1 из 2: the average man, the middle of the street (PSL 4, MTN)',
-  '- ЛУЧШЕ 1 из 3: a touch above average, nothing about the face makes you look twice (PSL 4.4)',
-  '- ЛУЧШЕ 1 из 4: pleasant, tidy, still nobody turns around (PSL 4.7)',
-  '- ЛУЧШЕ 1 из 6: handsome, noticeably above the crowd (PSL 5, HTN)',
-  '- ЛУЧШЕ 1 из 44: model level, a fashion agency would sign him (PSL 6, Chadlite)',
-  '- ЛУЧШЕ 1 из 740: a top model or film star at his peak (PSL 7, Chad)',
-  '- ЛУЧШЕ 1 из 4300: one of the best-looking men in a whole country (PSL 7.5, Adam-lite)',
-  '- ЛУЧШЕ 1 из 31000: true Adam, the theoretical ceiling (PSL 8)',
-  '- ХУЖЕ 1 из 6: below average, one or two clear weaknesses (PSL 3, LTN)',
-  '- ХУЖЕ 1 из 44: clearly unattractive, pronounced disproportion (PSL 2, Sub-3)',
-  '- ХУЖЕ 1 из 740: severe deformity (PSL 1)',
+  '- ЛУЧШЕ 1 из 2: the average man, the middle of the street (PSL 4.0, MTN)',
+  '- ЛУЧШЕ 1 из 3: a touch above average, nothing makes you look twice (PSL 4.3)',
+  '- ЛУЧШЕ 1 из 4: pleasant, tidy, still nobody turns around (PSL 4.4)',
+  '- ЛУЧШЕ 1 из 6: attractive, noticeably above the crowd (PSL 4.6, HTN)',
+  '- ЛУЧШЕ 1 из 44: model benchmark, an agency would sign him (PSL 5.3, Chadlite)',
+  '- ЛУЧШЕ 1 из 740: a working top model or a film star at his peak (PSL 5.9, Chad)',
+  '- ЛУЧШЕ 1 из 4300: one of the best-looking men in a whole country (PSL 6.2)',
+  '- ЛУЧШЕ 1 из 31000: the very top, a face people post as the ideal (PSL 6.6, Adam-lite)',
+  '- ХУЖЕ 1 из 6: below average, one or two clear weaknesses (PSL 3.4, LTN)',
+  '- ХУЖЕ 1 из 44: clearly unattractive, pronounced disproportion (PSL 2.7, Sub-3)',
+  '- ХУЖЕ 1 из 740: severe deformity (PSL 2.1)',
 ].join('\n');
 
 // Обратная функция нормального распределения (приближение Acklam), копия из app.js.
@@ -4541,7 +4545,7 @@ function scoreFromRarity(text) {
   if (!m) return null;
   const n = Math.max(2, parseInt(m[2].replace(/\s/g, ''), 10) || 2);
   const z = normInv(1 - 1 / n) * (/ХУЖЕ/i.test(m[1]) ? -1 : 1);
-  return Math.round(Math.max(0, Math.min(PSL_MAX, PSL_MID + z)) * 10) / 10;
+  return Math.round(Math.max(0, Math.min(PSL_MAX, PSL_MID + PSL_SLOPE * z)) * 10) / 10;
 }
 
 // Текст замера показывается человеку как есть и уходит в историю. Строку редкости
@@ -4597,10 +4601,10 @@ const MEASURE_BASE = `Ты - измерительный инструмент д�
    При НЕ УВЕРЕН сравнивай осторожно и скажи, что именно вызывает сомнение.
 
 ДВЕ РАЗНЫЕ ШКАЛЫ, НЕ ПУТАЙ ИХ:
-- ОБЩИЙ_БАЛЛ - это PSL форума looksmax.org от 0 до 8. 4 - ровно средний мужчина, каждый балл -
-  одно стандартное отклонение: 5 - симпатичный (лучше 1 из 6), 6 - модельный уровень (1 из 44),
-  7 - топ-модель или актёр на пике (1 из 740), 8 - теоретический идеал. 3 - ниже среднего,
-  2 - явно непривлекательное лицо.
+- ОБЩИЙ_БАЛЛ - это PSL от 0 до 8. 4 - ровно средний мужчина, 4.6 - привлекательный
+  (лучше 1 из 6), 5.4 - модельный уровень, такого взяло бы агентство (1 из 44), 5.9 - топ-модель
+  или актёр на пике формы (1 из 740), 6.6 и выше - единицы на десятки тысяч, 8 - теоретический
+  предел. 3.4 - ниже среднего, 2.7 - явно непривлекательное лицо.
 - Восемь категорий - отдельная шкала от 0 до 10: 5 - обычная черта, 6 - хорошая,
   7 - модельная, 8 - одна из лучших, что встречаются, 9 и выше - почти никогда.
 

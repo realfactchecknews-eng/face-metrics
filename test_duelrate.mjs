@@ -11,7 +11,9 @@ const { parseCompare, duelRatePrompt } = new Function(`
   var PSL_SCALE_PROMPT = "SCALE";
   ${pick(src, /var PSL_MID = \d+;/)}
   ${pick(src, /var PSL_MAX = \d+;/)}
+  ${pick(src, /var PSL_SLOPE = [\d.]+;/)}
   ${pick(src, /var RARITY_LADDER = \[[\s\S]*?\]\.join\("\\n"\);/)}
+  ${pick(src, /var RARITY_ANCHORS = \[[\s\S]*?\]\.join\("\\n"\);/)}
   ${pick(src, /var RARITY_INSTRUCTIONS = [^\n]*/)}
   ${pick(src, /^function duelRatePrompt[\s\S]*?^\}/m)}
   ${pick(src, /^function normInv[\s\S]*?^\}/m)}
@@ -25,12 +27,12 @@ const alone = ['РЕДКОСТЬ: ЛУЧШЕ 1 из 2', 'РЕДКОСТЬ: ЛУ�
 
 let r = parseCompare(pair, alone);
 assert.equal(r.a, 4, 'балл A из отдельной оценки, а не из пары');
-assert.equal(r.b, 5.9, 'балл B из отдельной оценки: 5.9, как в обычном разборе, а не 6.9');
+assert.equal(r.b, 5.2, 'балл B из отдельной оценки (1 из 35), а не из пары (1 из 550 → 5.9)');
 
 r = parseCompare(pair, null);
-assert.equal(r.b, 6.9, 'без отдельной оценки — запасной путь через RAR_B');
+assert.equal(r.b, 5.9, 'без отдельной оценки — запасной путь через RAR_B');
 r = parseCompare(pair, [null, 'РЕДКОСТЬ: ЛУЧШЕ 1 из 35']);
-assert.ok(Math.abs(r.a - 3.3) < 0.05 && r.b === 5.9, 'упал один запрос — только это лицо берётся из пары');
+assert.ok(Math.abs(r.a - 3.6) < 0.05 && r.b === 5.2, 'упал один запрос — только это лицо берётся из пары');
 
 r = parseCompare('RAR_A: ЛУЧШЕ 1 из 6\nRAR_B: ЛУЧШЕ 1 из 5\nWINNER: B', ['РЕДКОСТЬ: ЛУЧШЕ 1 из 44', 'РЕДКОСТЬ: ЛУЧШЕ 1 из 2']);
 assert.equal(r.winner, 'A', 'при заметном разрыве победитель — по независимым баллам');
@@ -39,7 +41,8 @@ assert.equal(r.winner, 'B', 'почти равных оставляем на в�
 
 const p = duelRatePrompt();
 assert.match(p, /РЕДКОСТЬ|\u0420\u0415\u0414\u041a\u041e\u0421\u0422\u042c/, 'отдельная оценка просит ту же строку редкости');
-assert.match(p, /1 \u0438\u0437 44: model level/, 'и ту же лестницу, что обычный разбор');
+assert.match(p, /1 \u0438\u0437 44: model benchmark/, 'и ту же лестницу, что обычный разбор');
+assert.match(p, /young Leonardo DiCaprio/, 'и те же якорные лица');
 assert.ok(/" \+ RARITY_INSTRUCTIONS \+ "/.test(src), 'обычный разбор берёт инструкцию из той же переменной');
 
 // Воркер: по одному запросу на лицо, одна картинка в каждом, ошибка одного — null.

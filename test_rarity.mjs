@@ -8,6 +8,7 @@ const pick = (re) => { const m = src.match(re); assert.ok(m, 'не нашёл в
 const { scoreFromRarity, canthalTiltDeg, pslTier } = new Function(`
   ${pick(/var PSL_MID = \d+;/)}
   ${pick(/var PSL_MAX = \d+;/)}
+  ${pick(/var PSL_SLOPE = [\d.]+;/)}
   ${pick(/^function normInv[\s\S]*?^\}/m)}
   ${pick(/^function scoreFromRarity[\s\S]*?^\}/m)}
   ${pick(/^function canthalTiltDeg[\s\S]*?^\}/m)}
@@ -18,18 +19,20 @@ const { scoreFromRarity, canthalTiltDeg, pslTier } = new Function(`
 
 // PSL форума looksmax.org: шкала 0-8, середина 4, один балл — одно стандартное отклонение.
 const r = (s) => scoreFromRarity('РЕДКОСТЬ: ' + s);
+// Шкала по дата-шиту владельца: 4 + 0.64*z. Якоря листа MENS GUIDE воспроизводятся
+// с точностью 0.2 — Ди Каприо 6.0, Гослинг 4.6, Мэтт Бомер 7.6.
 assert.equal(r('ЛУЧШЕ 1 из 2'), 4, 'обычное лицо — ровно 4');
-assert.equal(r('ЛУЧШЕ 1 из 3'), 4.4, 'ступень «чуть выше среднего» — 4.4, а не округление вверх до 5');
-assert.equal(r('ЛУЧШЕ 1 из 4'), 4.7, 'ступень «приятное лицо» — 4.7');
-assert.equal(r('ЛУЧШЕ 1 из 6'), 5, '+1 SD — HTN 5');
-assert.equal(r('ЛУЧШЕ 1 из 44'), 6, '+2 SD — Chadlite 6, модельный уровень');
-assert.equal(r('ЛУЧШЕ 1 из 740'), 7, '+3 SD — Chad 7');
-assert.equal(r('ЛУЧШЕ 1 из 4300'), 7.5, 'Adam-lite 7.5');
-assert.equal(r('ЛУЧШЕ 1 из 31000'), 8, '+4 SD — True Adam 8');
-assert.equal(r('ХУЖЕ 1 из 6'), 3, '-1 SD — LTN 3');
-assert.equal(r('ХУЖЕ 1 из 44'), 2, '-2 SD — Sub-3 2');
-assert.equal(r('ЛУЧШЕ 1 из 10000000'), 8, 'выше 8 не бывает');
-assert.equal(r('ХУЖЕ 1 из 10000000'), 0, 'ниже 0 не бывает');
+assert.equal(r('ЛУЧШЕ 1 из 3'), 4.3, 'чуть выше среднего');
+assert.equal(r('ЛУЧШЕ 1 из 4'), 4.4, 'приятное лицо, но не оборачиваются');
+assert.equal(r('ЛУЧШЕ 1 из 6'), 4.6, 'привлекательный — начало HTN');
+assert.equal(r('ЛУЧШЕ 1 из 44'), 5.3, 'модельный уровень — начало Chadlite');
+assert.equal(r('ЛУЧШЕ 1 из 740'), 5.9, 'топ-модель или актёр на пике');
+assert.equal(r('ЛУЧШЕ 1 из 1000'), 6, 'молодой Ди Каприо по дата-шиту — ровно 6.0');
+assert.equal(r('ЛУЧШЕ 1 из 31000'), 6.6, 'Adam-lite');
+assert.equal(r('ХУЖЕ 1 из 6'), 3.4, 'ниже среднего — LTN');
+assert.equal(r('ХУЖЕ 1 из 44'), 2.7, 'явно непривлекательное — Sub-3');
+assert.ok(r('ЛУЧШЕ 1 из 10000000') <= 8 && r('ЛУЧШЕ 1 из 10000000') > 7, 'край шкалы не упирается в 8 раньше времени');
+assert.ok(r('ХУЖЕ 1 из 10000000') >= 0, 'ниже 0 не бывает');
 assert.equal(r('ЛУЧШЕ 1 из 10 000'), r('ЛУЧШЕ 1 из 10000'), 'пробелы в числе не ломают разбор');
 assert.equal(r('ЛУЧШЕ 1 из 1'), 4, 'N меньше двух — середина, а не бесконечность');
 
@@ -39,13 +42,15 @@ const ladder = ['ХУЖЕ 1 из 740', 'ХУЖЕ 1 из 44', 'ХУЖЕ 1 из 6'
 const scores = ladder.map(r);
 scores.slice(1).forEach((s, i) => assert.ok(s > scores[i], `${ladder[i + 1]} (${s}) должно быть выше ${ladder[i]} (${scores[i]})`));
 assert.deepEqual(ladder.map(r).map((x) => pslTier(x).label),
-  ['Subhuman', 'Sub-3', 'LTN', 'MTN', 'MTN', 'MTN', 'HTN', 'Chadlite', 'Chad', 'Adam-lite', 'True Adam'],
-  'новые ступени остаются в MTN — в этом и смысл: обычное лицо не должно попадать в HTN');
-assert.equal(pslTier(4.9).label, 'MTN', 'тир — по порогу, а не округлением');
-assert.ok(src.includes('1 \\u0438\\u0437 44: model level') || /1 \\u0438\\u0437 44: model level/.test(src), 'в промпте та же лестница, что в тесте');
+  ['Subhuman', 'Sub-3', 'LTN', 'MTN', 'MTN', 'MTN', 'HTN', 'Chadlite', 'Chad', 'Chad', 'Adam-lite'],
+  'ступени ложатся на тиры из дата-шита: обычное лицо в MTN, модельный уровень с 5.3');
+assert.equal(pslTier(4.5).label, 'MTN', 'обычное лицо не попадает в HTN');
+assert.equal(pslTier(6).label, 'Chad', 'Ди Каприо по дата-шиту — Chad, а не Chadlite');
+assert.equal(pslTier(4.59).label, 'MTN', 'тир — по порогу, а не округлением');
+assert.ok(/1 \\u0438\\u0437 44: model benchmark/.test(src), 'в промпте та же лестница, что в тесте');
 
 assert.equal(scoreFromRarity('ОБЩИЙ_БАЛЛ: 4.1/8'), null, 'нет строки — null, дальше берётся балл модели');
-assert.equal(scoreFromRarity('RAR_B: ХУЖЕ 1 из 44', 'RAR_B'), 2, 'дуэль разбирается той же шкалой');
+assert.equal(scoreFromRarity('RAR_B: ХУЖЕ 1 из 44', 'RAR_B'), 2.7, 'дуэль разбирается той же шкалой');
 assert.equal(scoreFromRarity('RAR_A: ЛУЧШЕ 1 из 44', 'RAR_B'), null, 'метка чужого игрока не подхватывается');
 
 // Кантальный наклон: внешний уголок выше внутреннего — плюс, и завал головы не влияет.
@@ -64,7 +69,9 @@ assert.ok(Math.abs(canthalTiltDeg(eyes(6, 12)) - 6) < 0.01, 'завал голо
 // Промпт: общий балл PSL 0-8, категории 0-10, старых следов нет.
 assert.ok(!/92-100%=8-10/.test(src), 'старой таблицы симметрии нет');
 assert.ok(!/ПЕРЦЕНТИЛЬ|PCT_A|scoreFromPercentile|RARITY_SLOPE/.test(src), 'перцентиля и старого наклона не осталось');
-assert.ok(/on the looksmax\.org scale from 0 to 8/.test(src), 'промпт называет общий балл PSL 0-8');
+assert.ok(/5\.3-5\.7 Chadlite: model benchmark/.test(src), 'модельный уровень описан с 5.3');
+assert.match(src, /RARITY_ANCHORS/, 'в промпте есть якорные лица');
+assert.match(src, /young Leonardo DiCaprio/, 'Ди Каприо среди якорей');
 assert.ok(/CATEGORY SCORES \(the eight features\) use a SEPARATE 0-10 scale/.test(src), 'категории остаются 0-10');
 assert.ok(/0\.0\/8\\nOverall PSL/.test(src), 'модель пишет общий балл «/8»');
 const worker = readFileSync(new URL('./worker.js', import.meta.url), 'utf8');
