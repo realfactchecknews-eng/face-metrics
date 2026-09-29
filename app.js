@@ -156,6 +156,7 @@ var I18N = {
     articlesHtml: "<div class='how'><p class='how-intro'>Deep-dive articles on the terms and concepts behind the score.</p>" +
       "<div class='art-list'>" +
       "<a class='art-item' href='psl-shkala.html' target='_blank' rel='noopener'><b>PSL scale</b><span>What the PSL 0–8 score actually means</span></a>" +
+      "<a class='art-item' href='research.html' target='_blank' rel='noopener'><b>Research</b><span>53 studies the categories are based on</span></a>" +
       "<a class='art-item' href='psl-tiers.html' target='_blank' rel='noopener'><b>PSL tiers: Sub-3 to True Adam</b><span>Full tier scale from looksmax.org, and PSL vs Appeal</span></a>" +
       "<a class='art-item' href='fwhr.html' target='_blank' rel='noopener'><b>fWHR</b><span>Facial width-to-height ratio explained</span></a>" +
       "<a class='art-item' href='canthal-tilt.html' target='_blank' rel='noopener'><b>Canthal tilt</b><span>How to read and measure eye tilt</span></a>" +
@@ -274,6 +275,7 @@ var I18N = {
     articlesHtml: "<div class='how'><p class='how-intro'>Подробные статьи про термины и понятия, лежащие в основе оценки.</p>" +
       "<div class='art-list'>" +
       "<a class='art-item' href='psl-shkala.html' target='_blank' rel='noopener'><b>PSL-шкала</b><span>Что реально значит балл PSL от 0 до 8</span></a>" +
+      "<a class='art-item' href='research.html' target='_blank' rel='noopener'><b>Исследования</b><span>53 работы, на которых стоят категории</span></a>" +
       "<a class='art-item' href='psl-tiers.html' target='_blank' rel='noopener'><b>PSL-тиры: от Sub-3 до True Adam</b><span>Полная шкала тиров с looksmax.org + PSL vs Appeal</span></a>" +
       "<a class='art-item' href='fwhr.html' target='_blank' rel='noopener'><b>fWHR</b><span>Соотношение ширины и высоты лица</span></a>" +
       "<a class='art-item' href='canthal-tilt.html' target='_blank' rel='noopener'><b>Canthal tilt</b><span>Как читать и измерять наклон глаз</span></a>" +
@@ -1111,6 +1113,10 @@ var PROP_DEFS = [
   ['lipsFace',  'Ширина губ к лицу',     'Mouth to face width',    0.371, 'higher', true],
   ['foreCheek', 'Ширина лба к скулам',   'Forehead to cheekbones', 0.974, 'lower',  false],
   ['cheekJaw',  'Ширина челюсти к скулам','Jaw to cheekbones',     0.888, 'higher', false],
+  // Лицевые трети — из чеклиста диморфизма в дата-шите луксмаксера. Канон: три равные
+  // трети, то есть отношение 1.0. Показываем человеку, но МОДЕЛИ НЕ ШЛЁМ: замер 29.09
+  // показал, что трети в промпте поднимают балл середины (обычные лица с 4.5 на 4.9).
+  ['thirds',    'Средняя треть к нижней','Middle to lower third',  1.0,   'mid',    true],
 ];
 
 // За этим наклоном вертикальные отношения уже описывают ракурс, а не лицо:
@@ -1150,6 +1156,8 @@ function computeProportions(lm, pose) {
   var eyeR   = _dist(lm[362], lm[263]);
   var eyeAvg = (eyeL + eyeR) / 2;
   var lipsW  = _dist(lm[61], lm[291]);
+  var thirdMid = lm[9] && lm[2] ? Math.abs(lm[2].y - lm[9].y) : 0;
+  var thirdLow = lm[2] && lm[152] ? Math.abs(lm[152].y - lm[2].y) : 0;
   var raw = {
     lenWidth:  cheekW ? faceH / cheekW : 0,
     noseFace:  faceH ? noseL / faceH : 0,
@@ -1159,6 +1167,8 @@ function computeProportions(lm, pose) {
     // Челюсть к скулам, а не наоборот: так больше значит шире челюсть, и
     // направление «больше — лучше» читается без выворачивания наизнанку.
     cheekJaw:  cheekW ? jawW / cheekW : 0,
+    // глабелла → подносовая точка против подносовой → подбородок
+    thirds:    thirdLow ? thirdMid / thirdLow : 0,
   };
   var ru = lang() === 'ru';
   // Порог заметности: 10% от среднего.
