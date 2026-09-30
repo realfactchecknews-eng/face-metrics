@@ -176,6 +176,7 @@ async function photoCacheKey(tgid, imgs, lang, isTeaser) {
 // списания — это жалобы «не начислилось», которые потом не воспроизвести.
 async function chargeQuota(env, q) {
   const { mode, tgid, today, credits, subscribed, freeKey, freeUsed, dayKey, dayUsed, unlimUntil } = q;
+  const cost = q.cost || 1;
   let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_WEEK - freeUsed) : 0, cashback = false;
   if (mode === 'free') {
     await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
@@ -183,15 +184,19 @@ async function chargeQuota(env, q) {
   } else if (mode === 'holder') {
     await env.RATE_LIMIT.put(dayKey, String(dayUsed + 1), { expirationTtl: 60 * 60 * 30 });
   } else if (mode === 'paid') {
-    creditsLeft = credits - 1;
+    creditsLeft = credits - cost;
     // Кешбэк лояльности: каждые CASHBACK_EVERY потраченных ПЛАТНЫХ кредита (накопительно,
     // без привязки к дням) — +1 анализ сверху. Считаем от общего числа потраченных кредитов
     // за всё время (spent:tgid), не от текущей покупки — так работает и растянуто по времени,
     // и если человек тратит кредиты пачкой за один раз.
     const spentKey = `spent:${tgid}`;
-    const spent = parseInt(await env.RATE_LIMIT.get(spentKey) || '0', 10) + 1;
+    const was = parseInt(await env.RATE_LIMIT.get(spentKey) || '0', 10);
+    const spent = was + cost;
     await env.RATE_LIMIT.put(spentKey, String(spent));
-    if (spent % CASHBACK_EVERY === 0) { creditsLeft += 1; cashback = true; }
+    // Считаем ПЕРЕСЕЧЁННЫЕ рубежи, а не остаток от деления: дуэль тратит два кредита за раз
+    // и на проверке `spent % N === 0` могла перепрыгнуть рубеж, молча съев кешбэк.
+    const bonus = Math.floor(spent / CASHBACK_EVERY) - Math.floor(was / CASHBACK_EVERY);
+    if (bonus > 0) { creditsLeft += bonus; cashback = true; }
     await env.RATE_LIMIT.put(`credits:${tgid}`, String(creditsLeft));
   } else if (mode === 'unlim') {
     // Счётчик анализов за текущую сессию безлимита (только для статистики, не влияет на лимиты).
@@ -271,6 +276,12 @@ async function analyze(request, env) {
   // Who Moggs (сравнение двух лиц) НЕ входит в бесплатную квоту — только безлимит или платные кредиты.
   const freeUsable = freeAvail && !body.compare;
 
+  // Дуэль стоит ДВА анализа. Причина в себестоимости: один запрос сравнивает пару, и ещё
+  // два отдельных запроса оценивают каждое лицо по одному (rateFacesSeparately) — иначе
+  // модель раздвигает баллы внутри пары. То есть три вызова модели против одного у разбора,
+  // а брали мы за это один кредит.
+  const cost = body.compare ? 2 : 1;
+
   // Холдер FACE: 1 бесплатный анализ в СУТКИ (обычный бесплатный — 1 в неделю).
   const hold = await isHolder(env, tgid);
   const dayKey = `qd:${tgid}:${today}`;
@@ -281,11 +292,16 @@ async function analyze(request, env) {
   else if (unlimUntil > Date.now()) mode = 'unlim';
   else if (hold.holder && dayUsed < HOLDER_FREE_PER_DAY) mode = 'holder';
   else if (freeUsable) mode = 'free';
-  else if (credits > 0) mode = 'paid';
+  else if (credits >= cost) mode = 'paid';
+  else if (body.compare && credits > 0) {
+    // Кредиты есть, но на дуэль не хватает — это отдельный случай: человек видит баланс
+    // и без объяснения решит, что дуэль сломалась.
+    return json({ error: 'pay', text: `Дуэль стоит ${cost} анализа, а на счету ${credits}. Пополни счёт, чтобы сравнить лица.`, cost, creditsLeft: credits, packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0 });
+  }
   else if (!subscribed) {
     return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в неделю.', channel: CHANNEL });
   } else {
-    return json({ error: 'pay', text: 'Бесплатный анализ уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0 });
+    return json({ error: 'pay', text: body.compare ? `Дуэль стоит ${cost} анализа. Купи кредиты, чтобы сравнить лица.` : 'Бесплатный анализ уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0 });
   }
   // Тизер (урезанный отчёт) — только для новичков, которые никогда не покупали.
   // Те, кто хоть раз покупал, получают ПОЛНЫЙ бесплатный анализ раз в 3 дня — бонус лояльности.
@@ -293,7 +309,7 @@ async function analyze(request, env) {
 
   // Всё, что нужно для списания. Собрано один раз: и путь через модель, и возврат из кэша
   // списывают через chargeQuota() с этим объектом, чтобы расчёт не мог разойтись.
-  const q = { mode, tgid, today, credits, subscribed, freeKey, freeUsed, dayKey, dayUsed, unlimUntil };
+  const q = { mode, tgid, today, credits, subscribed, freeKey, freeUsed, dayKey, dayUsed, unlimUntil, cost };
 
   const imgs = Array.isArray(body.images) && body.images.length
     ? body.images

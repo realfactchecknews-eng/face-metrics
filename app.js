@@ -179,6 +179,7 @@ var I18N = {
     tCompare: "Who Moggs?", tCompareSub: "Face-off: compare two faces",
     cmpTitle: "Who Moggs?", cmpSub: "Upload two faces — AI decides who mogs whom. 1 credit.",
     cmpRun: "FACE-OFF", cmpLoading: "DECIDING WHO MOGS…", cmpAgain: "↻ New face-off",
+    cmpCost: "A face-off costs 2 analyses",
     cmpNeedTwo: "Add both photos first.", cmpNoFaceA: "No face detected in photo A.",
     cmpNoFaceB: "No face detected in photo B.", cmpErrGen: "Something went wrong, try again.",
     cmpMogs: "MOGS", cmpVerdict: "VERDICT", cmpMogged: "MOGGED",
@@ -301,6 +302,7 @@ var I18N = {
     tCompare: "Who Moggs?", tCompareSub: "Дуэль: сравни два лица",
     cmpTitle: "Who Moggs?", cmpSub: "Загрузи два лица — ИИ решит, кто кого моггает. 1 кредит.",
     cmpRun: "ДУЭЛЬ", cmpLoading: "РЕШАЮ, КТО МОГГАЕТ…", cmpAgain: "↻ Новая дуэль",
+    cmpCost: "Дуэль стоит 2 анализа",
     cmpNeedTwo: "Сначала добавь оба фото.", cmpNoFaceA: "На фото A не найдено лицо.",
     cmpNoFaceB: "На фото B не найдено лицо.", cmpErrGen: "Что-то пошло не так, попробуй ещё раз.",
     cmpMogs: "МОГГАЕТ", cmpVerdict: "ВЕРДИКТ", cmpMogged: "MOGGED",
@@ -3600,7 +3602,7 @@ function pwRecheck(silent) {
         $(scan).classList.add("hidden");
         if (which === "A") A = res; else B = res;
         cmpErr("");
-        if (A && B) $("cmpRunBtn").classList.remove("hidden");
+        if (A && B) { $("cmpRunBtn").classList.remove("hidden"); $("cmpCost").classList.remove("hidden"); }
       };
       img.src = e.target.result;
     };
@@ -3984,7 +3986,7 @@ function pwRecheck(silent) {
     $("cmpAgainBtn").addEventListener("click", function(){ A=null;B=null; $("cmpImgA").src=""; $("cmpImgB").src="";
       $("cmpThumbA").classList.add("hidden"); $("cmpPhA").classList.remove("hidden");
       $("cmpThumbB").classList.add("hidden"); $("cmpPhB").classList.remove("hidden");
-      $("cmpRunBtn").classList.add("hidden"); cmpErr(""); showSetup(); });
+      $("cmpRunBtn").classList.add("hidden"); $("cmpCost").classList.add("hidden"); cmpErr(""); showSetup(); });
     $("cmpSlotA").addEventListener("click", function(){ if(!A) $("cmpInputA").click(); });
     $("cmpSlotB").addEventListener("click", function(){ if(!B) $("cmpInputB").click(); });
     $("cmpInputA").addEventListener("change", function(e){ if(e.target.files[0]) loadInto("A", e.target.files[0]); });

@@ -1936,6 +1936,11 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 .gate-link { text-decoration: none; display: inline-block; }
 .gate-hint { width: 100%; font-size: 0.8rem; color: var(--text-dim); margin-top: 4px; }
 
+.cmp-cost {
+  margin: 10px 0 0; text-align: center;
+  font-size: 0.8rem; color: var(--text-dim); letter-spacing: .3px;
+}
+
 /* ───── Тумблер дерзкого режима ───── */
 .tone-row {
   display: flex; align-items: center; gap: 10px;
