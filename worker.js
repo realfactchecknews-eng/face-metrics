@@ -156,13 +156,16 @@ async function setupWebhook(request, env) {
   return json(r);
 }
 
-// Ключ кэша разбора: хэш фотографий + человек + язык + тизер.
+// Ключ кэша разбора: хэш фотографий + человек + язык + тизер + тон.
 // Хэшируем base64 как есть: клиент кодирует канвас одинаково для одного и того же файла,
 // поэтому повторная загрузка того же снимка даёт тот же ключ.
-async function photoCacheKey(tgid, imgs, lang, isTeaser) {
+// Тон обязателен в ключе: дерзкий режим - другой промпт и другой текст отчёта, а живёт он
+// целиком на фронте. Без тона человек, включивший режим на уже разобранном фото, получал
+// из кэша прежний вежливый разбор - без списания, без ошибки, тумблер просто не работал.
+async function photoCacheKey(tgid, imgs, lang, isTeaser, tone) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(imgs.join('|')));
   const hex = [...new Uint8Array(buf)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `rep:${tgid}:${hex}:${lang === 'ru' ? 'ru' : 'en'}:${isTeaser ? 't' : 'f'}`;
+  return `rep:${tgid}:${hex}:${lang === 'ru' ? 'ru' : 'en'}:${isTeaser ? 't' : 'f'}${tone === 'edgy' ? ':e' : ''}`;
 }
 
 // ─────────────────────────── Анализ ───────────────────────────
@@ -263,7 +266,7 @@ async function analyze(request, env) {
   // получить обратно свой урезанный). Замеры гайда и дуэль не кэшируем - там каждый
   // прогон по смыслу новый.
   const cacheKey = !isMeasure && !body.compare && imgs.length
-    ? await photoCacheKey(tgid, imgs, body.lang, isTeaser)
+    ? await photoCacheKey(tgid, imgs, body.lang, isTeaser, body.tone)
     : null;
   if (cacheKey) {
     const hit = await env.RATE_LIMIT.get(cacheKey);
