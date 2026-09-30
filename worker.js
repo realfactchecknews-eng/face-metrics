@@ -22,7 +22,8 @@
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/неделю
 const LAVA_MIN_RUB = 50;                 // минимальная сумма инвойса у Lava.top — ниже нельзя ни при какой скидке
 const FREE_PER_WEEK = 1;                 // бесплатных анализов в неделю подписчику (у всех одинаковый ритм)
-const CASHBACK_EVERY = 3;                // каждые N потраченных платных кредитов -> +1 анализ кешбэком
+const CASHBACK_EVERY = 5;                // каждые N потраченных КУПЛЕННЫХ кредитов -> +1 анализ кешбэком
+                                         // (было 3; поднято 30.09 — при среднем чеке 75 ₽ возврат трети выручки)
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 function weekBucket() { return Math.floor(Date.now() / WEEK_MS); } // сброс раз в 7 дней от эпохи
 
@@ -190,13 +191,30 @@ async function chargeQuota(env, q) {
     // за всё время (spent:tgid), не от текущей покупки — так работает и растянуто по времени,
     // и если человек тратит кредиты пачкой за один раз.
     const spentKey = `spent:${tgid}`;
-    const was = parseInt(await env.RATE_LIMIT.get(spentKey) || '0', 10);
-    const spent = was + cost;
+    const spent = parseInt(await env.RATE_LIMIT.get(spentKey) || '0', 10) + cost;
     await env.RATE_LIMIT.put(spentKey, String(spent));
-    // Считаем ПЕРЕСЕЧЁННЫЕ рубежи, а не остаток от деления: дуэль тратит два кредита за раз
-    // и на проверке `spent % N === 0` могла перепрыгнуть рубеж, молча съев кешбэк.
-    const bonus = Math.floor(spent / CASHBACK_EVERY) - Math.floor(was / CASHBACK_EVERY);
-    if (bonus > 0) { creditsLeft += bonus; cashback = true; }
+
+    // Кешбэк считается по ДВУМ отдельным счётчикам, а не по spent:
+    //   cbe — сколько кредитов потрачено с момента запуска новой схемы (30.09),
+    //   cbg — сколько бонусных кредитов за это время выдано.
+    // Право на бонус даёт только потраченное СВОЁ, купленное: eligible = cbe - cbg.
+    // Без вычитания получался кешбэк на кешбэк — человек тратил бонусные кредиты
+    // и они снова копились на новый бонус.
+    // Оба счётчика стартуют с нуля у всех. Пересчитывать историю по spent нельзя:
+    // старая схема была «каждые 3», и любая попытка её пересчитать либо выдала бы
+    // задним числом пачку бонусов, либо надолго заморозила бы тех, кто много тратил.
+    const cbeKey = `cbe:${tgid}`, cbgKey = `cbg:${tgid}`;
+    const cbe = parseInt(await env.RATE_LIMIT.get(cbeKey) || '0', 10) + cost;
+    const cbg = parseInt(await env.RATE_LIMIT.get(cbgKey) || '0', 10);
+    await env.RATE_LIMIT.put(cbeKey, String(cbe));
+    // Разница floor-ов, а не остаток от деления: дуэль тратит два кредита за раз и
+    // на проверке `% N === 0` могла перепрыгнуть рубеж, молча съев бонус.
+    const bonus = Math.max(0, Math.floor(Math.max(0, cbe - cbg) / CASHBACK_EVERY) - cbg);
+    if (bonus > 0) {
+      creditsLeft += bonus;
+      cashback = true;
+      await env.RATE_LIMIT.put(cbgKey, String(cbg + bonus));
+    }
     await env.RATE_LIMIT.put(`credits:${tgid}`, String(creditsLeft));
   } else if (mode === 'unlim') {
     // Счётчик анализов за текущую сессию безлимита (только для статистики, не влияет на лимиты).

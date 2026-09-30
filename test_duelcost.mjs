@@ -10,20 +10,46 @@ assert.match(w, /else if \(credits >= cost\) mode = 'paid';/, 'гейт пуск
 assert.ok(w.includes('creditsLeft = credits - cost;'), 'списывается фиксированная единица');
 assert.ok(/q = \{[^}]*cost \}/.test(w), 'цена не доходит до chargeQuota');
 
-// Кешбэк: при шаге в 2 кредита проверка `spent % N === 0` перепрыгивала рубеж.
+// Кешбэк. Проверяем ту же арифметику, что в chargeQuota: считаем по cbe/cbg, а не по spent.
 const src = w.slice(w.indexOf('async function chargeQuota'), w.indexOf('// ─────────────────────────── Анализ'));
 assert.ok(!/spent % CASHBACK_EVERY === 0/.test(src), 'кешбэк снова считается остатком от деления');
+assert.ok(/cbe:\$\{tgid\}/.test(src) && /cbg:\$\{tgid\}/.test(src), 'нет отдельных счётчиков кешбэка');
+assert.ok(/Math\.max\(0, cbe - cbg\)/.test(src), 'бонусные кредиты не вычитаются — будет кешбэк на кешбэк');
 const every = parseInt(w.match(/CASHBACK_EVERY = (\d+)/)[1], 10);
-const bonus = (was, cost) => Math.floor((was + cost) / every) - Math.floor(was / every);
-// Разбор за разбором рубеж не пропускается.
-let was = 0, total = 0;
-for (let i = 0; i < 12; i++) { total += bonus(was, 1); was += 1; }
-assert.strictEqual(total, Math.floor(12 / every), 'поштучная трата даёт не тот кешбэк');
-// Дуэлями — тоже: рубеж засчитывается при перепрыгивании.
-was = 0; total = 0;
-for (let i = 0; i < 6; i++) { total += bonus(was, 2); was += 2; }
-assert.strictEqual(total, Math.floor(12 / every), 'дуэль съедает кешбэк, перепрыгивая рубеж');
-assert.strictEqual(bonus(2, 2), 1, 'перепрыгнутый рубеж не засчитан');
+assert.strictEqual(every, 5, 'шаг кешбэка должен быть 5');
+
+// Модель кошелька: тратим, пока есть что, и смотрим, сколько бонусов накапало.
+function run(bought, cost) {
+  let credits = bought, cbe = 0, cbg = 0, granted = 0;
+  while (credits >= cost) {
+    credits -= cost;
+    cbe += cost;
+    const bonus = Math.max(0, Math.floor(Math.max(0, cbe - cbg) / every) - cbg);
+    if (bonus > 0) { credits += bonus; cbg += bonus; granted += bonus; }
+  }
+  return { granted, left: credits };
+}
+// Купил 10 — заработал ровно 2 бонуса, не больше: бонусные траты новых бонусов не дают.
+assert.strictEqual(run(10, 1).granted, 2, 'кешбэк на кешбэк вернулся');
+assert.strictEqual(run(5, 1).granted, 1, '5 купленных должны дать 1 бонус');
+assert.strictEqual(run(4, 1).granted, 0, 'бонус выдан раньше рубежа');
+// Тот, кто купил 25, получает 5 — и ни одного сверху за потраченные бонусные.
+assert.strictEqual(run(25, 1).granted, 5, 'кешбэк с 25 купленных посчитан неверно');
+// Главное свойство: бонусов НИКОГДА не больше, чем один на CASHBACK_EVERY купленных —
+// сколько бы ни было итераций. Именно это ломал кешбэк на кешбэк.
+for (const bought of [1, 4, 5, 9, 10, 17, 25, 50, 100]) {
+  for (const cost of [1, 2]) {
+    const { granted } = run(bought, cost);
+    assert.ok(granted <= Math.floor(bought / every),
+      `купил ${bought}, тратил по ${cost}: выдано ${granted} бонусов вместо максимум ${Math.floor(bought / every)}`);
+  }
+}
+// Дуэлями по 2 кредита рубеж тоже не перепрыгивается, но невыброшенный бонусный кредит
+// придерживает следующий рубеж — он засчитается, когда человек этот кредит потратит.
+// Это не потеря: вычитаем ВЫДАННЫЕ бонусы, а отличить потраченный бонусный кредит от
+// купленного в общем балансе нечем.
+assert.strictEqual(run(10, 2).granted, 1, 'кешбэк при тратах по два посчитан неверно');
+assert.strictEqual(run(10, 2).left, 1, 'остаток после дуэлей посчитан неверно');
 
 // Отдельный текст, когда кредиты есть, но на дуэль не хватает.
 assert.ok(/body\.compare && credits > 0/.test(w), 'нет отдельного ответа на «кредитов мало»');
