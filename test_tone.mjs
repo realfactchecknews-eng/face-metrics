@@ -54,4 +54,43 @@ for (const bad of [base.replace('5.5/8', '6.1/8'), base.replace('5.4/10', '4.0/1
 }
 assert.ok(/reportNumbers\(txt\) === reportNumbers\(src\)/.test(worker), 'воркер не сверяет числа после переписывания');
 
+// ── Порядок показа ──
+// Дерзкий отчёт показывается сразу: раньше сначала рисовался вежливый, а через пару
+// секунд подменялся. Значит ждать роаст надо ДО renderAIReport, а не после.
+const call = app.slice(app.indexOf('var reportText = data.text'), app.indexOf('aiReport.classList.remove("hidden");', app.indexOf('var reportText = data.text')));
+assert.ok(call.indexOf('await roastReport') < call.indexOf('renderAIReport'),
+  'вежливый отчёт снова рисуется до переписывания — будет мигание');
+assert.ok(/setAIHUDPhase\(t\("hudRoasting"\)\)/.test(call), 'на время переписывания HUD не переключён');
+assert.ok(call.indexOf('stopAIHUD();') > call.indexOf('await roastReport'), 'HUD гаснет до того, как пришёл дерзкий текст');
+
+// ── Пояснение к режиму ──
+const html = readFileSync('index.html', 'utf8');
+const rowStart = html.indexOf('id="toneRow"'), rowEnd = html.indexOf('</div>', rowStart);
+assert.ok(html.slice(rowStart, rowEnd).includes('id="toneInfo"'), 'кнопки пояснения нет рядом с тумблером');
+// Кнопка обязана быть ВНЕ label: внутри него любой клик переключал бы сам тумблер.
+const lbl = html.slice(html.indexOf('<label class="tone-toggle"'), html.indexOf('</label>', rowStart));
+assert.ok(!lbl.includes('toneInfo'), 'кнопка внутри label — клик по ней переключит режим');
+for (const id of ['toneDialogTitle', 'toneDialogBody', 'toneDialogClose']) {
+  assert.ok(html.includes('id="' + id + '"'), 'нет узла ' + id);
+  assert.ok(app.includes('"' + id.replace('toneDialog', 'toneInfo').replace('Body', 'Body').replace('Title', 'Title') + '"') || app.includes('#' + id),
+    'узел ' + id + ' не переводится');
+}
+for (const key of ['toneInfoTitle', 'toneInfoBody', 'toneInfoClose', 'hudRoasting']) {
+  assert.strictEqual(app.split(key + ':').length - 1, 2, 'строка ' + key + ' должна быть в обоих языках');
+}
+
+// ── Повтор снимка списывается ──
+assert.ok(worker.includes('async function chargeQuota'), 'списание не вынесено в общую функцию');
+assert.strictEqual(worker.split('await chargeQuota(env, q)').length - 1, 2,
+  'списание должно звать оба пути: кэш и модель');
+const hitBlock = worker.slice(worker.indexOf("const hit = await env.RATE_LIMIT.get(cacheKey)"), worker.indexOf('// Модель.'));
+assert.ok(hitBlock.includes('chargeQuota'), 'возврат из кэша снова бесплатный');
+assert.ok(!/creditsLeft: credits\b/.test(hitBlock), 'кэш отдаёт старый остаток кредитов');
+// Потолок бесплатных проверяется ДО кэша, иначе повтор обходит его.
+assert.ok(worker.indexOf('GLOBAL_DAILY_CAP') < worker.indexOf('const hit = await env.RATE_LIMIT.get(cacheKey)'),
+  'глобальный потолок проверяется после кэша');
+// Подпись обязана говорить о списании — иначе это «списали, а разбор старый».
+assert.ok(!/No analysis was spent/.test(app) && !/\u0410\u043d\u0430\u043b\u0438\u0437 \u043d\u0435 \u0441\u043f\u0438\u0441\u0430\u043d/.test(app),
+  'подпись всё ещё обещает бесплатный повтор');
+
 console.log('test_tone: ok');

@@ -22,7 +22,7 @@
 <meta name="zen-verification" content="3OaMGH9M7VytOCY5pM7t4hjis97AQTIbLQ6TFWSDpoaOyhz5oCIbioCrn5yrwP9d" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=45" />
+<link rel="stylesheet" href="style.css?v=46" />
 
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
@@ -281,11 +281,20 @@
 
     </div>
 
-    <label id="toneRow" class="tone-row hidden">
-      <input type="checkbox" id="toneEdgy" />
-      <span class="tone-slider"></span>
-      <span class="tone-label">🔞 Дерзкий режим — жёсткий разбор без соплей</span>
-    </label>
+    <div id="toneRow" class="tone-row hidden">
+      <label class="tone-toggle">
+        <input type="checkbox" id="toneEdgy" />
+        <span class="tone-slider"></span>
+        <span class="tone-label">🔞 Дерзкий режим — жёсткий разбор без соплей</span>
+      </label>
+      <!-- Кнопка вынесена ИЗ label: внутри него любой клик переключал бы тумблер. -->
+      <button type="button" id="toneInfo" class="tone-info" aria-label="Что меняет дерзкий режим">?</button>
+    </div>
+    <dialog id="toneDialog" class="tone-dialog">
+      <h3 id="toneDialogTitle">Что меняет дерзкий режим</h3>
+      <p id="toneDialogBody"></p>
+      <button type="button" id="toneDialogClose" class="btn-primary">Понятно</button>
+    </dialog>
 
     <button id="analyzeBtn" class="btn-analyze hidden">
       <span class="btn-analyze-fill"></span>
@@ -625,7 +634,7 @@
      Модель assets/pill3d/scene.gltf — "Pill (Capsule)" by jaromir.ternavskiy,
      CC-BY-4.0, оставлена как исходник для пересъёмки:
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
-<script src="app.js?v=120"></script>
+<script src="app.js?v=121"></script>
 <script src="sharevideo.js?v=6"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════

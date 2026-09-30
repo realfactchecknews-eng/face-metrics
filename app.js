@@ -88,7 +88,11 @@ var I18N = {
     potEyebrow: "YOUR POTENTIAL",
     potNow: "now", potMax: "reachable",
     potNote: "Bone does not change — this gain comes from skin, grooming and what reads on the jaw. None of it needs a surgeon.",
-    cachedNote: "Same photo as before — this is your previous report. No analysis was spent.",
+    hudRoasting: "Rewriting in savage mode\u2026",
+    toneInfoTitle: "What the savage mode changes",
+    toneInfoBody: "Only the wording. The score, the tier and all eight category numbers are worked out by the same neutral analysis and do not move \u2014 we measured that and built it so on purpose. What changes is the voice: no courtesy compliments, no softening, jabs about features, haircut and style. The verdict is the same, the delivery is not. It takes a few seconds longer, because the report is rewritten in a second pass.",
+    toneInfoClose: "Got it",
+    cachedNote: "Same photo as before, so this is your saved report — the scoring is deterministic and a re-run returns the same thing. One analysis was spent.",
     potBtn: "Get the 90-day plan →",
     potBtnOwned: "Open coaching →",
     detailEyebrow: "DETAILED BREAKDOWN",
@@ -208,7 +212,11 @@ var I18N = {
     potEyebrow: "ТВОЙ ПОТЕНЦИАЛ",
     potNow: "сейчас", potMax: "достижимо",
     potNote: "Кость не меняется — этот рост берётся из кожи, груминга и того, что читается на челюсти. Всё это делается без врача.",
-    cachedNote: "Это тот же снимок, что ты уже загружал — показываем прошлый разбор. Анализ не списан.",
+    hudRoasting: "\u041f\u0435\u0440\u0435\u043f\u0438\u0441\u044b\u0432\u0430\u044e \u0432 \u0434\u0435\u0440\u0437\u043a\u043e\u043c \u0442\u043e\u043d\u0435\u2026",
+    toneInfoTitle: "\u0427\u0442\u043e \u043c\u0435\u043d\u044f\u0435\u0442 \u0434\u0435\u0440\u0437\u043a\u0438\u0439 \u0440\u0435\u0436\u0438\u043c",
+    toneInfoBody: "\u0422\u043e\u043b\u044c\u043a\u043e \u0444\u043e\u0440\u043c\u0443\u043b\u0438\u0440\u043e\u0432\u043a\u0438. \u0411\u0430\u043b\u043b, \u0442\u0438\u0440 \u0438 \u0432\u0441\u0435 \u0432\u043e\u0441\u0435\u043c\u044c \u0446\u0438\u0444\u0440 \u043f\u043e \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f\u043c \u0441\u0447\u0438\u0442\u0430\u0435\u0442 \u043e\u0434\u0438\u043d \u0438 \u0442\u043e\u0442 \u0436\u0435 \u043d\u0435\u0439\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0430\u0437\u0431\u043e\u0440, \u0438 \u043e\u0442 \u0442\u0443\u043c\u0431\u043b\u0435\u0440\u0430 \u043e\u043d\u0438 \u043d\u0435 \u0434\u0432\u0438\u0433\u0430\u044e\u0442\u0441\u044f \u2014 \u044d\u0442\u043e \u0437\u0430\u043c\u0435\u0440\u0435\u043d\u043e \u0438 \u0441\u0434\u0435\u043b\u0430\u043d\u043e \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u044c\u043d\u043e. \u041c\u0435\u043d\u044f\u0435\u0442\u0441\u044f \u043f\u043e\u0434\u0430\u0447\u0430: \u0431\u0435\u0437 \u0434\u0435\u0436\u0443\u0440\u043d\u044b\u0445 \u043a\u043e\u043c\u043f\u043b\u0438\u043c\u0435\u043d\u0442\u043e\u0432, \u0431\u0435\u0437 \u0441\u043c\u044f\u0433\u0447\u0435\u043d\u0438\u0439, \u0441 \u043f\u043e\u0434\u043a\u043e\u043b\u0430\u043c\u0438 \u043f\u0440\u043e \u0447\u0435\u0440\u0442\u044b \u043b\u0438\u0446\u0430, \u0441\u0442\u0440\u0438\u0436\u043a\u0443 \u0438 \u0441\u0442\u0438\u043b\u044c. \u0412\u0435\u0440\u0434\u0438\u043a\u0442 \u0442\u043e\u0442 \u0436\u0435, \u0442\u043e\u043d \u0434\u0440\u0443\u0433\u043e\u0439. \u0417\u0430\u043d\u0438\u043c\u0430\u0435\u0442 \u043d\u0430 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0435\u043a\u0443\u043d\u0434 \u0434\u043e\u043b\u044c\u0448\u0435: \u043e\u0442\u0447\u0451\u0442 \u043f\u0435\u0440\u0435\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u0432\u0442\u043e\u0440\u044b\u043c \u043f\u0440\u043e\u0445\u043e\u0434\u043e\u043c.",
+    toneInfoClose: "\u041f\u043e\u043d\u044f\u0442\u043d\u043e",
+    cachedNote: "Это тот же снимок, что ты уже загружал — показываем сохранённый разбор: оценка детерминированная, повторный прогон дал бы ровно то же самое. Анализ списан.",
     potBtn: "Забрать план на 90 дней →",
     potBtnOwned: "Открыть ведение →",
     detailEyebrow: "ДЕТАЛЬНЫЙ АНАЛИЗ",
@@ -327,6 +335,7 @@ function applyLang() {
     ["#chooseSideBtn", "addFile"],
     ["#analyzeBtn .btn-analyze-text", "analyze"],
     [".tone-label", "tone"],
+    ["#toneDialogTitle", "toneInfoTitle"], ["#toneDialogBody", "toneInfoBody"], ["#toneDialogClose", "toneInfoClose"],
     ["#accLoggedOut .acc-lo-text b", "accLoTitle"],
     [".lrb-label", "lastLabel"], [".lrb-cta", "lastCta"],
     ["#toMenuBtn", "toMenu"], ["#uploadToMenuBtn", "toMenu"], ["#resetBtn", "reset"],
@@ -915,6 +924,14 @@ function startAIHUD(hasSide, cardId) {
   phaseEl.textContent   = AI_PHASES[0];
   phaseEl.style.opacity = "1";
   _hudPhaseTimer = setTimeout(nextPhase, 2100);
+}
+
+// Останавливает смену фраз и пишет свою. Нужна дерзкому режиму: второй запрос идёт
+// после разбора, и крутить фразы про геометрию в это время нечестно.
+function setAIHUDPhase(text) {
+  if (_hudPhaseTimer) { clearTimeout(_hudPhaseTimer); _hudPhaseTimer = null; }
+  var el = document.getElementById("hudPhase");
+  if (el) { el.textContent = text; el.style.opacity = "1"; }
 }
 
 function stopAIHUD(cardId) {
@@ -1762,18 +1779,20 @@ async function callAI(metrics, shapeInfo) {
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
-    stopAIHUD();
-    if (data.error) { showGate(data); return; }
+    if (data.error) { stopAIHUD(); showGate(data); return; }
     var reportText = data.text || t("emptyAnswer");
+    // Дерзкий режим — второй запрос поверх готового отчёта (балл считает нейтральный
+    // промпт, см. personaPrompt). Ждём его ДО показа: иначе человек видит вежливый разбор,
+    // который через пару секунд подменяется дерзким. Если переписать не вышло — показываем
+    // вежливый, он с верным баллом.
+    if (isEdgyTone() && data.text) {
+      setAIHUDPhase(t("hudRoasting"));
+      var roasted = await roastReport(reportText, acc);
+      if (roasted) reportText = roasted;
+    }
+    stopAIHUD();
     renderAIReport(reportText, false, !!data.teaser);
     aiReport.classList.remove("hidden");
-    // Дерзкий режим — отдельный запрос поверх готового отчёта. Балл уже посчитан и
-    // показан; если переписать не удалось, на экране просто остаётся вежливый текст.
-    if (isEdgyTone() && data.text) {
-      roastReport(reportText, acc).then(function (roasted) {
-        if (roasted && roasted !== reportText) renderAIReport(roasted, false, !!data.teaser);
-      });
-    }
     // Повтор того же снимка: воркер отдал прошлый отчёт, модель не вызывалась.
     // Без подписи человек решит, что сервис завис и показал старое.
     if (data.cached) {
@@ -3358,6 +3377,14 @@ function buyPack(pack, btn, payMethod) {
   if (cb) {
     cb.checked = localStorage.getItem("fm-tone") === "edgy";
     cb.addEventListener("change", function(){ localStorage.setItem("fm-tone", cb.checked ? "edgy" : "soft"); });
+  }
+  // Пояснение к режиму. <dialog> родной: фокус, Esc и подложка уже работают сами.
+  var info = document.getElementById("toneInfo"), dlg = document.getElementById("toneDialog");
+  if (info && dlg) {
+    info.addEventListener("click", function(){ dlg.showModal(); });
+    var close = document.getElementById("toneDialogClose");
+    if (close) close.addEventListener("click", function(){ dlg.close(); });
+    dlg.addEventListener("click", function(e){ if (e.target === dlg) dlg.close(); });
   }
   refreshAccount();
   resumeTgLoginIfPending();

@@ -169,6 +169,41 @@ async function photoCacheKey(tgid, imgs, lang, isTeaser) {
   return `rep:${tgid}:${hex}:${lang === 'ru' ? 'ru' : 'en'}:${isTeaser ? 't' : 'f'}`;
 }
 
+// Списание квоты за анализ. Вынесено из analyze(), потому что путей теперь два: обычный
+// и возврат из кэша по тому же снимку. Раньше кэш отдавал отчёт бесплатно; с 30.09 повтор
+// стоит столько же, сколько первый разбор, — токены мы не тратим, но и лазейки «грузи
+// одно и то же» больше нет. Вся арифметика обязана жить в одном месте: разъехавшиеся
+// списания — это жалобы «не начислилось», которые потом не воспроизвести.
+async function chargeQuota(env, q) {
+  const { mode, tgid, today, credits, subscribed, freeKey, freeUsed, dayKey, dayUsed, unlimUntil } = q;
+  let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_WEEK - freeUsed) : 0, cashback = false;
+  if (mode === 'free') {
+    await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
+    freeLeft = FREE_PER_WEEK - freeUsed - 1;
+  } else if (mode === 'holder') {
+    await env.RATE_LIMIT.put(dayKey, String(dayUsed + 1), { expirationTtl: 60 * 60 * 30 });
+  } else if (mode === 'paid') {
+    creditsLeft = credits - 1;
+    // Кешбэк лояльности: каждые CASHBACK_EVERY потраченных ПЛАТНЫХ кредита (накопительно,
+    // без привязки к дням) — +1 анализ сверху. Считаем от общего числа потраченных кредитов
+    // за всё время (spent:tgid), не от текущей покупки — так работает и растянуто по времени,
+    // и если человек тратит кредиты пачкой за один раз.
+    const spentKey = `spent:${tgid}`;
+    const spent = parseInt(await env.RATE_LIMIT.get(spentKey) || '0', 10) + 1;
+    await env.RATE_LIMIT.put(spentKey, String(spent));
+    if (spent % CASHBACK_EVERY === 0) { creditsLeft += 1; cashback = true; }
+    await env.RATE_LIMIT.put(`credits:${tgid}`, String(creditsLeft));
+  } else if (mode === 'unlim') {
+    // Счётчик анализов за текущую сессию безлимита (только для статистики, не влияет на лимиты).
+    const unlimUseKey = `unlimUse:${tgid}:${unlimUntil}`;
+    const unlimUseCnt = parseInt(await env.RATE_LIMIT.get(unlimUseKey) || '0', 10);
+    await env.RATE_LIMIT.put(unlimUseKey, String(unlimUseCnt + 1), { expirationTtl: 60 * 60 * 24 * 7 });
+  }
+  const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
+  await env.RATE_LIMIT.put(`g:${today}`, String(g + 1), { expirationTtl: 93600 });
+  return { creditsLeft, freeLeft, cashback };
+}
+
 // ─────────────────────────── Анализ ───────────────────────────
 async function analyze(request, env) {
   let body;
@@ -256,12 +291,29 @@ async function analyze(request, env) {
   // Те, кто хоть раз покупал, получают ПОЛНЫЙ бесплатный анализ раз в 3 дня — бонус лояльности.
   const isTeaser = mode === 'free' && !buyer;
 
+  // Всё, что нужно для списания. Собрано один раз: и путь через модель, и возврат из кэша
+  // списывают через chargeQuota() с этим объектом, чтобы расчёт не мог разойтись.
+  const q = { mode, tgid, today, credits, subscribed, freeKey, freeUsed, dayKey, dayUsed, unlimUntil };
+
   const imgs = Array.isArray(body.images) && body.images.length
     ? body.images
     : (body.image ? [body.image] : []);
 
   // ── Кэш по фото ──
-  // Повторная загрузка того же снимка не должна жечь токены: отдаём прошлый отчёт.
+  // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
+  // Не блокирует уже оплативших (unlim/paid), чтобы платёж не пропадал впустую при наплыве трафика.
+  if (env.RATE_LIMIT && (mode === 'free' || mode === 'holder')) {
+    const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
+    if (g >= GLOBAL_DAILY_CAP) {
+      return json({ error: 'global', text: 'Дневной лимит бесплатных анализов исчерпан. Загляните завтра или купи кредиты.', packs: PACKS });
+    }
+  }
+
+  // Повторная загрузка того же снимка не жжёт токены: отдаём прошлый отчёт. Но анализ
+  // при этом СПИСЫВАЕТСЯ как за обычный разбор (решение владельца 30.09): результат для
+  // человека тот же самый, а бесплатный повтор был лазейкой. Конвейер детерминированный
+  // (замер 30.09: 20 повторов из 20 совпали до десятой), так что заново считать нечего -
+  // модель вернула бы ровно этот же текст.
   // Ключ привязан к человеку (чужой снимок нельзя прогнать по чужому кэшу), к языку
   // (отчёт на другом языке - другой текст) и к тизеру (купивший полный разбор не должен
   // получить обратно свой урезанный). Замеры гайда и дуэль не кэшируем - там каждый
@@ -274,21 +326,13 @@ async function analyze(request, env) {
     if (hit) {
       const seen = parseInt(await env.RATE_LIMIT.get(`gc:${today}`) || '0', 10);
       await env.RATE_LIMIT.put(`gc:${today}`, String(seen + 1), { expirationTtl: 93600 });
-      console.log('AI cache hit', JSON.stringify({ tgid, isTeaser, lang: body.lang || 'en' }));
+      const paid = await chargeQuota(env, q);
+      console.log('AI cache hit', JSON.stringify({ tgid, isTeaser, mode, lang: body.lang || 'en' }));
       return json({
         text: hit, mode: 'cached', cached: true, teaser: isTeaser,
-        creditsLeft: credits, freeLeft: subscribed ? Math.max(0, FREE_PER_WEEK - freeUsed) : 0,
-        subscribed, cashback: false,
+        creditsLeft: paid.creditsLeft, freeLeft: Math.max(0, paid.freeLeft),
+        subscribed, cashback: paid.cashback,
       });
-    }
-  }
-
-  // Глобальный потолок БЕСПЛАТНЫХ анализов в сутки — защита бюджета OpenRouter.
-  // Не блокирует уже оплативших (unlim/paid), чтобы платёж не пропадал впустую при наплыве трафика.
-  if (env.RATE_LIMIT && (mode === 'free' || mode === 'holder')) {
-    const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
-    if (g >= GLOBAL_DAILY_CAP) {
-      return json({ error: 'global', text: 'Дневной лимит бесплатных анализов исчерпан. Загляните завтра или купи кредиты.', packs: PACKS });
     }
   }
 
@@ -442,34 +486,8 @@ async function analyze(request, env) {
   }
 
   // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели (одинаковый для всех); paid → минус кредит.
-  let creditsLeft = credits, freeLeft = subscribed ? (FREE_PER_WEEK - freeUsed) : 0, cashback = false;
-  if (mode === 'free') {
-    await env.RATE_LIMIT.put(freeKey, String(freeUsed + 1), { expirationTtl: 8 * 24 * 60 * 60 });
-    freeLeft = FREE_PER_WEEK - freeUsed - 1;
-  } else if (mode === 'holder') {
-    await env.RATE_LIMIT.put(dayKey, String(dayUsed + 1), { expirationTtl: 60 * 60 * 30 });
-  } else if (mode === 'paid') {
-    creditsLeft = credits - 1;
-    // Кешбэк лояльности: каждые CASHBACK_EVERY потраченных ПЛАТНЫХ кредита (накопительно,
-    // без привязки к дням) — +1 анализ сверху. Считаем от общего числа потраченных кредитов
-    // за всё время (spent:tgid), не от текущей покупки — так работает и растянуто по времени,
-    // и если человек тратит кредиты пачкой за один раз.
-    const spentKey = `spent:${tgid}`;
-    const spent = parseInt(await env.RATE_LIMIT.get(spentKey) || '0', 10) + 1;
-    await env.RATE_LIMIT.put(spentKey, String(spent));
-    if (spent % CASHBACK_EVERY === 0) {
-      creditsLeft += 1;
-      cashback = true;
-    }
-    await env.RATE_LIMIT.put(`credits:${tgid}`, String(creditsLeft));
-  } else if (mode === 'unlim') {
-    // Счётчик анализов за текущую сессию безлимита (только для статистики, не влияет на лимиты).
-    const unlimUseKey = `unlimUse:${tgid}:${unlimUntil}`;
-    const unlimUseCnt = parseInt(await env.RATE_LIMIT.get(unlimUseKey) || '0', 10);
-    await env.RATE_LIMIT.put(unlimUseKey, String(unlimUseCnt + 1), { expirationTtl: 60 * 60 * 24 * 7 });
-  }
-  const g = parseInt(await env.RATE_LIMIT.get(`g:${today}`) || '0', 10);
-  await env.RATE_LIMIT.put(`g:${today}`, String(g + 1), { expirationTtl: 93600 });
+  const { creditsLeft: cl0, freeLeft, cashback } = await chargeQuota(env, q);
+  let creditsLeft = cl0;
 
   if (isMeasure) {
     data.choices[0].message.content = normalizeMeasureText(data.choices[0].message.content);
