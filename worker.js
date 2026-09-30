@@ -109,6 +109,7 @@ export default {
       if (path === '/lava-webhook') return await lavaWebhook(request, env);
       if (path === '/support-webhook') return await supportWebhook(request, env);
       if (path === '/media-webhook')   return await mediaWebhook(request, env);
+      if (path === '/roast')      return await roastRewrite(request, env);
       if (path === '/auth')       return await authTg(request, env);
       if (path === '/authpoll')   return await authPoll(request, env);
       if (path === '/me')         return await me(request, env);
@@ -156,16 +157,16 @@ async function setupWebhook(request, env) {
   return json(r);
 }
 
-// Ключ кэша разбора: хэш фотографий + человек + язык + тизер + тон.
+// Ключ кэша разбора: хэш фотографий + человек + язык + тизер.
 // Хэшируем base64 как есть: клиент кодирует канвас одинаково для одного и того же файла,
 // поэтому повторная загрузка того же снимка даёт тот же ключ.
-// Тон обязателен в ключе: дерзкий режим - другой промпт и другой текст отчёта, а живёт он
-// целиком на фронте. Без тона человек, включивший режим на уже разобранном фото, получал
-// из кэша прежний вежливый разбор - без списания, без ошибки, тумблер просто не работал.
-async function photoCacheKey(tgid, imgs, lang, isTeaser, tone) {
+// Тона здесь НЕТ намеренно: с 30.09 разбор всегда считается нейтральным промптом, а дерзкий
+// тон накладывает отдельный вызов /roast со своим кэшем. Оба тона делят один разбор, и
+// переключение тумблера не заставляет платить за вторую работу модели.
+async function photoCacheKey(tgid, imgs, lang, isTeaser) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(imgs.join('|')));
   const hex = [...new Uint8Array(buf)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `rep:${tgid}:${hex}:${lang === 'ru' ? 'ru' : 'en'}:${isTeaser ? 't' : 'f'}${tone === 'edgy' ? ':e' : ''}`;
+  return `rep:${tgid}:${hex}:${lang === 'ru' ? 'ru' : 'en'}:${isTeaser ? 't' : 'f'}`;
 }
 
 // ─────────────────────────── Анализ ───────────────────────────
@@ -266,7 +267,7 @@ async function analyze(request, env) {
   // получить обратно свой урезанный). Замеры гайда и дуэль не кэшируем - там каждый
   // прогон по смыслу новый.
   const cacheKey = !isMeasure && !body.compare && imgs.length
-    ? await photoCacheKey(tgid, imgs, body.lang, isTeaser, body.tone)
+    ? await photoCacheKey(tgid, imgs, body.lang, isTeaser)
     : null;
   if (cacheKey) {
     const hit = await env.RATE_LIMIT.get(cacheKey);
@@ -513,6 +514,87 @@ async function rateFacesSeparately(env, model, images, ratePrompt) {
       return d?.choices?.[0]?.message?.content || null;
     } catch { return null; }
   }));
+}
+
+// ─────────────────────────── Дерзкий режим (второй вызов) ───────────────────────────
+// Замер 30.09.2026 по 52 размеченным лицам: роаст-персона В промпте разбора меняла ТИР
+// у 12 лиц из 52 (до 1.2 балла, в обе стороны). Перенос инструкции после строки редкости
+// не помог — 10 из 52. Контрольный прогон тем же промптом дважды совпал 20 из 20, то есть
+// это не шум модели, а сама персона: она меняет чтение лица целиком.
+// Поэтому балл считает нейтральный промпт, а дерзкий тон накладывается вторым вызовом,
+// который переписывает ТОЛЬКО прозу. Картинки здесь нет — вызов дешевле основного втрое.
+const ROAST_MAX_DAY = 30;              // потолок переписываний в сутки на человека
+
+// Все числа отчёта: строка редкости и каждая метка с баллом. Если после переписывания
+// они разъехались — модель полезла в оценку, и мы отдаём исходный текст.
+function reportNumbers(text) {
+  const nums = [...String(text).matchAll(/^([\u0410-\u042f_A-Z]+):\s*([\d.]+)\s*\/\s*(8|10)/gm)].map((m) => m[1] + '=' + m[2]);
+  const rar = String(text).match(/\u0420\u0415\u0414\u041a\u041e\u0421\u0422\u042c:\s*(\u041b\u0423\u0427\u0428\u0415|\u0425\u0423\u0416\u0415)\s*1\s*\u0438\u0437\s*([\d\s]+)/i);
+  return (rar ? rar[1].toUpperCase() + '/' + rar[2].replace(/\s/g, '') : '-') + '|' + nums.join(',');
+}
+
+async function roastRewrite(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return cors('Bad JSON', 400); }
+  const sess = await getSession(env, body.token);
+  if (!sess) return json({ error: 'auth', text: '\u0412\u043e\u0439\u0434\u0438\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 Telegram.' });
+  const tgid = sess.id;
+
+  // Вход строго наш собственный отчёт, а не произвольный текст: иначе роут превращается
+  // в бесплатную языковую модель для всякого, у кого есть токен сессии.
+  const src = typeof body.text === 'string' ? body.text.trim() : '';
+  if (src.length < 200 || src.length > 8000 || !src.includes('\u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b:')) {
+    return json({ error: 'bad', text: '\u041d\u0435\u0447\u0435\u0433\u043e \u043f\u0435\u0440\u0435\u043f\u0438\u0441\u044b\u0432\u0430\u0442\u044c.' });
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const capKey = `rq:${tgid}:${today}`;
+  const used = parseInt(await env.RATE_LIMIT.get(capKey) || '0', 10);
+  if (used >= ROAST_MAX_DAY) return json({ error: 'limit', text: src });
+
+  const L = body.lang === 'ru' ? 'ru' : 'en';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(src));
+  const hex = [...new Uint8Array(buf)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
+  const cacheKey = `roast:${tgid}:${hex}:${L}`;
+  const hit = await env.RATE_LIMIT.get(cacheKey);
+  if (hit) return json({ text: hit, cached: true });
+
+  const instr = (L === 'ru'
+    ? '\u0420\u0415\u0416\u0418\u041c: \u0414\u0415\u0420\u0417\u041a\u0418\u0419 \u0420\u041e\u0410\u0421\u0422. \u041f\u0435\u0440\u0435\u043f\u0438\u0448\u0438 \u043f\u0440\u043e\u0437\u0443 \u044d\u0442\u043e\u0433\u043e \u0433\u043e\u0442\u043e\u0432\u043e\u0433\u043e \u0440\u0430\u0437\u0431\u043e\u0440\u0430 \u0445\u043b\u0451\u0441\u0442\u043a\u043e, \u0438\u0440\u043e\u043d\u0438\u0447\u043d\u043e \u0438 \u043c\u0435\u043c\u043d\u043e, \u043a\u0430\u043a \u0436\u0451\u0441\u0442\u043a\u0438\u0439 \u0440\u0430\u0437\u0431\u043e\u0440 \u043d\u0430 PSL-\u0444\u043e\u0440\u0443\u043c\u0435: \u0431\u0435\u0437 \u0434\u0435\u0436\u0443\u0440\u043d\u044b\u0445 \u043a\u043e\u043c\u043f\u043b\u0438\u043c\u0435\u043d\u0442\u043e\u0432, \u0431\u0435\u0437 \u0441\u043c\u044f\u0433\u0447\u0435\u043d\u0438\u0439, \u043c\u043e\u0436\u043d\u043e \u043f\u043e\u0434\u043a\u043e\u043b\u044b \u0438 \u0441\u0430\u0440\u043a\u0430\u0437\u043c \u043f\u0440\u043e \u0447\u0435\u0440\u0442\u044b \u043b\u0438\u0446\u0430, \u0441\u0442\u0440\u0438\u0436\u043a\u0443 \u0438 \u0441\u0442\u0438\u043b\u044c. \u0416\u0401\u0421\u0422\u041a\u0418\u0415 \u0413\u0420\u0410\u041d\u0418\u0426\u042b: \u043d\u0438\u043a\u0430\u043a\u0438\u0445 \u043e\u0441\u043a\u043e\u0440\u0431\u043b\u0435\u043d\u0438\u0439 \u043f\u043e \u043d\u0430\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u0438/\u0440\u0435\u043b\u0438\u0433\u0438\u0438/\u043f\u043e\u043b\u0443/\u0431\u043e\u043b\u0435\u0437\u043d\u044f\u043c, \u0431\u0435\u0437 \u043f\u043e\u0436\u0435\u043b\u0430\u043d\u0438\u0439 \u0432\u0440\u0435\u0434\u0430, \u0431\u0435\u0437 \u0432\u044b\u0434\u0443\u043c\u0430\u043d\u043d\u044b\u0445 \u0444\u0430\u043a\u0442\u043e\u0432 \u2014 \u043e\u043f\u0438\u0441\u044b\u0432\u0430\u0439 \u0442\u043e\u043b\u044c\u043a\u043e \u0442\u043e, \u0447\u0442\u043e \u0443\u0436\u0435 \u0435\u0441\u0442\u044c \u0432 \u0440\u0430\u0437\u0431\u043e\u0440\u0435.'
+    : 'MODE: SAVAGE ROAST. Rewrite the prose of this finished report sharp, ironic and meme-y, like a brutal PSL-forum teardown: no courtesy compliments, no softening, jabs and sarcasm about features, haircut and style are fine. HARD LIMITS: no insults based on nationality, religion, gender or illness, no wishing harm, no invented facts — describe only what the report already states.')
+    + (L === 'ru' ? ' \u041f\u0438\u0448\u0438 \u043f\u043e-\u0440\u0443\u0441\u0441\u043a\u0438.' : ' Write in English.');
+
+  // Числа не обсуждаются: оценка уже посчитана нейтральным промптом, здесь только слова.
+  const prompt = instr
+    + '\n\nCRITICAL, THIS IS WHAT THE REWRITE IS FOR: keep EVERY line that carries a label and a number EXACTLY as it is, character for character -- the \u0420\u0415\u0414\u041a\u041e\u0421\u0422\u042c line, \u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b and all eight category labels with their scores. Do not re-judge the face, do not move a single number, do not add or remove a category. Keep the same section order, the same labels and the same number of numbered recommendations. Rewrite ONLY the descriptive sentences under those labels and the wording of the recommendations. Reply with the full report in the same plain-text format, nothing else.'
+    + '\n\n---\n' + src;
+
+  let out = '';
+  for (let attempt = 0; attempt < 2 && !out; attempt++) {
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENROUTER_API_KEY}` },
+        body: JSON.stringify({
+          model: 'google/gemini-3.7-flash', max_tokens: 2000, temperature: 0, top_p: 1,
+          seed: 1337 + attempt, reasoning: { effort: 'low' },
+          provider: { order: ['google-ai-studio'], allow_fallbacks: true },
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const d = await r.json();
+      const txt = (d?.choices?.[0]?.message?.content || '').trim();
+      console.log('roast', JSON.stringify({ tgid, attempt, ok: !!txt, usage: d?.usage ?? null }));
+      // Страховка: если числа поехали, дерзкий текст выбрасываем. Лучше вежливый отчёт
+      // с верным баллом, чем дерзкий с чужим — ради этого вся переделка и затевалась.
+      if (txt && reportNumbers(txt) === reportNumbers(src)) out = txt;
+      else if (txt) console.log('roast numbers moved', JSON.stringify({ tgid, was: reportNumbers(src), got: reportNumbers(txt) }));
+    } catch (e) { console.log('roast failed', String(e)); }
+  }
+  if (!out) return json({ text: src, fellback: true });
+
+  await env.RATE_LIMIT.put(cacheKey, out, { expirationTtl: 60 * 24 * 3600 });
+  await env.RATE_LIMIT.put(capKey, String(used + 1), { expirationTtl: 90000 });
+  return json({ text: out });
 }
 
 // ─────────────────────────── Вход через Telegram ───────────────────────────

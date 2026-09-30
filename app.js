@@ -1758,14 +1758,22 @@ async function callAI(metrics, shapeInfo) {
     var acc = getAccount();
     var res = await fetch(WORKER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: prompt, images: images, token: acc ? acc.token : null, lang: lang(), stable: STABLE_SCORE, tone: isEdgyTone() ? "edgy" : "" })
+      body: JSON.stringify({ prompt: prompt, images: images, token: acc ? acc.token : null, lang: lang(), stable: STABLE_SCORE })
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
     stopAIHUD();
     if (data.error) { showGate(data); return; }
-    renderAIReport(data.text || t("emptyAnswer"), false, !!data.teaser);
+    var reportText = data.text || t("emptyAnswer");
+    renderAIReport(reportText, false, !!data.teaser);
     aiReport.classList.remove("hidden");
+    // Дерзкий режим — отдельный запрос поверх готового отчёта. Балл уже посчитан и
+    // показан; если переписать не удалось, на экране просто остаётся вежливый текст.
+    if (isEdgyTone() && data.text) {
+      roastReport(reportText, acc).then(function (roasted) {
+        if (roasted && roasted !== reportText) renderAIReport(roasted, false, !!data.teaser);
+      });
+    }
     // Повтор того же снимка: воркер отдал прошлый отчёт, модель не вызывалась.
     // Без подписи человек решит, что сервис завис и показал старое.
     if (data.cached) {
@@ -1951,10 +1959,11 @@ var PERSONA_TERMS = " Use looksmaxxing terminology in English.";
 // Русский текст оставлен дословно прежним: он уже в проде, менять его — двигать баллы.
 var PERSONA_EDGY_RU = " You are a sharp-tongued PSL-forum looksmaxxing analyst. РЕЖИМ: ДЕРЗКИЙ РОАСТ. Пиши хлёстко, иронично и мемно, как жёсткий разбор на PSL-форуме: без дежурных комплиментов, без смягчений, можно подколы и сарказм про черты лица, стрижку и стиль. При этом оценки должны оставаться ЧЕСТНЫМИ и точными (не занижай ради шутки), и ЖЁСТКИЕ ГРАНИЦЫ: никаких оскорблений по национальности/религии/полу/болезням, без пожеланий вреда, без выдуманных фактов.";
 var PERSONA_EDGY_EN = " You are a sharp-tongued PSL-forum looksmaxxing analyst. MODE: SAVAGE ROAST. Write sharp, ironic and meme-y, like a brutal PSL-forum teardown: no courtesy compliments, no softening, jabs and sarcasm about features, haircut and style are fine. Scores must stay HONEST and accurate (never lowball for the sake of a joke), and HARD LIMITS: no insults based on nationality, religion, gender or illness, no wishing harm, no invented facts.";
-function personaPrompt() {
-  if (!isEdgyTone()) return PERSONA + PERSONA_TERMS;
-  return PERSONA + (lang() === "ru" ? PERSONA_EDGY_RU : PERSONA_EDGY_EN);
-}
+// Персона ВСЕГДА нейтральная, даже при включённом дерзком режиме. Замер 30.09.2026:
+// роаст в промпте разбора менял тир у 12 лиц из 52, перенос инструкции не помог (10 из 52),
+// а контрольный прогон совпал 20 из 20 — то есть двигала оценку именно персона.
+// Дерзкий тон накладывается вторым запросом (/roast), который переписывает только прозу.
+function personaPrompt() { return PERSONA + PERSONA_TERMS; }
 
 function duelRatePrompt() {
   return "You are a professional looksmaxxing analyst. Rate ONLY the single face in this photo, exactly as you would in a full report. "
@@ -2994,6 +3003,20 @@ function saveAccount(status) {
   localStorage.setItem("fm-tg", JSON.stringify({ token: status.token, user: status.user }));
 }
 function clearAccount() { localStorage.removeItem("fm-tg"); }
+
+// Переписывание готового отчёта в дерзком тоне. Числа воркер сверяет сам и при
+// расхождении возвращает исходный текст — сюда дерзкий отчёт с чужим баллом не доедет.
+async function roastReport(text, acc) {
+  try {
+    var res = await fetch(WORKER_URL.replace(/\/$/, "") + "/roast", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text, lang: lang(), token: acc ? acc.token : null }),
+    });
+    if (!res.ok) return null;
+    var d = await res.json();
+    return d && typeof d.text === "string" ? d.text : null;
+  } catch (e) { return null; }
+}
 
 function isEdgyTone() {
   var cb = document.getElementById("toneEdgy");
