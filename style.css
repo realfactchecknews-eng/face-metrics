@@ -756,7 +756,15 @@ main {
   background: rgba(0,0,0,0.9);
 }
 
-.btn {
+/* .btn-primary — только модификатор цвета; отступы, кегль и рамка живут здесь. Кнопка,
+   у которой стоит один .btn-primary без .btn и нет своего правила, получала стили
+   браузера по умолчанию — серую полоску с рамкой 2px (так вышло с «Понятно» в окне про
+   дерзкий режим). Поэтому .btn-primary добавлен в селектор: одна правка вместо класса
+   в каждой разметке. На .btn.btn-primary не влияет — значения те же.
+   Двум другим голым .btn-primary («Принимаю» в согласии, «Всё понятно» в подсказках)
+   размер задают собственные правила, они этой правкой не затронуты — проверено
+   сравнением вычисленных стилей всех кнопок до и после. */
+.btn, .btn-primary {
   background: transparent;
   border: 1px solid rgba(196,164,107,0.5);
   color: var(--text-bright);
@@ -770,7 +778,7 @@ main {
   border-radius: 2px;
 }
 
-.btn:hover {
+.btn:hover, .btn-primary:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -1954,7 +1962,7 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 .tone-dialog::backdrop { background: rgba(0,0,0,0.6); }
 .tone-dialog h3 { margin: 0 0 10px; color: var(--text-bright); font-weight: 400; }
 .tone-dialog p { margin: 0 0 18px; font-size: 0.9rem; line-height: 1.55; }
-.tone-dialog button { width: 100%; }
+.tone-dialog button { width: 100%; padding: 14px 20px; font-size: 0.85rem; border-radius: 8px; }
 .tone-row input { display: none; }
 .tone-slider {
   width: 44px; height: 24px; border-radius: 100px; flex-shrink: 0;
