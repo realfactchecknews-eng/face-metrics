@@ -89,8 +89,7 @@ assert.ok(!/creditsLeft: credits\b/.test(hitBlock), 'кэш отдаёт ста�
 // Потолок бесплатных проверяется ДО кэша, иначе повтор обходит его.
 assert.ok(worker.indexOf('GLOBAL_DAILY_CAP') < worker.indexOf('const hit = await env.RATE_LIMIT.get(cacheKey)'),
   'глобальный потолок проверяется после кэша');
-// Подпись обязана говорить о списании — иначе это «списали, а разбор старый».
-assert.ok(!/No analysis was spent/.test(app) && !/\u0410\u043d\u0430\u043b\u0438\u0437 \u043d\u0435 \u0441\u043f\u0438\u0441\u0430\u043d/.test(app),
-  'подпись всё ещё обещает бесплатный повтор');
+// Никакой подписи про повтор: отчёт по тому же снимку неотличим от первого.
+assert.ok(!app.includes('cachedNote'), 'подпись про сохранённый отчёт вернулась');
 
 console.log('test_tone: ok');

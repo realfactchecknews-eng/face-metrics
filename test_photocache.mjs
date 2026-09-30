@@ -22,16 +22,18 @@ assert.match(base, /^rep:111:[0-9a-f]{24}:ru:f$/, 'формат ключа: rep:
 // Замеры гайда и дуэль не кэшируем, и кэш проверяется ДО списания кредита.
 assert.match(w, /const cacheKey = !isMeasure && !body\.compare && imgs\.length/, 'замер и дуэль мимо кэша');
 const analyze = pick(w, /async function analyze\(request, env\)[\s\S]*?\n\}/);
-assert.ok(analyze.indexOf('const hit = await env.RATE_LIMIT.get(cacheKey)') < analyze.indexOf('Списание ПОСЛЕ успеха'),
-  'попадание в кэш отдаётся до списания: за повтор того же снимка платить не за что');
 assert.ok(analyze.indexOf('const hit = await env.RATE_LIMIT.get(cacheKey)') < analyze.indexOf('openrouter.ai'),
   'при попадании модель не вызывается');
 assert.match(w, /expirationTtl: 60 \* 24 \* 3600/, 'кэш живёт 60 дней');
 
-// На сайте человек должен понимать, почему отчёт прежний.
-assert.match(app, /if \(data\.cached\)/, 'сайт различает ответ из кэша');
-assert.match(app, /cachedNote: "Это тот же снимок/, 'есть русская подпись');
-assert.match(app, /cachedNote: "Same photo as before/, 'есть английская подпись');
-assert.match(app, /var oldNote = document\.getElementById\("cachedNote"\)/, 'подпись убирается при новом анализе');
+// С 30.09 повтор того же снимка СПИСЫВАЕТСЯ как обычный анализ: токены экономим, но
+// бесплатной перезагрузки одного и того же больше нет.
+const hitBlock = analyze.slice(analyze.indexOf('const hit = await env.RATE_LIMIT.get(cacheKey)'), analyze.indexOf('// Модель.'));
+assert.ok(hitBlock.includes('chargeQuota'), 'повтор снова бесплатный');
+// Подписи про повтор быть НЕ должно: повторный отчёт ничем не отличается от первого.
+// Конвейер детерминированный, модель вернула бы тот же текст, и анализ списывается так же —
+// отличать нечего, а подпись только сеяла сомнение в оценке.
+assert.ok(!app.includes('cachedNote'), 'подпись про сохранённый отчёт вернулась');
+assert.ok(!app.includes('cached-note'), 'остался узел подписи');
 
 console.log('кэш по фото: все проверки прошли');
