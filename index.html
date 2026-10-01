@@ -637,7 +637,7 @@
      Модель assets/pill3d/scene.gltf — "Pill (Capsule)" by jaromir.ternavskiy,
      CC-BY-4.0, оставлена как исходник для пересъёмки:
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
-<script src="app.js?v=124"></script>
+<script src="app.js?v=125"></script>
 <script src="sharevideo.js?v=6"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════
@@ -735,6 +735,13 @@
         <div class="card-t">Новый замер</div>
         <div class="card-s" id="measureNote">Один замер в 10 дней. Чаще нет смысла: за меньший срок разница между фото - это шум, а не ты.</div>
         <button class="btn" id="measureBtn" onclick="openShot()">Сделать замер</button>
+      </div>
+
+      <!-- Виден только тем, у кого замеры открыты за прошлую покупку, а гайда нет. -->
+      <div class="card" id="pgUpsell" hidden>
+        <div class="card-t">Что ещё даёт гайд</div>
+        <div class="card-s">Сейчас тебе доступны замер раз в 30 дней и график. В гайде к этому добавляются план на 90 дней с заданием каждую неделю, разбор всех параметров и замер раз в 10 дней вместо 30.</div>
+        <button class="btn btn-primary" id="pgUpsellBtn" onclick="pgShowLocked()">Посмотреть гайд</button>
       </div>
 
       <div id="dynHost"></div>

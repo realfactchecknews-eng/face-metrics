@@ -267,15 +267,18 @@ async function analyze(request, env) {
   const isMeasure = body.measure === true;
   let earlyPaid = false;          // досрочный замер, оплаченный кредитом
   if (isMeasure) {
-    if (!hasGuide) return json({ error: 'guide', text: 'Замеры прогресса доступны после покупки гайда.', packs: { guide: PACKS.guide } });
+    // Замеры открыты владельцам гайда (раз в 10 дней) и всем, кто хоть раз платил
+    // (раз в 30 дней) — см. PROG_FREE_COOLDOWN.
+    if (!hasGuide && !buyer) return json({ error: 'guide', text: 'Замеры прогресса доступны после покупки гайда.', packs: { guide: PACKS.guide } });
+    const measureCooldown = hasGuide ? PROG_COOLDOWN : PROG_FREE_COOLDOWN;
     const plist = await progList(env, tgid);
     if (plist.length >= PROG_MAX) return json({ error: 'progmax', text: 'Достигнут лимит замеров. Напиши в поддержку.' });
     const plast = plist[plist.length - 1];
-    if (plast && Date.now() - plast.t < PROG_COOLDOWN) {
+    if (plast && Date.now() - plast.t < measureCooldown) {
       // Замер по расписанию бесплатный — это то, за что человек заплатил при покупке.
       // А замер РАНЬШЕ СРОКА стоит один кредит: платит тот, кому не терпится, а
       // обещанный план работает без доплат.
-      const leftH = Math.ceil((PROG_COOLDOWN - (Date.now() - plast.t)) / 3600e3);
+      const leftH = Math.ceil((measureCooldown - (Date.now() - plast.t)) / 3600e3);
       const leftD = Math.ceil(leftH / 24);
       if (body.forcePay !== true) {
         return json({
@@ -1093,7 +1096,7 @@ async function lavaWebhook(request, env) {
     const { id: orderId, isFirst } = await recordOrder(env, { tgid, pack: packId, method: 'card', amount: upd.amount, currency: upd.currency || 'RUB', username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'card', upd.amount))) await trackReferralPurchase(env, tgid, pack, 'card', upd.amount);
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
-    const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
+    const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? BL[L].trackingOpen : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -1157,7 +1160,7 @@ async function cryptoWebhook(request, env) {
     const { id: orderId, isFirst } = await recordOrder(env, { tgid, pack: payload.pack || '', method: 'crypto', amount: upd.payload.amount, currency: upd.payload.asset || upd.payload.fiat, username: '', name: '', promo: promoUsed });
     if (!(await trackMediaPromoPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount)))) await trackReferralPurchase(env, tgid, pack, 'crypto', Number(upd.payload.amount));
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
-    const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
+    const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? BL[L].trackingOpen : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
@@ -1298,6 +1301,7 @@ const BL = {
     payRec: ', auto-renewal is on',
     payOk: (n, id, bonus) => `✅ Payment received! ${n}.\nGo back to facerate.ru — everything is updated.${id ? `\n\nOrder ID: <code>${id}</code> (quote it if you write to support)` : ''}${bonus ? `\n\n${bonus}` : ''}`,
     firstBuyBonus: (p) => `🎁 Thanks for your first purchase! Here's ${p}% off your next one — it's already applied automatically, just buy within 30 days.`,
+    trackingOpen: '📈 Progress tracking is now open for you: a free re-measurement every 30 days, on facerate.ru under «Ведение». Same photo conditions, and the chart shows what actually changed.',
     pastBuyerBonus: (p) => `🎁 A little thank-you for being a customer! We've added ${p}% off your next purchase — it's already applied automatically, just buy within 30 days.`,
     langSet: '🌍 Language set: English.',
     pickLang: '🌍 Choose language / Выбери язык:',
@@ -1375,6 +1379,7 @@ const BL = {
     payRec: ', автопродление включено',
     payOk: (n, id, bonus) => `✅ Оплата получена! ${n}.\nВозвращайся на facerate.ru — всё уже обновлено.${id ? `\n\nID заказа: <code>${id}</code> (укажи его, если напишешь в поддержку)` : ''}${bonus ? `\n\n${bonus}` : ''}`,
     firstBuyBonus: (p) => `🎁 Спасибо за первую покупку! Дарим скидку ${p}% на следующую — она уже применена автоматически, просто купи в течение 30 дней.`,
+    trackingOpen: '📈 Тебе открылись замеры прогресса: бесплатный замер раз в 30 дней на facerate.ru, вкладка «Ведение». Снимайся в тех же условиях — график покажет, что реально изменилось.',
     pastBuyerBonus: (p) => `🎁 Небольшой подарок за то, что ты с нами! Начислили скидку ${p}% на следующую покупку — она уже применена автоматически, просто купи в течение 30 дней.`,
     langSet: '🌍 Язык переключён: русский.',
     pickLang: '🌍 Choose language / Выбери язык:',
@@ -2193,7 +2198,7 @@ async function handlePayment(env, msg, L) {
     const payMethod = sp.currency === 'XTR' ? 'stars' : 'rub';
     if (!(await trackMediaPromoPurchase(env, tgid, pack, payMethod, paidAmount))) await trackReferralPurchase(env, tgid, pack, payMethod, paidAmount);
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
-    const extra = [gotBonus ? b.firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', await m1UpsellText(env, tgid, pack, L || 'en')].filter(Boolean).join('\n\n');
+    const extra = [gotBonus ? b.firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? b.trackingOpen : '', await m1UpsellText(env, tgid, pack, L || 'en')].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note, orderId, extra), reply_markup: menuKb(L || 'en'), parse_mode: 'HTML' });
   } catch { /* payload сломан — молча игнор */ }
 }
@@ -4557,7 +4562,13 @@ const PROG_CATS = [
 ];
 const PROG_MAX       = 60;                  // потолок замеров на юзера
 const PROG_TXT_MAX   = 3;                   // сколько полных текстов храним для сравнения
-const PROG_COOLDOWN  = 10 * 24 * 3600e3;    // ровно один замер в 10 дней
+const PROG_COOLDOWN  = 10 * 24 * 3600e3;    // ровно один замер в 10 дней (у владельцев гайда)
+// Бесплатный замер для тех, кто хоть раз платил, но гайд не покупал: раз в 30 дней.
+// Это механика ВОЗВРАТА, а не подарок. После одного анализа возвращаться незачем — балл
+// не меняется. Замер через месяц даёт повод прийти второй раз, а второй визит и есть то
+// место, где продаются пятёрка, безлимит и гайд. Стоит он нам $0.008 за вернувшегося.
+// 30, а не 10: за меньший срок разница между фото — шум, и человек решит, что бот врёт.
+const PROG_FREE_COOLDOWN = 30 * 24 * 3600e3;
 const PLAN_WEEKS     = 13;
 
 // ВАЖНО ПРО ФОТО.
@@ -5125,25 +5136,33 @@ async function progressGet(request, env) {
   const tgid = sess.id;
 
   const hasGuide = (await env.RATE_LIMIT.get(`guide:${tgid}`)) === '1';
-  if (!hasGuide) return json({ guide: false, pack: PACKS.guide });
+  // tracking — урезанное «Ведение» для тех, кто платил, но гайд не брал: график и замер
+  // раз в 30 дней, без плана на 90 дней и без текста гайда. Это повод вернуться через
+  // месяц, а не бесплатная версия гайда.
+  const tracking = !hasGuide && await isBuyer(env, tgid);
+  if (!hasGuide && !tracking) return json({ guide: false, pack: PACKS.guide });
 
   const list = await progList(env, tgid);
   const texts = await progTexts(env, tgid);
   const week = parseInt(await env.RATE_LIMIT.get(`planw:${tgid}`) || '1', 10);
   const last = list[list.length - 1];
-  const cooldownLeft = last ? Math.max(0, PROG_COOLDOWN - (Date.now() - last.t)) : 0;
+  const cooldownLeft = last ? Math.max(0, (hasGuide ? PROG_COOLDOWN : PROG_FREE_COOLDOWN) - (Date.now() - last.t)) : 0;
 
   const streak = parseInt(await env.RATE_LIMIT.get(`streak:${tgid}`) || '0', 10);
   const best   = parseInt(await env.RATE_LIMIT.get(`best:${tgid}`) || '0', 10);
 
   return json({
-    guide: true,
+    guide: hasGuide,
+    tracking,
     streak, best,
-    week: Math.min(week, PLAN_WEEKS),
+    // План и текст гайда — только владельцам: это и есть то, за что платят 999.
+    week: hasGuide ? Math.min(week, PLAN_WEEKS) : 0,
     points: list,
-    lastText: texts.length ? texts[texts.length - 1].text : '',
+    lastText: hasGuide && texts.length ? texts[texts.length - 1].text : '',
     cooldownLeft,
+    cooldownDays: Math.round((hasGuide ? PROG_COOLDOWN : PROG_FREE_COOLDOWN) / 864e5),
     left: Math.max(0, PROG_MAX - list.length),
+    ...(tracking ? { pack: PACKS.guide } : {}),
   });
 }
 

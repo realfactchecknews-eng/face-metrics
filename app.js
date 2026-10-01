@@ -4480,7 +4480,8 @@ async function pgLoad(){
     d = await r.json();
   } catch { return pgShowLocked(); }
 
-  if (d.error || !d.guide) return pgShowLocked(d.pack);
+  // tracking — платил, но гайд не брал: график и замер раз в 30 дней есть, плана и гайда нет.
+  if (d.error || (!d.guide && !d.tracking)) return pgShowLocked(d.pack);
 
   PG = d;
   CURRENT_WEEK = d.week || 1;
@@ -4504,7 +4505,7 @@ async function pgLoad(){
     p.prev = prev?.cats?.[p.k];
   });
 
-  pgShowUnlocked();
+  pgShowUnlocked(!d.guide);
 }
 
 function pgShowLocked(pack){
@@ -4549,9 +4550,30 @@ function pgShowLocked(pack){
   mk('pg-buy-btn ghost', 'Telegram Stars - ' + tag(stars, p.oldStars, '⭐'), 'stars');
 }
 
-function pgShowUnlocked(){
+function pgShowUnlocked(trackingOnly){
   document.getElementById('pgLocked').hidden = true;
   document.getElementById('pgUnlocked').hidden = false;
+
+  // Без гайда прячем то, что в него входит: план на 90 дней, веб-версию гайда и задание
+  // недели. Остаётся замер и график — ровно то, ради чего человек возвращается.
+  var guideOnly = ['p3', 'p4', 'weekCard'];
+  guideOnly.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.hidden = !!trackingOnly;
+  });
+  document.querySelectorAll('#tabs .tab').forEach(function (b) {
+    if (guideOnly.indexOf(b.dataset.p) >= 0) b.hidden = !!trackingOnly;
+  });
+  // Если открыта спрятанная вкладка — возвращаемся на замеры.
+  if (trackingOnly) {
+    var openTab = document.querySelector('#tabs .tab.on');
+    if (openTab && guideOnly.indexOf(openTab.dataset.p) >= 0) {
+      var first = document.querySelector('#tabs .tab[data-p="p1"]');
+      if (first) first.click();
+    }
+  }
+  var up = document.getElementById('pgUpsell');
+  if (up) up.hidden = !trackingOnly;
 
   // Индексы коллажа выставляем ПОСЛЕ загрузки: по умолчанию первый и последний замер.
   shareA = 0;
@@ -4580,11 +4602,13 @@ function pgShowUnlocked(){
   }
   const note = document.getElementById('measureNote');
   if (note) {
+    // Ритм берём из ответа воркера: у владельца гайда 10 дней, у остальных 30.
+    const every = (PG && PG.cooldownDays) || 10;
     note.textContent = left > 0
       ? 'Бесплатный замер будет доступен через ' + days + ' ' +
         (days === 1 ? 'день' : days < 5 ? 'дня' : 'дней') +
         '. Раньше срока — за 1 анализ.'
-      : 'Один замер в 10 дней. Чаще нет смысла: за меньший срок разница между фото это шум, а не ты.';
+      : 'Один замер в ' + every + ' дней. Чаще нет смысла: за меньший срок разница между фото это шум, а не ты.';
   }
   const nx = document.getElementById('mNext');
   if (nx) nx.textContent = left > 0 ? 'через ' + Math.ceil(left / 864e5) + ' дн.' : 'доступен';
