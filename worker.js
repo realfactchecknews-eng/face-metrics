@@ -142,6 +142,7 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(checkGiveawayDraw(env));
     ctx.waitUntil(progressCron(env));
+    ctx.waitUntil(trackCron(env));
     ctx.waitUntil(checkOpenRouterBalance(env));
   },
 };
@@ -1302,6 +1303,9 @@ const BL = {
     payOk: (n, id, bonus) => `✅ Payment received! ${n}.\nGo back to facerate.ru — everything is updated.${id ? `\n\nOrder ID: <code>${id}</code> (quote it if you write to support)` : ''}${bonus ? `\n\n${bonus}` : ''}`,
     firstBuyBonus: (p) => `🎁 Thanks for your first purchase! Here's ${p}% off your next one — it's already applied automatically, just buy within 30 days.`,
     trackingOpen: '📈 Progress tracking is now open for you: a free re-measurement every 30 days, on facerate.ru under «Ведение». Same photo conditions, and the chart shows what actually changed.',
+    remindFirst: (tip) => `📈 A month has passed since your analysis.\n\nA free measurement is available — same conditions, same frame. The chart will show what has actually changed, which is impossible to judge in the mirror: the face changes slower than you look at it.${tip ? `\n\n<b>What you were going to work on:</b>\n${tip}` : ''}`,
+    remindAgain: (tip) => `📈 Thirty days since your last measurement — the next free one is available.\n\nShoot in the same light and at the same angle, otherwise the chart will show the camera rather than you.${tip ? `\n\n<b>From your own report:</b>\n${tip}` : ''}`,
+    remindBtn: '📊 Take a measurement',
     pastBuyerBonus: (p) => `🎁 A little thank-you for being a customer! We've added ${p}% off your next purchase — it's already applied automatically, just buy within 30 days.`,
     langSet: '🌍 Language set: English.',
     pickLang: '🌍 Choose language / Выбери язык:',
@@ -1380,6 +1384,9 @@ const BL = {
     payOk: (n, id, bonus) => `✅ Оплата получена! ${n}.\nВозвращайся на facerate.ru — всё уже обновлено.${id ? `\n\nID заказа: <code>${id}</code> (укажи его, если напишешь в поддержку)` : ''}${bonus ? `\n\n${bonus}` : ''}`,
     firstBuyBonus: (p) => `🎁 Спасибо за первую покупку! Дарим скидку ${p}% на следующую — она уже применена автоматически, просто купи в течение 30 дней.`,
     trackingOpen: '📈 Тебе открылись замеры прогресса: бесплатный замер раз в 30 дней на facerate.ru, вкладка «Ведение». Снимайся в тех же условиях — график покажет, что реально изменилось.',
+    remindFirst: (tip) => `📈 С твоего разбора прошёл месяц.\n\nБесплатный замер уже доступен — те же условия, тот же ракурс. График покажет, что реально изменилось: в зеркале этого не увидеть, лицо меняется медленнее, чем мы на него смотрим.${tip ? `\n\n<b>Над чем ты собирался работать:</b>\n${tip}` : ''}`,
+    remindAgain: (tip) => `📈 Тридцать дней с прошлого замера — следующий бесплатный доступен.\n\nСнимайся при том же свете и в том же ракурсе, иначе график покажет камеру, а не тебя.${tip ? `\n\n<b>Из твоего же отчёта:</b>\n${tip}` : ''}`,
+    remindBtn: '📊 Сделать замер',
     pastBuyerBonus: (p) => `🎁 Небольшой подарок за то, что ты с нами! Начислили скидку ${p}% на следующую покупку — она уже применена автоматически, просто купи в течение 30 дней.`,
     langSet: '🌍 Язык переключён: русский.',
     pickLang: '🌍 Choose language / Выбери язык:',
@@ -2224,6 +2231,9 @@ async function grantPack(env, tgid, pack, L, sp) {
     await env.RATE_LIMIT.put(`gstart:${tgid}`, String(Date.now()));
     const gl = await guideMembers(env);
     if (!gl.includes(String(tgid))) { gl.push(String(tgid)); await env.RATE_LIMIT.put('guidelist', JSON.stringify(gl)); }
+    // Из очереди напоминаний о замере убираем: у владельца гайда своя рассылка по неделям,
+    // два письма про замер подряд — это уже навязчивость.
+    await trackTouch(env, tgid, { remove: true }).catch(() => {});
     if (env.GUIDE_FILE_ID) {
       await tgApi(env, 'sendDocument', { chat_id: tgid, document: env.GUIDE_FILE_ID,
         caption: '📕 Твой гайд на 25 страниц.\n\nНачни с главы 11 — там план на 90 дней. Замеры прогресса и разбор параметров ждут на facerate.ru, в разделе «Ведение».\n\nЗадание на неделю буду присылать сюда каждый понедельник.' }).catch(() => {});
@@ -3236,6 +3246,8 @@ async function recordOrder(env, entry) {
   // Постоянный флаг «хоть раз реально покупал» — даёт полный (не тизерный) бесплатный
   // анализ раз в 3 дня вместо тизера раз в неделю (см. analyze()). Без TTL.
   await env.RATE_LIMIT.put(`everBought:${entry.tgid}`, '1');
+  // Очередь напоминаний о бесплатном замере — ставим с первой же покупки.
+  if (isFirst) await trackTouch(env, entry.tgid).catch(() => {});
   return { id, isFirst };
 }
 
@@ -4640,6 +4652,9 @@ async function progSave(env, tgid, text) {
   texts.push({ t: Date.now(), text: text.slice(0, 4000) });
   await env.RATE_LIMIT.put(`progtxt:${tgid}`, JSON.stringify(texts.slice(-PROG_TXT_MAX)));
 
+  // Замер сделан — следующее напоминание через 30 дней, счётчик писем с нуля.
+  await trackTouch(env, tgid).catch(() => {});
+
   // Персональные советы для заданий бота.
   const tips = extractTips(text);
   if (Object.keys(tips).length) {
@@ -5185,6 +5200,131 @@ async function progressTip(request, env) {
   });
 }
 
+
+/* ───────────────────── Напоминание о бесплатном замере ─────────────────────
+   Замер раз в 30 дней открыт всем, кто платил (см. PROG_FREE_COOLDOWN), но сам по себе
+   он невидим: человек прочитал о нём в момент покупки, когда думал о другом, и через
+   месяц не вспомнит. Напоминание и есть вся ценность механики — без него замер лежит
+   мёртвым грузом.
+
+   Список `tracklist` — [{ id, due, n }]:
+     id  — tgid; due — когда напомнить; n — сколько напоминаний отправлено подряд.
+   Держим ОДНИМ значением, а не ключом на человека: крон ходит раз в час, и 700 отдельных
+   чтений каждый час — это впустую сожжённая квота KV. Здесь одно чтение на весь прогон.
+
+   Правила, чтобы это не превратилось в спам:
+     • владельцам гайда не шлём вовсе — у них своя еженедельная рассылка;
+     • не больше TRACK_REMIND_MAX писем подряд: не вернулся дважды — значит не вернётся;
+     • только дневные часы по Москве;
+     • после замера счётчик обнуляется, и цикл начинается заново.
+   ------------------------------------------------------------------------- */
+const TRACK_REMIND_MAX      = 2;                 // писем подряд, пока человек не вернулся
+const TRACK_REMIND_PER_RUN  = 40;                // за один прогон крона
+const TRACK_HOUR_FROM       = 11;                // по Москве
+const TRACK_HOUR_TO         = 21;
+
+async function trackList(env) { return getList(env, 'tracklist'); }
+
+// Поставить человека в очередь напоминаний (первая покупка) или сдвинуть срок (после замера).
+// Владельцев гайда не держим вовсе: у них своя рассылка, и два письма о замере подряд —
+// это уже навязчивость.
+async function trackTouch(env, tgid, { remove = false } = {}) {
+  const id = String(tgid);
+  const list = await trackList(env);
+  const i = list.findIndex((x) => String(x.id) === id);
+  if (remove) {
+    if (i < 0) return;
+    list.splice(i, 1);
+  } else {
+    const due = Date.now() + PROG_FREE_COOLDOWN;
+    if (i >= 0) list[i] = { id, due, n: 0 };
+    else list.push({ id, due, n: 0 });
+  }
+  await putList(env, 'tracklist', list.slice(-5000));
+}
+
+// Разовое наполнение списка теми, кто купил ДО появления механики. Идёт страницами и
+// запоминает курсор: ключей тысячи, за один прогон крона всё не перебрать.
+async function trackSeed(env) {
+  if (await env.RATE_LIMIT.get('tracklistSeeded')) return;
+  const list = await trackList(env);
+  const known = new Set(list.map((x) => String(x.id)));
+  let cursor = (await env.RATE_LIMIT.get('tracklistCursor')) || undefined;
+  for (let page = 0; page < 5; page++) {
+    const r = await env.RATE_LIMIT.list({ prefix: 'everBought:', cursor, limit: 1000 });
+    for (const k of r.keys) {
+      const id = k.name.slice('everBought:'.length);
+      if (!id || known.has(id)) continue;
+      known.add(id);
+      // Купившим давно напоминаем не прямо сейчас, а в ближайшие сутки вразбивку:
+      // 700 писем одной пачкой — это и лимиты Telegram, и выглядит как рассылка-спам.
+      list.push({ id, due: Date.now() + Math.floor(Math.random() * 24 * 3600e3), n: 0 });
+    }
+    cursor = r.cursor;
+    if (r.list_complete) {
+      await env.RATE_LIMIT.put('tracklistSeeded', '1');
+      await env.RATE_LIMIT.delete('tracklistCursor');
+      await putList(env, 'tracklist', list.slice(-5000));
+      console.log('tracklist seeded', JSON.stringify({ total: list.length }));
+      return;
+    }
+  }
+  if (cursor) await env.RATE_LIMIT.put('tracklistCursor', cursor);
+  await putList(env, 'tracklist', list.slice(-5000));
+}
+
+async function trackCron(env) {
+  await trackSeed(env);
+  // Московский час: у Cloudflare время UTC, а писать человеку в 4 утра нельзя.
+  const hourMsk = (new Date().getUTCHours() + 3) % 24;
+  if (hourMsk < TRACK_HOUR_FROM || hourMsk >= TRACK_HOUR_TO) return;
+
+  const list = await trackList(env);
+  const now = Date.now();
+  let sent = 0, changed = false;
+
+  for (const row of list) {
+    if (sent >= TRACK_REMIND_PER_RUN) break;
+    if (!row || row.due > now) continue;
+    if ((row.n || 0) >= TRACK_REMIND_MAX) continue;
+
+    const tgid = row.id;
+    // Купил гайд после того, как попал в список — у него своя рассылка.
+    if ((await env.RATE_LIMIT.get(`guide:${tgid}`)) === '1') { row.n = TRACK_REMIND_MAX; changed = true; continue; }
+
+    // Уже сделал замер сам — двигаем срок и молчим.
+    const plist = await progList(env, tgid);
+    const last = plist[plist.length - 1];
+    if (last && now - last.t < PROG_FREE_COOLDOWN) {
+      row.due = last.t + PROG_FREE_COOLDOWN; row.n = 0; changed = true; continue;
+    }
+
+    const L = await userLang(env, tgid);
+    const b = BL[L] || BL.en;
+    // Личный совет из его же разбора, если он когда-то делал замер. Общая фраза, если нет:
+    // выдумывать «твою слабую зону» без данных нельзя, это ровно то, за что нам не верят.
+    let tips = {};
+    try { tips = JSON.parse(await env.RATE_LIMIT.get(`tips:${tgid}`) || '{}'); } catch {}
+    const firstTip = Object.values(tips).flat().filter(Boolean)[0] || '';
+    const text = last ? b.remindAgain(firstTip) : b.remindFirst(firstTip);
+
+    const r = await tgApi(env, 'sendMessage', {
+      chat_id: tgid, parse_mode: 'HTML', text,
+      reply_markup: { inline_keyboard: [[{ text: b.remindBtn, url: 'https://facerate.ru/#progress' }]] },
+    }).catch(() => ({ ok: false }));
+
+    // Бот заблокирован или чат удалён — больше не пытаемся.
+    if (!r.ok && /blocked|chat not found|deactivated/i.test(r.description || '')) {
+      row.n = TRACK_REMIND_MAX; changed = true; continue;
+    }
+    row.n = (row.n || 0) + 1;
+    row.due = now + PROG_FREE_COOLDOWN;
+    changed = true;
+    sent++;
+  }
+  if (changed) await putList(env, 'tracklist', list);
+  if (sent) console.log('track reminders', JSON.stringify({ sent, hourMsk }));
+}
 
 /* ============================================================================
    [10] РАССЫЛКА БОТА · план недели и напоминание о замере
