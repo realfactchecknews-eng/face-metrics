@@ -58,7 +58,7 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // оставлены на прежнем уровне (h1/d1 почти не покупают, задирать их бессмысленно). old* у
   // p1 = фактическая предыдущая цена (зачёркивается пока активна акция, см. SALE_ENDS_AT).
   // У остальных old* равны текущей цене — зачёркивания не будет (packsKb: `old && old > cur`).
-  p1: { type: 'credits', credits: 1, stars: 99,  rub: 99,   lavaRub: 99,   label: '1 анализ', labelEn: '1 analysis', oldStars: 70,   oldRub: 70,   oldLavaRub: 70 },
+  p1: { type: 'credits', credits: 1, stars: 79,  rub: 79,   lavaRub: 79,   label: '1 анализ', labelEn: '1 analysis', oldStars: 99,   oldRub: 99,   oldLavaRub: 99 },
   p5: { type: 'credits', credits: 5, stars: 149,  rub: 149,  lavaRub: 149,  label: '5 анализов', labelEn: '5 analyses', oldStars: 149,   oldRub: 149,  oldLavaRub: 149 },
   h1: { type: 'unlim',  hours: 1,    stars: 199, rub: 199,  lavaRub: 199,  label: 'Безлимит на час', labelEn: 'Hour unlimited', oldStars: 199,  oldRub: 199,  oldLavaRub: 199 },
   d1: { type: 'unlim',  hours: 24,   stars: 299, rub: 299,  lavaRub: 299,  label: 'Безлимит на день', labelEn: 'Day unlimited', oldStars: 299,  oldRub: 299,  oldLavaRub: 299 },
@@ -79,7 +79,14 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
 // Недельная акция на новые цены выше — по истечении можно вернуть old*-значения в основные
 // поля (или оставить как есть, тогда акция станет постоянной ценой). Таймер на сайте/в боте
 // считает именно до этой даты. Поставь актуальную дату при продлении/завершении акции.
-const SALE_ENDS_AT = Date.parse('2026-07-28T12:00:00+03:00');
+// Неделя по 79 при обычной цене 99 (02.10-09.10.2026). Пока эта дата в будущем, бот и
+// пейволл сами рисуют зачёркнутую old*-цену и строку «до повышения» — отдельного кода нет.
+// Зачёркнутые 99 НАСТОЯЩИЕ: именно столько мы брали 30.09-02.10, и ровно столько вернётся
+// 09.10. Рисовать зачёркнутой цену, которой никогда не было, нельзя — это и тёмный паттерн,
+// и недостоверные сведения о цене по ЗоЗПП.
+// Смысл акции двойной: вернуть срочность и замерить эластичность — 4 покупки в сутки на 99
+// против 12-18 на 70. Если на 79 вернутся 12+, вопрос о цене закрыт цифрами.
+const SALE_ENDS_AT = Date.parse('2026-10-09T12:00:00+03:00');
 // Способы оплаты, доступные при заданных секретах (stars — всегда).
 function lavaConfigured(env) { return !!(env.LAVA_API_KEY && env.LAVA_OFFER_IDS); }
 function enabledMethods(env) {

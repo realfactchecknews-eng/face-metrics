@@ -3489,13 +3489,14 @@ function showPaywall(state, st) {
         var p = packs[id]; if (!p) return;
         var unit = method === "stars" ? "⭐" : "₽";
         var price = rawPrice(p) + unit;
-        var top = id === "m1" ? (" <i class='pw-hit'>" + (saleEndsAt && saleEndsAt > Date.now() ? "🔥 хит скидки" : "top") + "</i>") : "";
         var was = "";
         // Зачёркнутая ОБЫЧНАЯ цена (до недельной акции), пока акция активна.
         var oldPrice = rawOldPrice(p);
-        if (saleEndsAt && saleEndsAt > Date.now() && oldPrice && oldPrice > rawPrice(p)) {
-          was = " <s class='pw-was'>" + oldPrice + unit + "</s>";
-        }
+        var onSale = !!(saleEndsAt && saleEndsAt > Date.now() && oldPrice && oldPrice > rawPrice(p));
+        if (onSale) was = " <s class='pw-was'>" + oldPrice + unit + "</s>";
+        // «Хит скидки» — только если этот тариф ДЕЙСТВИТЕЛЬНО подешевел. Раньше подпись
+        // висела на m1 при любой активной акции, даже когда его цена не менялась.
+        var top = id === "m1" ? (" <i class='pw-hit'>" + (onSale ? "🔥 хит скидки" : "top") + "</i>") : "";
         btn(packNames[id] + " — " + was + " " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
       }
       packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1");
