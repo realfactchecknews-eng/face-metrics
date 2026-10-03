@@ -48,4 +48,15 @@ r = parse('/grantuser 1 @a   @b    @c');               // лишние проб�
 assert.deepStrictEqual(r.names, ['a', 'b', 'c']);
 assert.strictEqual(r.note, '');
 assert.ok(Number.isNaN(parse('/grantuser @a @b').n), 'без количества команда обязана отбиться');
+// ── Разовое наполнение указателя из старых сессий ──
+// Без него указатель начинает жизнь пустым, и человек, пользующийся сервисом год,
+// выглядит незнакомцем — на этом 03.10 провалилась выдача призов конкурса.
+const seed = w.slice(w.indexOf('async function unameSeed'), w.indexOf('async function getSession'));
+assert.ok(/prefix: 'sess:'/.test(seed), 'ники берутся не из сессий');
+assert.ok(/unameSeeded/.test(seed), 'наполнение не одноразовое — будет гонять впустую вечно');
+assert.ok(/unameCursor/.test(seed), 'нет курсора: десятки тысяч ключей за один прогон не перебрать');
+assert.ok(/Promise\.all/.test(seed), 'чтения последовательные — это минуты ожидания на ровном месте');
+assert.ok(/ctx\.waitUntil\(unameSeed\(env\)/.test(w), 'наполнение не подключено к крону');
+assert.ok(/text\.startsWith\('\/unameseed'\)/.test(w), 'нет команды, чтобы не ждать крон во время раздачи призов');
+
 console.log('/grantuser: все проверки прошли');

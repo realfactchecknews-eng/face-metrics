@@ -150,6 +150,7 @@ export default {
     ctx.waitUntil(checkGiveawayDraw(env));
     ctx.waitUntil(progressCron(env));
     ctx.waitUntil(trackCron(env));
+    ctx.waitUntil(unameSeed(env).catch(() => {}));
     ctx.waitUntil(checkOpenRouterBalance(env));
   },
 };
@@ -780,6 +781,50 @@ async function resolveUsername(env, username) {
     }
   }
   return null;
+}
+
+// Разовое наполнение указателя ников из уже существующих сессий. Сами сессии (`sess:*`)
+// хранят {id, username} и живут 30 дней — то есть покрывают всех, кто за последний месяц
+// входил на сайт. Без этого указатель начинает жизнь пустым, и человек, пользующийся
+// сервисом год, выглядит незнакомцем (на этом 03.10 провалилась выдача призов конкурса).
+// Идём страницами по курсору: ключей десятки тысяч, за один прогон не перебрать.
+const UNAME_SEED_KEYS_PER_RUN = 2000;   // за один вызов
+const UNAME_SEED_BATCH = 50;            // параллельных чтений
+
+async function unameSeed(env, keysPerRun = UNAME_SEED_KEYS_PER_RUN) {
+  if (await env.RATE_LIMIT.get('unameSeeded')) return { done: true, added: 0, scanned: 0 };
+  let cursor = (await env.RATE_LIMIT.get('unameCursor')) || undefined;
+  let scanned = 0, added = 0, complete = false;
+
+  while (scanned < keysPerRun) {
+    const r = await env.RATE_LIMIT.list({ prefix: 'sess:', cursor, limit: 1000 });
+    const names = r.keys.map((k) => k.name);
+    // Читаем пачками: 2000 последовательных чтений — это минуты ожидания на ровном месте.
+    for (let i = 0; i < names.length; i += UNAME_SEED_BATCH) {
+      const chunk = names.slice(i, i + UNAME_SEED_BATCH);
+      const rows = await Promise.all(chunk.map((n) => env.RATE_LIMIT.get(n).catch(() => null)));
+      const writes = [];
+      for (const raw of rows) {
+        if (!raw) continue;
+        let u; try { u = JSON.parse(raw); } catch { continue; }
+        if (!u || !u.id || !u.username) continue;
+        writes.push(rememberUsername(env, u.username, u.id).then(() => { added++; }).catch(() => {}));
+      }
+      await Promise.all(writes);
+    }
+    scanned += names.length;
+    cursor = r.cursor;
+    if (r.list_complete) { complete = true; break; }
+  }
+
+  if (complete) {
+    await env.RATE_LIMIT.put('unameSeeded', '1');
+    await env.RATE_LIMIT.delete('unameCursor');
+  } else if (cursor) {
+    await env.RATE_LIMIT.put('unameCursor', cursor);
+  }
+  console.log('uname seed', JSON.stringify({ scanned, added, complete }));
+  return { done: complete, added, scanned };
 }
 
 async function getSession(env, token) {
@@ -1866,6 +1911,17 @@ async function tgWebhook(request, env) {
   }
 
 
+
+  // ── Админ: /unameseed — прогнать наполнение указателя ников прямо сейчас ──
+  // Крон делает то же самое раз в час, но когда идёт раздача призов, ждать час глупо.
+  if (text.startsWith('/unameseed') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: '⏳ Собираю ники из сессий...' });
+    const r = await unameSeed(env, 6000);
+    await tgApi(env, 'sendMessage', { chat_id: chat, parse_mode: 'HTML',
+      text: `🔎 <b>Указатель ников</b>\n\nПросмотрено сессий: ${r.scanned}\nДобавлено ников: ${r.added}\n`
+          + (r.done ? '✅ Готово, все сессии перебраны.' : '⏳ Ещё не всё — запусти команду снова или подожди крон (раз в час).') });
+    return new Response('ok');
+  }
   // ── Админ: /grantuser N @user1 @user2 ... | текст — начислить анализы по @никам ──
   // Для конкурсов в канале: у нас есть ники участников, а tgid нет, и /testgrant просит
   // именно tgid. Telegram id по @нику обычного человека НЕ отдаёт (getChat умеет только
