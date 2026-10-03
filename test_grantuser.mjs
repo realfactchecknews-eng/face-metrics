@@ -59,4 +59,14 @@ assert.ok(/Promise\.all/.test(seed), 'чтения последовательн�
 assert.ok(/ctx\.waitUntil\(unameSeed\(env\)/.test(w), 'наполнение не подключено к крону');
 assert.ok(/text\.startsWith\('\/unameseed'\)/.test(w), 'нет команды, чтобы не ждать крон во время раздачи призов');
 
+// Долгая работа не должна висеть на ответе вебхуку: Telegram не дожидается, считает
+// доставку неудачной и шлёт тот же апдейт снова — получается пачка «Собираю ники...»
+// без результата и несколько параллельных прогонов вместо одного.
+assert.ok(/async function tgWebhook\(request, env, ctx\)/.test(w), 'вебхук не получает ctx');
+assert.ok(/tgWebhook\(request, env, ctx\)/.test(w), 'ctx не передаётся из роутера');
+const seedCmd = w.slice(w.indexOf("text.startsWith('/unameseed')"), w.indexOf("// ── Админ: /grantuser N @user1"));
+assert.ok(/ctx\.waitUntil\(job\)/.test(seedCmd), 'перебор сессий всё ещё держит ответ вебхуку');
+assert.ok(seedCmd.indexOf('waitUntil') < seedCmd.indexOf('Собираю ники'), 'работа запускается после ответа — отчёт не придёт');
+assert.ok(/if \(!ctx\) await job/.test(seedCmd), 'без ctx работа потеряется молча');
+
 console.log('/grantuser: все проверки прошли');

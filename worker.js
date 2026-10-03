@@ -116,7 +116,7 @@ export default {
     try {
       if (path === '/admin-stats/data') return await adminStatsData(request, env);
       if (path === '/setup-webhook') return await setupWebhook(request, env);
-      if (path === '/tg-webhook') return await tgWebhook(request, env);
+      if (path === '/tg-webhook') return await tgWebhook(request, env, ctx);
       if (path === '/crypto-webhook') return await cryptoWebhook(request, env);
       if (path === '/lava-webhook') return await lavaWebhook(request, env);
       if (path === '/support-webhook') return await supportWebhook(request, env);
@@ -1581,7 +1581,7 @@ function packsKb(method, L, discPct) {
   return { inline_keyboard: rows };
 }
 
-async function tgWebhook(request, env) {
+async function tgWebhook(request, env, ctx) {
   // Проверка, что вебхук реально от Telegram (секретный заголовок).
   if (env.TG_WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TG_WEBHOOK_SECRET) {
     return new Response('forbidden', { status: 403 });
@@ -1915,11 +1915,21 @@ async function tgWebhook(request, env) {
   // ── Админ: /unameseed — прогнать наполнение указателя ников прямо сейчас ──
   // Крон делает то же самое раз в час, но когда идёт раздача призов, ждать час глупо.
   if (text.startsWith('/unameseed') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
-    await tgApi(env, 'sendMessage', { chat_id: chat, text: '⏳ Собираю ники из сессий...' });
-    const r = await unameSeed(env, 6000);
-    await tgApi(env, 'sendMessage', { chat_id: chat, parse_mode: 'HTML',
-      text: `🔎 <b>Указатель ников</b>\n\nПросмотрено сессий: ${r.scanned}\nДобавлено ников: ${r.added}\n`
-          + (r.done ? '✅ Готово, все сессии перебраны.' : '⏳ Ещё не всё — запусти команду снова или подожди крон (раз в час).') });
+    // Перебор десятков тысяч сессий не укладывается в срок ответа на вебхук: Telegram
+    // не дожидается, считает доставку неудачной и шлёт тот же апдейт снова — отсюда
+    // пачка одинаковых «Собираю ники...» без результата. Поэтому отвечаем сразу, а
+    // работу уносим в waitUntil и присылаем отчёт отдельным сообщением.
+    const job = (async () => {
+      const r = await unameSeed(env, 6000);
+      await tgApi(env, 'sendMessage', { chat_id: chat, parse_mode: 'HTML',
+        text: `🔎 <b>Указатель ников</b>\n\nПросмотрено сессий: ${r.scanned}\nДобавлено ников: ${r.added}\n`
+            + (r.done ? '✅ Готово, все сессии перебраны.' : '⏳ Ещё не всё — запусти команду снова или подожди крон (раз в час).') })
+        .catch(() => {});
+    })();
+    if (ctx) ctx.waitUntil(job);
+    await tgApi(env, 'sendMessage', { chat_id: chat,
+      text: '⏳ Собираю ники из сессий. Отчёт пришлю следующим сообщением — это занимает до минуты, команду повторять не нужно.' });
+    if (!ctx) await job;
     return new Response('ok');
   }
   // ── Админ: /grantuser N @user1 @user2 ... | текст — начислить анализы по @никам ──
