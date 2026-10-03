@@ -686,6 +686,7 @@ async function authTg(request, env) {
   const token = crypto.randomUUID() + '-' + crypto.randomUUID();
   const user = { id: u.id, first_name: u.first_name || '', username: u.username || '', photo_url: u.photo_url || '' };
   await env.RATE_LIMIT.put(`sess:${token}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 30 });
+  await rememberUsername(env, user.username, user.id).catch(() => {});
   return json(await statusFor(env, user, token));
 }
 
@@ -752,6 +753,33 @@ async function statusFor(env, user, token, fresh) {
     saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0,
     unlimUntil: unlimUntil > Date.now() ? unlimUntil : 0,
   };
+}
+
+// Указатель «ник -> tgid». Телеграм НЕ умеет отдавать id по @нику обычного человека:
+// getChat работает только для каналов и супергрупп. Поэтому ники запоминаем сами —
+// каждый раз, когда человек пишет боту или входит на сайте. Без TTL: ник нужен спустя
+// месяцы, когда проводим конкурс. Ник — штука меняемая, поэтому запись перетирается:
+// у ника всегда тот id, кто носил его последним.
+async function rememberUsername(env, username, tgid) {
+  const u = String(username || '').replace(/^@/, '').trim().toLowerCase();
+  if (!u || !tgid || !env.RATE_LIMIT) return;
+  await env.RATE_LIMIT.put(`uname:${u}`, String(tgid));
+}
+
+// Ник -> tgid: сначала свой указатель, потом журнал платежей (одно чтение, покрывает всех,
+// кто когда-либо платил — их ники лежат прямо в записях заказов).
+async function resolveUsername(env, username) {
+  const u = String(username || '').replace(/^@/, '').trim().toLowerCase();
+  if (!u) return null;
+  const hit = await env.RATE_LIMIT.get(`uname:${u}`);
+  if (hit) return hit;
+  for (const t of await getList(env, 'translog')) {
+    if ((t.username || '').toLowerCase().replace(/^@/, '') === u && t.tgid) {
+      await rememberUsername(env, u, t.tgid);
+      return String(t.tgid);
+    }
+  }
+  return null;
 }
 
 async function getSession(env, token) {
@@ -1575,6 +1603,8 @@ async function tgWebhook(request, env) {
   // а после put он есть у всех.
   const isNewUser = env.RATE_LIMIT ? !(await env.RATE_LIMIT.get(`user:${tgid}`)) : false;
   if (env.RATE_LIMIT) await env.RATE_LIMIT.put(`user:${tgid}`, '1');
+  // Ник в указатель: по нему потом раздаём призы конкурсов (см. resolveUsername).
+  await rememberUsername(env, msg.from.username, tgid).catch(() => {});
   const L = await userLang(env, tgid);
   const b = BL[L];
 
@@ -1838,9 +1868,10 @@ async function tgWebhook(request, env) {
 
   // ── Админ: /grantuser N @user1 @user2 ... | текст — начислить анализы по @никам ──
   // Для конкурсов в канале: у нас есть ники участников, а tgid нет, и /testgrant просит
-  // именно tgid. Ник в id превращает сам Telegram (getChat). Если он не отвечает —
-  // человек не нажимал Start у бота, и мы ему всё равно не смогли бы написать: бот не
-  // может первым начать переписку. Поэтому неудачи просто перечисляем в отчёте.
+  // именно tgid. Telegram id по @нику обычного человека НЕ отдаёт (getChat умеет только
+  // каналы и супергруппы — проверено 03.10 на 12 никах, не нашёлся ни один), поэтому
+  // резолвим по своему указателю uname: (см. rememberUsername/resolveUsername).
+  // Кого в указателе нет — перечисляем в отчёте, молча терять человека нельзя.
   if (text.startsWith('/grantuser') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
     const [head, tail] = text.slice(10).split('|');
     const parts = (head || '').trim().split(/\s+/).filter(Boolean);
@@ -1851,14 +1882,13 @@ async function tgWebhook(request, env) {
       await tgApi(env, 'sendMessage', { chat_id: chat, text:
         'Начислить анализы по никам:\n\n/grantuser КОЛИЧЕСТВО @ник @ник ... | текст сообщения\n\n'
         + 'Например:\n/grantuser 1 @vasya @petya | Твой рейт совпал с нашим — держи анализ.\n\n'
-        + 'Текст необязателен. Ник в id превращает Telegram, поэтому человек должен был\n'
-        + 'хоть раз нажать Start у бота — иначе ему и сообщение не доставить.' });
+        + 'Текст необязателен. Ник ищется в нашем указателе: он заполняется, когда человек\n'
+        + 'пишет любому нашему боту или входит на сайте. Telegram id по @нику не отдаёт.' });
       return new Response('ok');
     }
     const ok = [], fail = [];
     for (const name of names.slice(0, 50)) {
-      const chatInfo = await tgApi(env, 'getChat', { chat_id: '@' + name }).catch(() => null);
-      const uid = chatInfo?.ok ? chatInfo.result?.id : null;
+      const uid = await resolveUsername(env, name);
       if (!uid) { fail.push(name); continue; }
       const cur = parseInt(await env.RATE_LIMIT.get(`credits:${uid}`) || '0', 10);
       await env.RATE_LIMIT.put(`credits:${uid}`, String(cur + n));
@@ -1879,7 +1909,7 @@ async function tgWebhook(request, env) {
       text: `🎁 <b>Начислено по ${n} анализ(а)</b>\n\n`
           + (ok.length ? `✅ ${ok.length}: ${escHtml(ok.join(', '))}\n\n` : '')
           + (fail.length ? `⚠️ не найдены (${fail.length}): ${escHtml(fail.join(', '))}\n`
-             + '<i>Такой ник Telegram не отдал: человек не нажимал Start у бота, сменил ник или закрыл профиль. Попроси его открыть бота и повтори команду.</i>' : '')
+             + '<i>Этих ников нет в нашем указателе. Telegram не умеет отдавать id по @нику обычного человека, поэтому ник появляется у нас только после того, как человек написал любому нашему боту или вошёл на сайте. Попроси их написать боту что угодно и повтори команду.</i>' : '')
           + '\n<i>В translog не пишется, выручку не портит.</i>' });
     return new Response('ok');
   }
@@ -3144,6 +3174,7 @@ async function mediaWebhook(request, env) {
 
   const msg = upd.message;
   if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
+  await rememberUsername(env, msg.from.username, msg.from.id).catch(() => {});
   const chat = msg.chat.id, tgid = String(msg.from.id);
   const text = (msg.text || '').trim();
   const isAdmin = isAdminId(env, tgid);
@@ -3504,6 +3535,7 @@ async function supportWebhook(request, env) {
 
   const msg = upd.message;
   if (!msg || !msg.from || msg.from.is_bot) return new Response('ok');
+  await rememberUsername(env, msg.from.username, msg.from.id).catch(() => {});
   const fromId = String(msg.from.id);
   const adminId = fromId; // используем chat_id самого пишущего админа для ответов ему
   const L = await userLang(env, msg.from.id);

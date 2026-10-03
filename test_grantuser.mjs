@@ -9,8 +9,17 @@ assert.ok(/ADMIN_USERNAMES\.includes\(msg\.from\.username \|\| ''\)/.test(
   w.slice(w.indexOf("text.startsWith('/grantuser')") - 200, w.indexOf("text.startsWith('/grantuser')") + 200)),
   'команда начисления доступна не только админу');
 
-// Ник -> id отдаёт сам Telegram: своей таблицы ников у нас нет.
-assert.ok(/getChat/.test(block), 'ник не превращается в id');
+// Ник -> id: только по своему указателю. Telegram id по @нику обычного человека не отдаёт,
+// getChat умеет лишь каналы — на 12 реальных никах не нашёлся ни один.
+assert.ok(/resolveUsername/.test(block), 'ник не превращается в id');
+assert.ok(!/getChat/.test(block), 'вернулся getChat — он по никам людей не работает и врёт о причине');
+
+// Указатель должен наполняться отовсюду, где мы вообще видим ник.
+assert.ok(w.split('rememberUsername(env,').length - 1 >= 4,
+  'ник запоминается не во всех точках входа (три бота + вход на сайте)');
+const res = w.slice(w.indexOf('async function resolveUsername'), w.indexOf('async function getSession'));
+assert.ok(/toLowerCase\(\)/.test(res), 'регистр ника не нормализуется — @Vasya и @vasya разъедутся');
+assert.ok(/translog/.test(res), 'нет запасного пути через журнал платежей');
 assert.ok(/replace\(\/\^@\/, ''\)/.test(block), 'лидирующая @ не срезается — getChat получит @@ник');
 // Потолки: случайная опечатка не должна раздать по 500 анализов и не должна уйти в тысячу человек.
 assert.ok(/n > 50/.test(block), 'нет потолка на количество анализов');
