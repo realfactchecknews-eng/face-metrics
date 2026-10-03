@@ -55,6 +55,11 @@ const seed = w.slice(w.indexOf('async function unameSeed'), w.indexOf('async fun
 assert.ok(/prefix: 'sess:'/.test(seed), 'ники берутся не из сессий');
 assert.ok(/unameSeeded/.test(seed), 'наполнение не одноразовое — будет гонять впустую вечно');
 assert.ok(/unameCursor/.test(seed), 'нет курсора: десятки тысяч ключей за один прогон не перебрать');
+// Курсор обязан сохраняться после КАЖДОЙ страницы: иначе прогресс переживает только
+// полностью доработавший вызов, а убитый по времени начинает с начала — и так вечно.
+const loop = seed.slice(seed.indexOf('while (scanned <'), seed.indexOf('console.log('));
+assert.ok(/put\('unameCursor', cursor\)/.test(loop), 'курсор сохраняется вне цикла — прогресс будет теряться');
+assert.ok(/list_complete/.test(loop) && /unameSeeded/.test(loop), 'признак завершения ставится вне цикла');
 assert.ok(/Promise\.all/.test(seed), 'чтения последовательные — это минуты ожидания на ровном месте');
 assert.ok(/ctx\.waitUntil\(unameSeed\(env\)/.test(w), 'наполнение не подключено к крону');
 assert.ok(/text\.startsWith\('\/unameseed'\)/.test(w), 'нет команды, чтобы не ждать крон во время раздачи призов');
@@ -71,5 +76,7 @@ assert.ok(/ctx\.waitUntil\(job\)/.test(seedCmd), 'перебор сессий в
 assert.ok(seedCmd.indexOf('ctx.waitUntil(job)') < seedCmd.indexOf("tgApi(env, 'sendMessage', { chat_id: chat,\n      text: '⏳"),
   'работа ставится после ответа — отчёт не придёт');
 assert.ok(/if \(!ctx\) await job/.test(seedCmd), 'без ctx работа потеряется молча');
+// Падение фоновой задачи должно быть ВИДНО: иначе это выглядит как «команда молчит».
+assert.ok(/catch \(e\)/.test(seedCmd) && /упал/.test(seedCmd), 'ошибка сбора ников не доходит до админа');
 
 console.log('/grantuser: все проверки прошли');

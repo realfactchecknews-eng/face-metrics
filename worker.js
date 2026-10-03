@@ -814,14 +814,16 @@ async function unameSeed(env, keysPerRun = UNAME_SEED_KEYS_PER_RUN) {
     }
     scanned += names.length;
     cursor = r.cursor;
-    if (r.list_complete) { complete = true; break; }
-  }
-
-  if (complete) {
-    await env.RATE_LIMIT.put('unameSeeded', '1');
-    await env.RATE_LIMIT.delete('unameCursor');
-  } else if (cursor) {
-    await env.RATE_LIMIT.put('unameCursor', cursor);
+    // Курсор сохраняем ПОСЛЕ КАЖДОЙ страницы, а не в конце прогона. Иначе прогресс
+    // переживает только полностью доработавший вызов: убитый по времени начинает
+    // с начала, топчется по тем же сессиям и до конца не доходит никогда.
+    if (r.list_complete) {
+      complete = true;
+      await env.RATE_LIMIT.put('unameSeeded', '1');
+      await env.RATE_LIMIT.delete('unameCursor');
+      break;
+    }
+    if (cursor) await env.RATE_LIMIT.put('unameCursor', cursor);
   }
   console.log('uname seed', JSON.stringify({ scanned, added, complete }));
   return { done: complete, added, scanned };
@@ -1920,10 +1922,15 @@ async function tgWebhook(request, env, ctx) {
     // пачка одинаковых «Собираю ники...» без результата. Поэтому отвечаем сразу, а
     // работу уносим в waitUntil и присылаем отчёт отдельным сообщением.
     const job = (async () => {
-      const r = await unameSeed(env, 6000);
+      let r, err = '';
+      // Без своего try падение внутри фоновой задачи не видно ВООБЩЕ: отчёт просто
+      // не приходит, и выглядит это как «команда молчит».
+      try { r = await unameSeed(env, 3000); } catch (e) { err = String(e && e.message || e); }
       await tgApi(env, 'sendMessage', { chat_id: chat, parse_mode: 'HTML',
-        text: `🔎 <b>Указатель ников</b>\n\nПросмотрено сессий: ${r.scanned}\nДобавлено ников: ${r.added}\n`
-            + (r.done ? '✅ Готово, все сессии перебраны.' : '⏳ Ещё не всё — запусти команду снова или подожди крон (раз в час).') })
+        text: err
+          ? `⚠️ <b>Сбор ников упал</b>\n\n<code>${escHtml(err.slice(0, 300))}</code>\n\nПройденное не потеряно — запусти команду снова.`
+          : `🔎 <b>Указатель ников</b>\n\nПросмотрено сессий: ${r.scanned}\nДобавлено ников: ${r.added}\n`
+            + (r.done ? '✅ Готово, все сессии перебраны.' : '⏳ Ещё не всё — запусти команду снова (прогресс сохранён).') })
         .catch(() => {});
     })();
     if (ctx) ctx.waitUntil(job);
