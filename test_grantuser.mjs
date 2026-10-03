@@ -66,7 +66,10 @@ assert.ok(/async function tgWebhook\(request, env, ctx\)/.test(w), 'вебхук
 assert.ok(/tgWebhook\(request, env, ctx\)/.test(w), 'ctx не передаётся из роутера');
 const seedCmd = w.slice(w.indexOf("text.startsWith('/unameseed')"), w.indexOf("// ── Админ: /grantuser N @user1"));
 assert.ok(/ctx\.waitUntil\(job\)/.test(seedCmd), 'перебор сессий всё ещё держит ответ вебхуку');
-assert.ok(seedCmd.indexOf('waitUntil') < seedCmd.indexOf('Собираю ники'), 'работа запускается после ответа — отчёт не придёт');
+// Ответ Telegram должен уходить ПОСЛЕ постановки работы в waitUntil. Сравниваем по
+// вызову sendMessage, а не по тексту: та же фраза встречается в комментарии выше.
+assert.ok(seedCmd.indexOf('ctx.waitUntil(job)') < seedCmd.indexOf("tgApi(env, 'sendMessage', { chat_id: chat,\n      text: '⏳"),
+  'работа ставится после ответа — отчёт не придёт');
 assert.ok(/if \(!ctx\) await job/.test(seedCmd), 'без ctx работа потеряется молча');
 
 console.log('/grantuser: все проверки прошли');
