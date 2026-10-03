@@ -1835,6 +1835,55 @@ async function tgWebhook(request, env) {
     return new Response('ok');
   }
 
+
+  // ── Админ: /grantuser N @user1 @user2 ... | текст — начислить анализы по @никам ──
+  // Для конкурсов в канале: у нас есть ники участников, а tgid нет, и /testgrant просит
+  // именно tgid. Ник в id превращает сам Telegram (getChat). Если он не отвечает —
+  // человек не нажимал Start у бота, и мы ему всё равно не смогли бы написать: бот не
+  // может первым начать переписку. Поэтому неудачи просто перечисляем в отчёте.
+  if (text.startsWith('/grantuser') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const [head, tail] = text.slice(10).split('|');
+    const parts = (head || '').trim().split(/\s+/).filter(Boolean);
+    const n = parseInt(parts[0], 10);
+    const names = parts.slice(1).map((s) => s.replace(/^@/, '').trim()).filter(Boolean);
+    const note = (tail || '').trim();
+    if (!n || n < 1 || n > 50 || !names.length) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text:
+        'Начислить анализы по никам:\n\n/grantuser КОЛИЧЕСТВО @ник @ник ... | текст сообщения\n\n'
+        + 'Например:\n/grantuser 1 @vasya @petya | Твой рейт совпал с нашим — держи анализ.\n\n'
+        + 'Текст необязателен. Ник в id превращает Telegram, поэтому человек должен был\n'
+        + 'хоть раз нажать Start у бота — иначе ему и сообщение не доставить.' });
+      return new Response('ok');
+    }
+    const ok = [], fail = [];
+    for (const name of names.slice(0, 50)) {
+      const chatInfo = await tgApi(env, 'getChat', { chat_id: '@' + name }).catch(() => null);
+      const uid = chatInfo?.ok ? chatInfo.result?.id : null;
+      if (!uid) { fail.push(name); continue; }
+      const cur = parseInt(await env.RATE_LIMIT.get(`credits:${uid}`) || '0', 10);
+      await env.RATE_LIMIT.put(`credits:${uid}`, String(cur + n));
+      const L = await userLang(env, uid);
+      const word = L === 'ru'
+        ? `🎁 <b>Тебе начислено анализов: ${n}</b>`
+        : `🎁 <b>Analyses added: ${n}</b>`;
+      const where = L === 'ru'
+        ? 'Открывай facerate.ru — они уже на счету.'
+        : 'Open facerate.ru — already on your balance.';
+      const r = await tgApi(env, 'sendMessage', { chat_id: uid, parse_mode: 'HTML',
+        text: `${word}\n\n${note ? escHtml(note) + '\n\n' : ''}${where}` }).catch(() => ({ ok: false }));
+      // Начисление уже прошло — если сообщение не доставилось, это не повод его откатывать,
+      // но в отчёте это должно быть видно.
+      ok.push(name + (r?.ok ? '' : ' (начислено, сообщение не доставлено)'));
+    }
+    await tgApi(env, 'sendMessage', { chat_id: chat, parse_mode: 'HTML',
+      text: `🎁 <b>Начислено по ${n} анализ(а)</b>\n\n`
+          + (ok.length ? `✅ ${ok.length}: ${escHtml(ok.join(', '))}\n\n` : '')
+          + (fail.length ? `⚠️ не найдены (${fail.length}): ${escHtml(fail.join(', '))}\n`
+             + '<i>Такой ник Telegram не отдал: человек не нажимал Start у бота, сменил ник или закрыл профиль. Попроси его открыть бота и повтори команду.</i>' : '')
+          + '\n<i>В translog не пишется, выручку не портит.</i>' });
+    return new Response('ok');
+  }
+
   // ── Админ: /lavaproducts — список офферов Lava.top (id + название + динамическая цена?)
   // и текущий LAVA_OFFER_IDS, чтобы найти offerId под новый тариф без похода в их API руками.
   if (text.startsWith('/lavaproducts') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
