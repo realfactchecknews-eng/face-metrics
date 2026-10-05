@@ -12,13 +12,16 @@ assert.strictEqual(packs.gpdf.type, 'guidepdf', 'свой тип нужен, ч�
 assert.ok(packs.p5.rub < packs.gpdf.rub && packs.gpdf.rub < packs.guide.rub,
   'тариф должен стоять между 149 и 999, иначе он не мостик');
 
-// Он НЕ должен съедать тариф за 999: ни анализов, ни ведения.
-assert.ok(!packs.gpdf.credits, 'анализы в PDF-тарифе съедают смысл пятёрки и гайда за 999');
+// К гайду идёт ОДИН полный разбор: иначе гайд читается в пустоту — объяснили, что мерить,
+// а своих восьми цифр у человека нет, в бесплатном тизере их три.
+assert.strictEqual(packs.gpdf.credits, 1, 'к гайду должен прилагаться один полный разбор');
+assert.ok(packs.gpdf.credits < packs.p5.credits, 'разборов не должно быть больше, чем в пятёрке за 149');
+// Но ведение он не отдаёт — это и есть тариф за 999.
 const grant = w.slice(w.indexOf("if (pack?.type === 'guidepdf')"), w.indexOf("if (pack?.type === 'sub')"));
 assert.ok(/sendDocument/.test(grant), 'файл не отправляется');
 assert.ok(!/guide:\$\{tgid\}/.test(grant), 'ставится флаг гайда — человек получит ведение бесплатно');
 assert.ok(!/guidelist/.test(grant), 'попадает в рассылку заданий, за которую не платил');
-assert.ok(!/credits:/.test(grant), 'начисляются анализы');
+assert.ok(/credits:\$\{tgid\}/.test(grant), 'обещанный разбор не начисляется');
 assert.ok(/GUIDE_FILE_ID/.test(grant), 'файл берётся не из настроек');
 
 // Виден в обоих магазинах, иначе его никто не купит.

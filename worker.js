@@ -72,11 +72,12 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // Одна звезда = один рубль, как и у остальных тарифов.
   // В Lava.top оффер гайда должен быть isDynamicPrice, иначе там цена останется
   // прежней: сумму воркер передаёт сам.
-  // Только PDF, без ведения: мостик между 149 и 999 — разрыв в шесть раз людям было нечем
-  // перейти. Намеренно БЕЗ анализов и без флага guide: иначе он съедает смысл тарифа 999,
-  // где и план на 90 дней, и замеры раз в 10 дней, и 5 анализов.
-  // Замеры раз в 30 дней покупатель получит всё равно — они открыты всем, кто платил.
-  gpdf: { type: 'guidepdf', stars: 399, rub: 399, lavaRub: 399,
+  // Мостик между 149 и 999: разрыв в шесть раз людям было нечем перейти.
+  // Гайд разбирает восемь параметров — и к нему идёт ОДИН полный разбор, чтобы человек
+  // сразу увидел свои восемь цифр, а не три из бесплатного тизера. Без этого гайд читается
+  // в пустоту: объяснили, что мерить, а мерить нечем.
+  // Флага guide НЕ ставим: ведение, план и веб-версия остаются за тарифом 999.
+  gpdf: { type: 'guidepdf', credits: 1, stars: 399, rub: 399, lavaRub: 399,
           label: 'Гайд (PDF)', labelEn: 'Guide (PDF)',
           oldStars: 399, oldRub: 399, oldLavaRub: 399 },
   // Доплата до ведения для тех, кто уже купил PDF. 399 + 600 = 999 — ровно столько же,
@@ -84,7 +85,10 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // в два шага, либо обесценивает прямой тариф.
   // НЕ показывается в общем списке: без PDF это был бы полный гайд за 600 вместо 999.
   // Проверку делает обработчик pay: (ищет флаг gpdf:{tgid}).
-  gupg: { type: 'guide', credits: 5, stars: 600, rub: 600, lavaRub: 600,
+  // credits: 4, а не 5 — в PDF-тарифе уже был один. В сумме 5, ровно как у прямого гайда:
+  // путь в два шага обязан давать то же самое, что и в один, иначе принцип «399+600=999»
+  // работает только на ценнике.
+  gupg: { type: 'guide', credits: 4, stars: 600, rub: 600, lavaRub: 600,
           label: 'Ведение 90 дней (доплата к гайду)', labelEn: '90-day coaching (upgrade)',
           oldStars: 600, oldRub: 600, oldLavaRub: 600 },
   guide: { type: 'guide', credits: 5, stars: 999, rub: 999, lavaRub: 999,
@@ -2181,8 +2185,8 @@ async function handleCallback(env, cq) {
     const rows = enabledMethods(env).map((m) => [{ text: `${names[m] || m} — ${PACKS.gupg.rub}${m === 'stars' ? '⭐' : '₽'}`, callback_data: `pay:gupg:${m}` }]);
     rows.push([{ text: BL[L].kbBack, callback_data: 'menu' }]);
     await reply(L === 'ru'
-      ? `<b>Ведение на 90 дней</b>\n\nЗамер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю и 5 анализов на счёт.\n\nДоплата ${PACKS.gupg.rub} ₽ — вместе с гайдом ровно ${PACKS.guide.rub} ₽.`
-      : `<b>90-day coaching</b>\n\nA measurement every 10 days instead of 30, a chart across eight parameters, a weekly task and 5 analyses.\n\nUpgrade ${PACKS.gupg.rub} RUB — ${PACKS.guide.rub} together with the guide.`,
+      ? `<b>Ведение на 90 дней</b>\n\nЗамер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю и ещё 4 анализа на счёт.\n\nДоплата ${PACKS.gupg.rub} ₽ — вместе с гайдом ровно ${PACKS.guide.rub} ₽.`
+      : `<b>90-day coaching</b>\n\nA measurement every 10 days instead of 30, a chart across eight parameters, a weekly task and 4 more analyses.\n\nUpgrade ${PACKS.gupg.rub} RUB — ${PACKS.guide.rub} together with the guide.`,
       { inline_keyboard: rows }, { parse_mode: 'HTML' });
     return;
   } else if (data.startsWith('pay:')) {
@@ -2453,8 +2457,8 @@ async function offerUpgrade(env, tgid, pack, L) {
   await tgApi(env, 'sendMessage', {
     chat_id: tgid, parse_mode: 'HTML',
     text: L === 'ru'
-      ? `📕 Гайд у тебя. Чего в нём нет — это обратной связи.\n\n<b>Ведение на 90 дней</b> добавляет к тексту: замер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю в бота и 5 анализов на счёт.\n\nДоплата — ${u.rub} ₽. Вместе с гайдом выходит ${PACKS.guide.rub} ₽, ровно как если бы взял всё сразу.`
-      : `📕 The guide is yours. What it lacks is feedback.\n\n<b>90-day coaching</b> adds a measurement every 10 days instead of 30, a chart across eight parameters, a weekly task in the bot and 5 analyses.\n\nUpgrade costs ${u.rub} RUB. With the guide that is ${PACKS.guide.rub} total — the same as buying everything at once.`,
+      ? `📕 Гайд у тебя. Чего в нём нет — это обратной связи.\n\n<b>Ведение на 90 дней</b> добавляет к тексту: замер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю в бота и ещё 4 анализа на счёт.\n\nДоплата — ${u.rub} ₽. Вместе с гайдом выходит ${PACKS.guide.rub} ₽, ровно как если бы взял всё сразу.`
+      : `📕 The guide is yours. What it lacks is feedback.\n\n<b>90-day coaching</b> adds a measurement every 10 days instead of 30, a chart across eight parameters, a weekly task in the bot and 4 more analyses.\n\nUpgrade costs ${u.rub} RUB. With the guide that is ${PACKS.guide.rub} total — the same as buying everything at once.`,
     reply_markup: { inline_keyboard: [[{ text: L === 'ru' ? '➕ Добавить ведение' : '➕ Add coaching', callback_data: 'upg' }]] },
   }).catch(() => {});
 }
@@ -2501,7 +2505,11 @@ async function grantPack(env, tgid, pack, L, sp) {
     // Флаг нужен обработчику оплаты: доплату до ведения можно продать только тому,
     // кто PDF действительно купил.
     await env.RATE_LIMIT.put(`gpdf:${tgid}`, '1');
-    return L === 'ru' ? 'гайд отправлен файлом выше' : 'the guide has been sent as a file above';
+    const cur = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+    await env.RATE_LIMIT.put(`credits:${tgid}`, String(cur + (pack.credits || 0)));
+    return L === 'ru'
+      ? `гайд отправлен файлом выше, плюс ${pack.credits} полный разбор на счёт`
+      : `the guide has been sent as a file above, plus ${pack.credits} full analysis`;
   }
   if (pack?.type === 'sub') {
     const until = (sp?.subscription_expiration_date ? sp.subscription_expiration_date * 1000 : Date.now() + 30 * 24 * 3600 * 1000);

@@ -10,7 +10,9 @@ assert.ok(packs.gupg, 'тарифа доплаты нет');
 assert.strictEqual(packs.gpdf.rub + packs.gupg.rub, packs.guide.rub,
   `399 + ${packs.gupg.rub} должно давать ровно ${packs.guide.rub}`);
 assert.strictEqual(packs.gupg.type, 'guide', 'доплата должна выдавать то же, что полный гайд');
-assert.strictEqual(packs.gupg.credits, packs.guide.credits, 'анализы должны совпадать с полным гайдом');
+// Путь в два шага обязан давать то же, что и в один — не только по цене, но и по составу.
+assert.strictEqual(packs.gpdf.credits + packs.gupg.credits, packs.guide.credits,
+  `${packs.gpdf.credits} + ${packs.gupg.credits} анализов должно давать ${packs.guide.credits}, как у прямого гайда`);
 assert.strictEqual(packs.gupg.stars, packs.gupg.rub, 'звёзды и рубли разошлись');
 
 // Главная дыра: без проверки кто угодно купит полное ведение за 600 вместо 999.
