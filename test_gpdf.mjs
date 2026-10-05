@@ -25,7 +25,7 @@ assert.ok(/credits:\$\{tgid\}/.test(grant), 'обещанный разбор н�
 assert.ok(/GUIDE_FILE_ID/.test(grant), 'файл берётся не из настроек');
 
 // Виден в обоих магазинах, иначе его никто не купит.
-assert.ok(/rows\.push\(row\('gpdf'/.test(w), 'нет строки в списке тарифов бота');
+assert.ok(/\{ id: 'gpdf'/.test(w), 'нет строки в списке тарифов бота');
 assert.ok(/packBtn\("gpdf"\)/.test(app), 'нет кнопки на пейволле сайта');
 assert.strictEqual(app.split('packGpdf:').length - 1, 2, 'название должно быть в обоих языках');
 assert.ok(/gpdf: "📄 " \+ t\("packGpdf"\)/.test(app), 'название тарифа не переводится');

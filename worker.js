@@ -1604,33 +1604,53 @@ function saleCountdown(L) {
   const mins = Math.floor((ms % 3600000) / 60000);
   return L === 'ru' ? `${hours} ч ${mins} мин` : `${hours}h ${mins}m`;
 }
-function packsKb(method, L, discPct) {
+// guidePct — персональная скидка на ведение (у владельца PDF-гайда она своя, см.
+// guideUpgradePct). Передаётся отдельно от общей: иначе в списке висело бы 999, а в счёте
+// приходило 599 — то самое расхождение экрана и чека, которое читается как обман.
+function packsKb(method, L, discPct, guidePct = discPct) {
   const raw = (p) => method === 'stars' ? p.stars : (method === 'rub' || method === 'sbp') ? (p.lavaRub || p.rub) : p.rub;
   const rawOld = (p) => method === 'stars' ? p.oldStars : (method === 'rub' || method === 'sbp') ? (p.oldLavaRub || p.oldRub) : p.oldRub;
   const unit = (p) => method === 'stars' ? '⭐' : '₽';
   const cardLike = method === 'rub' || method === 'sbp';
-  const price = (p) => {
-    const base = raw(p);
+  const pctFor = (id) => (id === 'guide' ? guidePct : discPct);
+  // Цена числом — она же решает порядок тарифов в списке.
+  const curPrice = (id) => {
+    const base = raw(PACKS[id]);
+    const pct = pctFor(id);
     // Lava.top (карта/СБП) не принимает инвойс дешевле LAVA_MIN_RUB ни при какой скидке —
     // если тариф уже на этом полу (самый дешёвый — ровно 50₽), скидка технически неприменима.
-    const cur = discPct && !(cardLike && base <= LAVA_MIN_RUB) ? Math.max(1, Math.round(base * (100 - discPct) / 100)) : base;
+    return pct && !(cardLike && base <= LAVA_MIN_RUB) ? Math.max(1, Math.round(base * (100 - pct) / 100)) : base;
+  };
+  const price = (id) => {
+    const p = PACKS[id], base = raw(p), cur = curPrice(id);
     // Если активна персональная скидка — зачёркиваем ТЕКУЩУЮ базовую цену (base), а не старую
     // цену до недельного повышения (rawOld). Иначе два разных "было" сливаются в одно число и
     // выглядит как "подешевело с 39 до 38", хотя на самом деле "было 45 (база), стало 38 (со скидкой)".
-    const old = discPct ? base : ((saleActive() || p.launch) ? rawOld(p) : null);
+    const old = pctFor(id) ? base : ((saleActive() || p.launch) ? rawOld(p) : null);
     const oldTxt = old && old > cur ? `${strike(old + unit(p))} ` : '';
     return `${oldTxt}${cur}${unit(p)}`;
   };
-  const row = (id, emoji, note) => {
-    let label = `${emoji}${packLabel(PACKS[id], L)} — ${price(PACKS[id])}`;
-    if (note) label += note;
-    return [{ text: label, callback_data: `pay:${id}:${method}` }];
-  };
-  const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : '')];
-  // Гайд — единственный тариф, который не покупают не глядя: это не анализы, а
-  // 90 дней работы. Поэтому ведём на экран с составом, а не сразу на счёт.
-  rows.push(row('gpdf', '📄 '));
-  rows.push([{ text: `📕 ${packLabel(PACKS.guide, L)} — ${price(PACKS.guide)} НОВОЕ`, callback_data: 'guide' }]);
+  // Порядок — строго по возрастанию цены. Раньше он был историческим: тарифы дописывались
+  // в конец по мере появления, и гайд за 399 оказывался после безлимита за 999.
+  // Сортируем по ФАКТИЧЕСКИ показанной цене: со скидками и в звёздах порядок другой.
+  const items = [
+    { id: 'p1', emoji: '' },
+    { id: 'p5', emoji: '' },
+    { id: 'h1', emoji: '⏱ ' },
+    { id: 'd1', emoji: '🔥 ' },
+    { id: 'gpdf', emoji: '📄 ' },
+    // «Хит скидки» — только если тариф ДЕЙСТВИТЕЛЬНО подешевел. Висело при любой активной
+    // акции, даже когда цена месяца не менялась (ту же ложь чинили на сайте 30.09).
+    { id: 'm1', emoji: '👑 ', note: curPrice('m1') < raw(PACKS.m1) ? ' 🔥ХИТ СКИДКИ' : '' },
+    // Гайд — единственный тариф, который не покупают не глядя: это не анализы, а
+    // 90 дней работы. Поэтому ведём на экран с составом, а не сразу на счёт.
+    { id: 'guide', emoji: '📕 ', note: ' НОВОЕ', cb: 'guide' },
+  ];
+  items.sort((a, b) => curPrice(a.id) - curPrice(b.id));
+  const rows = items.map((x) => [{
+    text: `${x.emoji}${packLabel(PACKS[x.id], L)} — ${price(x.id)}${x.note || ''}`,
+    callback_data: x.cb || `pay:${x.id}:${method}`,
+  }]);
   const cd = saleActive() ? saleCountdown(L) : null;
   if (cd) rows.unshift([{ text: (L === 'ru' ? `🔥 Цены недели! До повышения: ${cd}` : `🔥 Weekly prices! Ends in: ${cd}`), callback_data: 'noop' }]);
   if (discPct) rows.unshift([{ text: `🎁 Промо-скидка ${discPct}% уже применена`, callback_data: 'noop' }]);
@@ -2184,7 +2204,8 @@ async function handleCallback(env, cq) {
     // Шаг 2: тарифы под выбранный способ.
     const method = data.slice(4);
     const listDiscPct = await buyerDiscountPct(env, tgid, null);
-    await reply(b.shopTitle, packsKb(method, L, listDiscPct));
+    const guideDiscPct = await buyerDiscountPct(env, tgid, 'guide');
+    await reply(b.shopTitle, packsKb(method, L, listDiscPct, guideDiscPct));
   } else if (data.startsWith('pay:')) {
     // Шаг 2: выставление счёта выбранным способом.
     const [, packId, method] = data.split(':');
