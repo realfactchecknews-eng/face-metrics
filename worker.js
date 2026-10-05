@@ -80,17 +80,6 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   gpdf: { type: 'guidepdf', credits: 1, stars: 399, rub: 399, lavaRub: 399,
           label: 'Гайд (PDF)', labelEn: 'Guide (PDF)',
           oldStars: 399, oldRub: 399, oldLavaRub: 399 },
-  // Доплата до ведения для тех, кто уже купил PDF. 399 + 600 = 999 — ровно столько же,
-  // сколько у взявшего полный гайд сразу. Любая другая цифра либо наказывает за покупку
-  // в два шага, либо обесценивает прямой тариф.
-  // НЕ показывается в общем списке: без PDF это был бы полный гайд за 600 вместо 999.
-  // Проверку делает обработчик pay: (ищет флаг gpdf:{tgid}).
-  // credits: 4, а не 5 — в PDF-тарифе уже был один. В сумме 5, ровно как у прямого гайда:
-  // путь в два шага обязан давать то же самое, что и в один, иначе принцип «399+600=999»
-  // работает только на ценнике.
-  gupg: { type: 'guide', credits: 4, stars: 600, rub: 600, lavaRub: 600,
-          label: 'Ведение 90 дней (доплата к гайду)', labelEn: '90-day coaching (upgrade)',
-          oldStars: 600, oldRub: 600, oldLavaRub: 600 },
   guide: { type: 'guide', credits: 5, stars: 999, rub: 999, lavaRub: 999,
            label: 'Гайд + ведение 90 дней', labelEn: 'Guide + 90-day coaching',
            oldStars: 999, oldRub: 999, oldLavaRub: 999 },
@@ -1552,10 +1541,32 @@ function menuKb(L, short) {
 // Шаг 1: выбор способа оплаты.
 // Покупка гайда одним шагом: после бесплатной главы вести человека через общий
 // список тарифов незачем, он уже знает, что хочет. Кнопки сразу на pay:guide:*.
-function guideKb(L, env) {
+// discPct — персональная скидка (для владельца PDF-гайда это разница в цене, см.
+// guideUpgradePct). Без неё экран показывал бы 999 всем, а счёт приходил бы на 599 —
+// расхождение цены на экране и в счёте читается как обман, даже когда оно в пользу человека.
+// Копия тарифа «гайд» с персональной ценой — для экранов, которые показывают число до
+// выставления счёта. Сам счёт считает цену той же функцией buyerDiscountPct, так что
+// разойтись они не могут.
+async function guidePackFor(env, tgid) {
+  const pct = await buyerDiscountPct(env, tgid, 'guide');
+  if (!pct) return PACKS.guide;
+  const p = PACKS.guide;
+  return { ...p, stars: applyDiscount(p.stars, pct), rub: applyDiscount(p.rub, pct),
+           lavaRub: applyDiscount(p.lavaRub, pct),
+           oldStars: p.stars, oldRub: p.rub, oldLavaRub: p.rub };
+}
+
+function guideKb(L, env, discPct = 0) {
   const b = BL[L];
   const p = PACKS.guide;
-  const money = (cur, old, unit) => (old && old > cur ? strike(old + unit) + ' ' : '') + cur + unit;
+  const d = (v) => applyDiscount(v, discPct);
+  const money = (cur, old, unit) => {
+    const now = d(cur);
+    // При скидке зачёркиваем ТЕКУЩУЮ базовую цену, а не старую «до акции»: иначе два
+    // разных «было» сливаются в одно число.
+    const was = discPct ? cur : old;
+    return (was && was > now ? strike(was + unit) + ' ' : '') + now + unit;
+  };
   const rows = [[{ text: `${b.payStars} · ${money(p.stars, p.oldStars, '⭐')}`, callback_data: 'pay:guide:stars' }]];
   if (lavaConfigured(env) || env.YUKASSA_PROVIDER_TOKEN) {
     rows.push([{ text: `${b.payCard} · ${money(p.rub, p.oldRub, '₽')}`, callback_data: 'pay:guide:rub' }]);
@@ -1743,7 +1754,7 @@ async function tgWebhook(request, env, ctx) {
         await tgApi(env, 'sendDocument', {
           chat_id: chat, document: env.EXCERPT_FILE_ID,
           caption: b.freeOkCaption + '\n\n' + b.freeUpsell,
-          reply_markup: guideKb(L, env),
+          reply_markup: guideKb(L, env, await buyerDiscountPct(env, tgid, 'guide')),
         }).catch(() => {});
       } else {
         await tgApi(env, 'sendMessage', { chat_id: chat, text: b.freeNeedSub, reply_markup: { inline_keyboard: [
@@ -2165,7 +2176,7 @@ async function handleCallback(env, cq) {
     t += await faceStatusLine(env, tgid, L);
     await reply(t, menuKb(L), { parse_mode: 'HTML' });
   } else if (data === 'guide') {
-    await reply(b.guideAbout, guideKb(L, env), { parse_mode: 'HTML' });
+    await reply(b.guideAbout, guideKb(L, env, await buyerDiscountPct(env, tgid, 'guide')), { parse_mode: 'HTML' });
   } else if (data === 'shop') {
     // Шаг 1: выбор способа оплаты.
     await reply(b.payPick, methodKb(L, env));
@@ -2174,33 +2185,11 @@ async function handleCallback(env, cq) {
     const method = data.slice(4);
     const listDiscPct = await buyerDiscountPct(env, tgid, null);
     await reply(b.shopTitle, packsKb(method, L, listDiscPct));
-  } else if (data === 'upg') {
-    // Экран доплаты до ведения. Способы те же, что у остальных тарифов.
-    if (!(await env.RATE_LIMIT.get(`gpdf:${tgid}`))) {
-      await reply(L === 'ru' ? 'Доплата доступна тем, кто уже купил гайд.' : 'The upgrade is for guide owners.',
-        { inline_keyboard: [[{ text: BL[L].kbBack, callback_data: 'shop' }]] });
-      return;
-    }
-    const names = { stars: '⭐ Telegram Stars', rub: '💳 Карта', sbp: '📲 СБП', crypto: '🪙 Крипта' };
-    const rows = enabledMethods(env).map((m) => [{ text: `${names[m] || m} — ${PACKS.gupg.rub}${m === 'stars' ? '⭐' : '₽'}`, callback_data: `pay:gupg:${m}` }]);
-    rows.push([{ text: BL[L].kbBack, callback_data: 'menu' }]);
-    await reply(L === 'ru'
-      ? `<b>Ведение на 90 дней</b>\n\nЗамер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю и ещё 4 анализа на счёт.\n\nДоплата ${PACKS.gupg.rub} ₽ — вместе с гайдом ровно ${PACKS.guide.rub} ₽.`
-      : `<b>90-day coaching</b>\n\nA measurement every 10 days instead of 30, a chart across eight parameters, a weekly task and 4 more analyses.\n\nUpgrade ${PACKS.gupg.rub} RUB — ${PACKS.guide.rub} together with the guide.`,
-      { inline_keyboard: rows }, { parse_mode: 'HTML' });
-    return;
   } else if (data.startsWith('pay:')) {
     // Шаг 2: выставление счёта выбранным способом.
     const [, packId, method] = data.split(':');
     const pack = PACKS[packId];
     if (!pack) return;
-    // Доплата продаётся ТОЛЬКО владельцу PDF-гайда. Иначе кто угодно купил бы полное
-    // ведение за 600 вместо 999, просто нажав кнопку из чужого сообщения.
-    if (packId === 'gupg' && !(await env.RATE_LIMIT.get(`gpdf:${tgid}`))) {
-      await reply(L === 'ru' ? 'Доплата доступна тем, кто уже купил гайд.' : 'The upgrade is for guide owners.',
-        { inline_keyboard: [[{ text: BL[L].kbBack, callback_data: 'shop' }]] });
-      return;
-    }
     const discPct = await buyerDiscountPct(env, tgid, packId);
     // Скидку больше НЕ гасим здесь — раньше она пропадала уже при выставлении счёта, даже
     // если человек его не оплатил (просто посмотрел цену ещё раз). Теперь гасится только
@@ -2294,7 +2283,7 @@ async function handleCallback(env, cq) {
         await tgApi(env, 'sendDocument', {
           chat_id: chat, document: env.EXCERPT_FILE_ID,
           caption: b.freeOkCaption + '\n\n' + b.freeUpsell,
-          reply_markup: guideKb(L, env),
+          reply_markup: guideKb(L, env, await buyerDiscountPct(env, tgid, 'guide')),
         }).catch(() => {});
       } else {
         await reply(b.freeSoon, menuKb(L));
@@ -2453,13 +2442,15 @@ async function handlePayment(env, msg, L) {
 async function offerUpgrade(env, tgid, pack, L) {
   if (pack?.type !== 'guidepdf') return;
   if ((await env.RATE_LIMIT.get(`guide:${tgid}`)) === '1') return;   // ведение уже есть
-  const u = PACKS.gupg;
+  // Цену называем ту же, что человек увидит на экране гайда: она считается из скидки,
+  // а не записана числом, иначе при смене 399/999 письмо начнёт врать.
+  const price = applyDiscount(PACKS.guide.rub, guideUpgradePct());
   await tgApi(env, 'sendMessage', {
     chat_id: tgid, parse_mode: 'HTML',
     text: L === 'ru'
-      ? `📕 Гайд у тебя. Чего в нём нет — это обратной связи.\n\n<b>Ведение на 90 дней</b> добавляет к тексту: замер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю в бота и ещё 4 анализа на счёт.\n\nДоплата — ${u.rub} ₽. Вместе с гайдом выходит ${PACKS.guide.rub} ₽, ровно как если бы взял всё сразу.`
-      : `📕 The guide is yours. What it lacks is feedback.\n\n<b>90-day coaching</b> adds a measurement every 10 days instead of 30, a chart across eight parameters, a weekly task in the bot and 4 more analyses.\n\nUpgrade costs ${u.rub} RUB. With the guide that is ${PACKS.guide.rub} total — the same as buying everything at once.`,
-    reply_markup: { inline_keyboard: [[{ text: L === 'ru' ? '➕ Добавить ведение' : '➕ Add coaching', callback_data: 'upg' }]] },
+      ? `📕 Гайд у тебя. Чего в нём нет — это обратной связи.\n\n<b>Ведение на 90 дней</b> добавляет к тексту: замер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю в бота и 5 анализов на счёт.\n\nДля тебя оно стоит ${price} ₽ вместо ${PACKS.guide.rub} — гайд уже оплачен, второй раз за него не берём.`
+      : `📕 The guide is yours. What it lacks is feedback.\n\n<b>90-day coaching</b> adds a measurement every 10 days instead of 30, a chart across eight parameters, a weekly task in the bot and 5 analyses.\n\nFor you it costs ${price} RUB instead of ${PACKS.guide.rub} — the guide is already paid for, we do not charge for it twice.`,
+    reply_markup: { inline_keyboard: [[{ text: L === 'ru' ? '➕ Добавить ведение' : '➕ Add coaching', callback_data: 'guide' }]] },
   }).catch(() => {});
 }
 
@@ -2857,10 +2848,24 @@ function refPayout(ref) { return Math.round((ref.revenueRub || 0) * (ref.pct || 
 const PERSONAL_REF_DISCOUNT_THRESHOLD = 5;
 const PERSONAL_REF_DISCOUNT_PCT = 10;
 const PERSONAL_REF_OWNER_DISCOUNT_PCT = 15;
+// Скидка на ведение тому, кто уже купил PDF-гайд. Сделано скидкой, а не отдельным
+// тарифом: отдельный требовал бы своего товара в Lava.top, своей кнопки и своей защиты
+// от покупки без PDF. Здесь работает всё разом — список тарифов, экран гайда и счета
+// по всем способам оплаты берут процент из одного места.
+// Процент считается из цен, а не записан числом: поменяется 399 или 999 — цена ведения
+// для владельца гайда пересчитается сама и останется равной разнице.
+function guideUpgradePct() {
+  return Math.round(100 * (1 - (PACKS.guide.rub - PACKS.gpdf.rub) / PACKS.guide.rub));
+}
+
 async function buyerDiscountPct(env, tgid, packId) {
+  // Скидка владельцу гайда берётся МАКСИМУМОМ с остальными: иначе промо-скидка в 25%
+  // затёрла бы её, и человек заплатил бы за ведение больше, чем должен.
+  let upgrade = 0;
+  if (packId === 'guide' && await env.RATE_LIMIT.get(`gpdf:${tgid}`)) upgrade = guideUpgradePct();
   const pd = await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`);
-  if (pd) return parseInt(pd, 10) || 0;
-  let best = 0;
+  if (pd) return Math.max(parseInt(pd, 10) || 0, upgrade);
+  let best = upgrade;
   const code = await env.RATE_LIMIT.get(`refby:${tgid}`);
   if (code) {
     const ref = await getRef(env, code);
@@ -5450,7 +5455,9 @@ async function progressGet(request, env) {
     cooldownLeft,
     cooldownDays: Math.round((hasGuide ? PROG_COOLDOWN : PROG_FREE_COOLDOWN) / 864e5),
     left: Math.max(0, PROG_MAX - list.length),
-    ...(tracking ? { pack: PACKS.guide } : {}),
+    // Цену гайда отдаём уже персональную: у владельца PDF она ниже на разницу, и экран
+    // «Ведение» должен показывать ровно то, что придёт в счёте.
+    ...(tracking ? { pack: await guidePackFor(env, tgid) } : {}),
   });
 }
 

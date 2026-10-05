@@ -1,40 +1,50 @@
-// Доплата до ведения после покупки PDF-гайда.
+// Скидка на ведение владельцу PDF-гайда. Сделана скидкой, а не отдельным тарифом:
+// отдельный требовал бы своего товара в Lava.top, своей кнопки и своей защиты от покупки
+// без PDF — а здесь всё берётся из одного места.
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert';
 const w = readFileSync('worker.js', 'utf8');
+const app = readFileSync('app.js', 'utf8');
 const packs = new Function(w.slice(w.indexOf('const PACKS = {'), w.indexOf('\n};', w.indexOf('const PACKS = {')) + 3) + '; return PACKS;')();
 
-// Цена доплаты = разница. Сумма двух шагов обязана совпасть с прямой ценой, иначе один
-// из путей оказывается наказанием.
-assert.ok(packs.gupg, 'тарифа доплаты нет');
-assert.strictEqual(packs.gpdf.rub + packs.gupg.rub, packs.guide.rub,
-  `399 + ${packs.gupg.rub} должно давать ровно ${packs.guide.rub}`);
-assert.strictEqual(packs.gupg.type, 'guide', 'доплата должна выдавать то же, что полный гайд');
-// Путь в два шага обязан давать то же, что и в один — не только по цене, но и по составу.
-assert.strictEqual(packs.gpdf.credits + packs.gupg.credits, packs.guide.credits,
-  `${packs.gpdf.credits} + ${packs.gupg.credits} анализов должно давать ${packs.guide.credits}, как у прямого гайда`);
-assert.strictEqual(packs.gupg.stars, packs.gupg.rub, 'звёзды и рубли разошлись');
+// Отдельного тарифа доплаты быть не должно — иначе его пришлось бы защищать от покупки
+// без гайда, заводить товар в Lava и держать цену в двух местах.
+assert.ok(!packs.gupg, 'вернулся отдельный тариф доплаты');
+assert.ok(!/gupg/.test(w), 'в коде остались следы отдельного тарифа');
 
-// Главная дыра: без проверки кто угодно купит полное ведение за 600 вместо 999.
-assert.ok(/packId === 'gupg' && !\(await env\.RATE_LIMIT\.get\(`gpdf:\$\{tgid\}`\)\)/.test(w),
-  'доплату можно купить без PDF — это полный гайд за 600');
-const scr = w.slice(w.indexOf("} else if (data === 'upg')"), w.indexOf("} else if (data.startsWith('pay:')"));
-assert.ok(/gpdf:\$\{tgid\}/.test(scr), 'экран доплаты открыт всем');
+// Процент считается ИЗ ЦЕН, а не записан числом: поменяется 399 или 999 — пересчитается сам.
+const pctSrc = w.slice(w.indexOf('function guideUpgradePct'), w.indexOf('async function buyerDiscountPct'));
+assert.ok(/PACKS\.guide\.rub - PACKS\.gpdf\.rub/.test(pctSrc), 'скидка записана числом — разъедется при смене цен');
+const pct = new Function('PACKS', pctSrc + '; return guideUpgradePct();')(packs);
+const applyDiscount = new Function('return ' + w.match(/function applyDiscount\([^)]*\)\s*\{[^}]*\}/)[0])();
+const price = applyDiscount(packs.guide.rub, pct);
+// Два шага не должны стоить заметно дороже или дешевле одного.
+assert.ok(Math.abs(packs.gpdf.rub + price - packs.guide.rub) <= 2,
+  `${packs.gpdf.rub} + ${price} должно сойтись с ${packs.guide.rub}, вышло ${packs.gpdf.rub + price}`);
 
-// Флаг ставится при покупке PDF, иначе доплату не купит даже тот, кому она положена.
+// Скидка берётся максимумом: промо в 25% не должно её затирать.
+const bd = w.slice(w.indexOf('async function buyerDiscountPct'), w.indexOf('function applyDiscount'));
+assert.ok(/Math\.max\(parseInt\(pd, 10\) \|\| 0, upgrade\)/.test(bd), 'промо-скидка затирает скидку владельца гайда');
+assert.ok(/let best = upgrade/.test(bd), 'скидка владельца гайда теряется среди остальных');
+assert.ok(/packId === 'guide' &&/.test(bd), 'скидка применяется не только к ведению');
+
+// Флаг покупки PDF — основание для скидки, без TTL.
 const grant = w.slice(w.indexOf("if (pack?.type === 'guidepdf')"), w.indexOf("if (pack?.type === 'sub')"));
-assert.ok(/put\(`gpdf:\$\{tgid\}`, '1'\)/.test(grant), 'покупка PDF не отмечается');
-assert.ok(!/expirationTtl/.test(grant.slice(grant.indexOf('gpdf:'))), 'флаг покупки с TTL — доплата однажды перестанет продаваться');
+assert.ok(/put\(`gpdf:\$\{tgid\}`, '1'\)/.test(grant), 'покупка PDF не отмечается — скидка не сработает');
+assert.ok(!/expirationTtl/.test(grant.slice(grant.indexOf('gpdf:'))), 'флаг с TTL — скидка однажды пропадёт');
 
-// Предложение уходит само, на всех трёх способах оплаты, и только за PDF.
-assert.strictEqual(w.split('await offerUpgrade(env, tgid, pack').length - 1, 3,
-  'предложение должно уходить после оплаты любым способом');
-const off = w.slice(w.indexOf('async function offerUpgrade'), w.indexOf("// Начисление тарифа"));
+// Цена на экране обязана совпадать со счётом: расхождение читается как обман.
+assert.ok(/guideKb\(L, env, discPct = 0\)/.test(w), 'экран гайда не умеет показывать персональную цену');
+assert.strictEqual(w.split("guideKb(L, env, await buyerDiscountPct(env, tgid, 'guide'))").length - 1, 3,
+  'не все экраны гайда показывают персональную цену');
+assert.ok(/guidePackFor\(env, tgid\)/.test(w), 'сайт получает цену гайда без скидки');
+
+// Предложение после покупки PDF.
+const off = w.slice(w.indexOf('async function offerUpgrade'), w.indexOf('// Начисление тарифа'));
 assert.ok(/pack\?\.type !== 'guidepdf'/.test(off), 'предложение уходит и после других покупок');
 assert.ok(/guide:\$\{tgid\}`\)\) === '1'/.test(off), 'предложим ведение тому, у кого оно уже есть');
-
-// В общем списке тарифов доплаты быть не должно.
-assert.ok(!/row\('gupg'/.test(w), 'доплата попала в общий список бота');
-const app = readFileSync('app.js', 'utf8');
-assert.ok(!/packBtn\("gupg"\)/.test(app), 'доплата попала на пейволл сайта');
-console.log('доплата до ведения: все проверки прошли');
+assert.ok(/applyDiscount\(PACKS\.guide\.rub, guideUpgradePct\(\)\)/.test(off), 'цена в предложении записана числом');
+assert.ok(/callback_data: 'guide'/.test(off), 'кнопка ведёт не на экран гайда');
+assert.strictEqual(w.split('await offerUpgrade(env, tgid, pack').length - 1, 3,
+  'предложение должно уходить после оплаты любым способом');
+console.log('скидка на ведение: все проверки прошли');
