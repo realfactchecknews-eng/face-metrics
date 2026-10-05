@@ -556,12 +556,6 @@ async function analyze(request, env) {
     // 60 дней: за это время лицо меняется, и новый разбор уже честнее старого.
     await env.RATE_LIMIT.put(cacheKey, data.choices[0].message.content, { expirationTtl: 60 * 24 * 3600 });
   }
-  // Последний балл — чтобы письмо дожима было про него, а не безликое. Одна запись
-  // на разбор; текст отчёта по человеку найти нельзя, он лежит в кэше по хэшу фото.
-  if (!isMeasure && !body.compare) {
-    const m = String(data.choices[0].message.content).match(/\u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b\s*:\s*([0-9]+(?:[.,][0-9])?)/);
-    if (m) await env.RATE_LIMIT.put(`lastscore:${tgid}`, m[1].replace(',', '.'), { expirationTtl: 90 * 24 * 3600 }).catch(() => {});
-  }
   // Бесплатный разбор без покупок — ставим в очередь дожима (письмо через сутки).
   if (!buyer && (mode === 'free' || mode === 'holder')) await wbEnqueue(env, tgid).catch(() => {});
 
@@ -1398,10 +1392,7 @@ const BL = {
     remindFirst: (tip) => `📈 A month has passed since your analysis.\n\nA free measurement is available — same conditions, same frame. The chart will show what has actually changed, which is impossible to judge in the mirror: the face changes slower than you look at it.${tip ? `\n\n<b>What you were going to work on:</b>\n${tip}` : ''}`,
     remindAgain: (tip) => `📈 Thirty days since your last measurement — the next free one is available.\n\nShoot in the same light and at the same angle, otherwise the chart will show the camera rather than you.${tip ? `\n\n<b>From your own report:</b>\n${tip}` : ''}`,
     remindBtn: '📊 Take a measurement',
-    wbFirst: (score) => (score
-        ? `Yesterday the bot gave you ${score} out of 8.\n\nThat was three categories out of eight — the other five stay closed on the free report.`
-        : `Your report is unfinished.\n\nThe free one shows three categories out of eight; the other five stay closed.`)
-      + `\n\nThe closed ones are the ones that usually drag the score down: jawline, maxilla, nose, lips and cheekbones, grooming. Plus eight recommendations for your face specifically — what to do and in what order.`,
+    wbFirst: (price) => `Your report is unfinished.\n\nThe bot showed three categories out of eight. The five it closed are the ones that usually keep the score from moving: jawline, midface, nose, lips and cheekbones, grooming. Plus eight recommendations for your face.\n\n${price}`,
     wbFirstBtn: 'Open the full report',
     wbSecond: (pct) => `A score on its own says little — it makes sense in comparison.\n\nUpload your photo and a friend's: the bot rates both separately and says who mogs whom, and why. The loser usually demands a rematch.\n\n${pct}% off is on your account and expires in three days.`,
     wbSecondBtn: '⚔ Compare with a friend',
@@ -1490,10 +1481,7 @@ const BL = {
     remindBtn: '📊 Сделать замер',
     // Дожим. Пишем как человек, а не как рассылка: ни «привет», ни «мы заметили»,
     // ни восклицаний. Короткая констатация и одна мысль на письмо.
-    wbFirst: (score) => (score
-        ? `Вчера бот дал тебе ${score} из 8.\n\nЭто по трём категориям из восьми — остальные пять в бесплатном закрыты.`
-        : `Твой разбор остался недоделанным.\n\nБесплатный показывает три категории из восьми, остальные пять закрыты.`)
-      + `\n\nЗакрыты как раз те, что чаще всего и тянут балл вниз: джоулайн, максилла, нос, губы и скулы, груминг. И восемь рекомендаций под конкретно твоё лицо — что делать и в каком порядке.\n\nПолный разбор — 79 ₽ до 9 октября, дальше 99.`,
+    wbFirst: (price) => `Разбор остался недоделанным.\n\nБот показал три категории из восьми. Пять закрытых — это ровно те, из-за которых балл обычно и не растёт: челюсть, средняя зона, нос, губы и скулы, груминг. Плюс восемь рекомендаций под твоё лицо.\n\n${price}`,
     wbFirstBtn: 'Открыть полный разбор',
     wbSecond: (pct) => `Разбор в одиночку мало о чём говорит — балл становится понятен в сравнении.\n\nЗакинь своё фото и фото друга: бот оценит обоих по отдельности и скажет, кто кого моггает и почему. Проигравший обычно требует реванша.\n\nСкидка ${pct}% на счету, сгорит через трое суток.`,
     wbSecondBtn: '⚔ Сравнить с другом',
@@ -5555,6 +5543,24 @@ const WB_MAX           = 2;                 // писем за всю жизнь
 const WB_PER_RUN       = 60;                // за один прогон крона
 const WB_DISCOUNT_PCT  = 25;                // скидка во втором письме
 
+// Строка про цену для писем. Считается из PACKS и SALE_ENDS_AT, а не пишется в тексте
+// руками: акция кончается, а рассылка продолжает уходить — и начинает врать о цене.
+function priceLine(L) {
+  const p = PACKS.p1;
+  const sale = saleActive() && p.oldRub > p.rub;
+  const d = new Date(SALE_ENDS_AT);
+  const day = d.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow', day: 'numeric', month: 'long' });
+  if (L === 'ru') {
+    return sale
+      ? `Открыть целиком — ${p.rub} ₽ до ${day}, потом ${p.oldRub}.`
+      : `Открыть целиком — ${p.rub} ₽.`;
+  }
+  const dayEn = d.toLocaleDateString('en-GB', { timeZone: 'Europe/Moscow', day: 'numeric', month: 'long' });
+  return sale
+    ? `Opening the full report costs ${p.rub} RUB until ${dayEn}, then ${p.oldRub}.`
+    : `Opening the full report costs ${p.rub} RUB.`;
+}
+
 async function wbList(env) { return getList(env, 'wblist'); }
 
 // Поставить в очередь после бесплатного разбора. Повторный бесплатный разбор срок НЕ
@@ -5598,10 +5604,7 @@ async function winbackCron(env) {
 
     let text, kb;
     if (first) {
-      // Балл показываем, только если он у нас есть: выдумывать число нельзя, а без него
-      // письмо всё равно работает — закрытые категории и так его.
-      const sc = await env.RATE_LIMIT.get(`lastscore:${tgid}`);
-      text = b.wbFirst(sc || '');
+      text = b.wbFirst(priceLine(L));
       kb = [[{ text: b.wbFirstBtn, url: 'https://facerate.ru/#analyze' }]];
     } else {
       // Скидку ставим только если своей нет или она меньше: перебивать более щедрую

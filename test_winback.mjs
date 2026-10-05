@@ -44,7 +44,21 @@ const txt = unesc(w);
 for (const k of ['wbFirst', 'wbSecond', 'wbFirstBtn', 'wbSecondBtn', 'wbStop', 'wbStopped']) {
   assert.ok(txt.split(k + ':').length - 1 >= 2, `строка ${k} должна быть в обоих языках`);
 }
-// Балл подставляется, только если он есть: выдумывать число нельзя.
-assert.ok(/wbFirst: \(score\) => \(score/.test(txt), 'письмо не умеет работать без сохранённого балла');
-assert.ok(/lastscore:\$\{tgid\}/.test(w), 'балл нигде не сохраняется');
+// Цена в письме считается, а не пишется руками: акция кончится, а письма продолжат
+// уходить каждый день — и начнут врать о цене.
+assert.ok(/text = b\.wbFirst\(priceLine\(L\)\)/.test(w), 'письмо не получает живую цену');
+const pl = w.slice(w.indexOf('function priceLine'), w.indexOf("async function wbList"));
+assert.ok(/PACKS\.p1/.test(pl) && /saleActive\(\)/.test(pl), 'цена в письме не привязана к тарифам и акции');
+assert.ok(/p\.oldRub > p\.rub/.test(pl), 'без скидки письмо всё равно пообещает «потом дороже»');
+// Ни одна цена не должна быть вшита в текст письма.
+const texts = txt.slice(txt.indexOf('wbFirst:'), txt.indexOf('wbStopped:'));
+assert.ok(!/\d{2,3}\s*₽/.test(texts), 'в тексте письма вшита цена — после акции он станет враньём');
+assert.ok(!/\d+ (октября|ноября|сентября)/.test(texts), 'в тексте письма вшита дата акции');
+
+// Проверяем обе ветки строки цены на живом коде.
+const mk = (rub, oldRub, active) => new Function('PACKS', 'saleActive', 'SALE_ENDS_AT',
+  pl + '; return priceLine;')({ p1: { rub, oldRub } }, () => active, Date.parse('2026-10-09T12:00:00+03:00'));
+assert.match(mk(79, 99, true)('ru'), /79 ₽ до 9 октября, потом 99/, 'во время акции цена названа неверно');
+assert.strictEqual(mk(99, 99, false)('ru'), 'Открыть целиком — 99 ₽.', 'после акции письмо всё ещё обещает скидку');
+assert.strictEqual(mk(79, 99, false)('ru'), 'Открыть целиком — 79 ₽.', 'акция кончилась, а «потом дороже» осталось');
 console.log('дожим: все проверки прошли');
