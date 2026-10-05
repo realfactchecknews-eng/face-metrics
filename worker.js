@@ -72,6 +72,13 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   // Одна звезда = один рубль, как и у остальных тарифов.
   // В Lava.top оффер гайда должен быть isDynamicPrice, иначе там цена останется
   // прежней: сумму воркер передаёт сам.
+  // Только PDF, без ведения: мостик между 149 и 999 — разрыв в шесть раз людям было нечем
+  // перейти. Намеренно БЕЗ анализов и без флага guide: иначе он съедает смысл тарифа 999,
+  // где и план на 90 дней, и замеры раз в 10 дней, и 5 анализов.
+  // Замеры раз в 30 дней покупатель получит всё равно — они открыты всем, кто платил.
+  gpdf: { type: 'guidepdf', stars: 399, rub: 399, lavaRub: 399,
+          label: 'Гайд (PDF)', labelEn: 'Guide (PDF)',
+          oldStars: 399, oldRub: 399, oldLavaRub: 399 },
   guide: { type: 'guide', credits: 5, stars: 999, rub: 999, lavaRub: 999,
            label: 'Гайд + ведение 90 дней', labelEn: 'Guide + 90-day coaching',
            oldStars: 999, oldRub: 999, oldLavaRub: 999 },
@@ -1043,12 +1050,16 @@ async function createInvoice(env, tgid, packId, L, method = 'stars', discPct = 0
     ? `${pack.credits} AI-анализ(а) лица на facerate.ru`
     : pack.type === 'unlim'
       ? `Безлимитные анализы ${unlimRu} на facerate.ru`
-      : 'Безлимитные анализы на месяц (автопродление, отмена в любой момент)';
+      : pack.type === 'guidepdf'
+        ? 'Гайд по луксмаксингу, 25 страниц (PDF). Без ведения.'
+        : 'Безлимитные анализы на месяц (автопродление, отмена в любой момент)';
   const descEn = pack.type === 'credits'
     ? `${pack.credits} AI face analyses on facerate.ru`
     : pack.type === 'unlim'
       ? `Unlimited analyses ${unlimEn} on facerate.ru`
-      : 'Unlimited analyses for a month (auto-renews, cancel anytime)';
+      : pack.type === 'guidepdf'
+        ? 'Looksmaxxing guide, 25 pages (PDF). No coaching.'
+        : 'Unlimited analyses for a month (auto-renews, cancel anytime)';
   const req = {
     title: `FaceRate: ${packLabel(pack, L)}`,
     description: L === 'ru' ? descRu : descEn,
@@ -1593,6 +1604,7 @@ function packsKb(method, L, discPct) {
   const rows = [row('p1', ''), row('p5', ''), row('h1', '⏱ '), row('d1', '🔥 '), row('m1', '👑 ', saleActive() ? ' 🔥ХИТ СКИДКИ' : '')];
   // Гайд — единственный тариф, который не покупают не глядя: это не анализы, а
   // 90 дней работы. Поэтому ведём на экран с составом, а не сразу на счёт.
+  rows.push(row('gpdf', '📄 '));
   rows.push([{ text: `📕 ${packLabel(PACKS.guide, L)} — ${price(PACKS.guide)} НОВОЕ`, callback_data: 'guide' }]);
   const cd = saleActive() ? saleCountdown(L) : null;
   if (cd) rows.unshift([{ text: (L === 'ru' ? `🔥 Цены недели! До повышения: ${cd}` : `🔥 Weekly prices! Ends in: ${cd}`), callback_data: 'noop' }]);
@@ -2430,6 +2442,15 @@ async function grantPack(env, tgid, pack, L, sp) {
     // Уходит внутрь BL.payOk («✅ Оплата получена! {текст}.») — поэтому без своей
     // галочки и без точки на конце, иначе получается «✅ ✅ … на счёт..».
     return `гайд отправлен файлом выше, ведение открыто, плюс ${pack.credits} анализов на счёт`;
+  }
+  if (pack?.type === 'guidepdf') {
+    if (env.GUIDE_FILE_ID) {
+      await tgApi(env, 'sendDocument', { chat_id: tgid, document: env.GUIDE_FILE_ID,
+        caption: L === 'ru'
+          ? '📕 Твой гайд на 25 страниц.\n\nНачни с главы 11 — там план на 90 дней, его можно вести самому.\n\nЗамер прогресса раз в 30 дней уже открыт: facerate.ru, вкладка «Ведение».'
+          : '📕 Your 25-page guide.\n\nStart with chapter 11 — the 90-day plan, which you can follow on your own.\n\nA progress measurement every 30 days is already unlocked: facerate.ru, the «Ведение» tab.' }).catch(() => {});
+    }
+    return L === 'ru' ? 'гайд отправлен файлом выше' : 'the guide has been sent as a file above';
   }
   if (pack?.type === 'sub') {
     const until = (sp?.subscription_expiration_date ? sp.subscription_expiration_date * 1000 : Date.now() + 30 * 24 * 3600 * 1000);

@@ -134,7 +134,7 @@ var I18N = {
     pwPaySub: "Pay with Telegram Stars in two taps. Or come back next week for a free one.",
     pwPaid: "I paid — show my result",
     pwChecking: "Checking…",
-    packP1: "1 analysis", packP5: "5 analyses", packH1: "Hour unlimited", packD1: "Day unlimited", packM1: "Month unlimited",
+    packP1: "1 analysis", packP5: "5 analyses", packH1: "Hour unlimited", packD1: "Day unlimited", packM1: "Month unlimited", packGpdf: "Guide (PDF)",
     waitTg: "Waiting for Telegram…",
     waitTgHint: "Usually 10–30 sec, sometimes up to a minute — don't close this page",
     loginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
@@ -257,7 +257,7 @@ var I18N = {
     pwPaySub: "Оплата звёздами Telegram в два тапа. Или возвращайся на следующей неделе за бесплатным.",
     pwPaid: "Я оплатил — показать результат",
     pwChecking: "Проверяю…",
-    packP1: "1 анализ", packP5: "5 анализов", packH1: "Безлимит на час", packD1: "Безлимит на день", packM1: "Безлимит на месяц",
+    packP1: "1 анализ", packP5: "5 анализов", packH1: "Безлимит на час", packD1: "Безлимит на день", packM1: "Безлимит на месяц", packGpdf: "Гайд (PDF)",
     waitTg: "Жду подтверждения в Telegram…",
     waitTgHint: "Обычно 10–30 сек, иногда до минуты — не закрывайте страницу",
     loginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
@@ -3473,7 +3473,7 @@ function showPaywall(state, st) {
     title.textContent = t("pwPayTitle");
     sub.textContent = saleCountdownText() || t("pwPaySub");
     var methods = (st && st.methods) || ["stars"];
-    var packNames = { p1: t("packP1"), p5: t("packP5"), h1: "⏱ " + t("packH1"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1") };
+    var packNames = { p1: t("packP1"), p5: t("packP5"), h1: "⏱ " + t("packH1"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1"), gpdf: "📄 " + t("packGpdf") };
     var methodNames = { stars: t("payStars"), rub: t("payCard"), sbp: t("paySbp"), crypto: t("payCrypto") };
     // Шаг 2: тарифы под выбранный способ (цена в его валюте).
     function showPacks(method) {
@@ -3499,7 +3499,7 @@ function showPaywall(state, st) {
         var top = id === "m1" ? (" <i class='pw-hit'>" + (onSale ? "🔥 хит скидки" : "top") + "</i>") : "";
         btn(packNames[id] + " — " + was + " " + price + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
       }
-      packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1");
+      packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1"); packBtn("gpdf");
       btn(t("pwBack"), "pw-btn pw-btn-ghost", function(){ showPaywall("pay", st); });
     }
     // Шаг 1: выбор способа оплаты (только доступные).
