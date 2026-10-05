@@ -79,6 +79,14 @@ const PACKS = {                          // тарифы: stars — XTR, rub —
   gpdf: { type: 'guidepdf', stars: 399, rub: 399, lavaRub: 399,
           label: 'Гайд (PDF)', labelEn: 'Guide (PDF)',
           oldStars: 399, oldRub: 399, oldLavaRub: 399 },
+  // Доплата до ведения для тех, кто уже купил PDF. 399 + 600 = 999 — ровно столько же,
+  // сколько у взявшего полный гайд сразу. Любая другая цифра либо наказывает за покупку
+  // в два шага, либо обесценивает прямой тариф.
+  // НЕ показывается в общем списке: без PDF это был бы полный гайд за 600 вместо 999.
+  // Проверку делает обработчик pay: (ищет флаг gpdf:{tgid}).
+  gupg: { type: 'guide', credits: 5, stars: 600, rub: 600, lavaRub: 600,
+          label: 'Ведение 90 дней (доплата к гайду)', labelEn: '90-day coaching (upgrade)',
+          oldStars: 600, oldRub: 600, oldLavaRub: 600 },
   guide: { type: 'guide', credits: 5, stars: 999, rub: 999, lavaRub: 999,
            label: 'Гайд + ведение 90 дней', labelEn: 'Guide + 90-day coaching',
            oldStars: 999, oldRub: 999, oldLavaRub: 999 },
@@ -1196,6 +1204,7 @@ async function lavaWebhook(request, env) {
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
     const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? BL[L].trackingOpen : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
+    await offerUpgrade(env, tgid, pack, L);
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
 }
@@ -1260,6 +1269,7 @@ async function cryptoWebhook(request, env) {
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
     const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? BL[L].trackingOpen : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
+    await offerUpgrade(env, tgid, pack, L);
   } catch { /* payload сломан — игнор */ }
   return new Response('ok');
 }
@@ -2160,11 +2170,33 @@ async function handleCallback(env, cq) {
     const method = data.slice(4);
     const listDiscPct = await buyerDiscountPct(env, tgid, null);
     await reply(b.shopTitle, packsKb(method, L, listDiscPct));
+  } else if (data === 'upg') {
+    // Экран доплаты до ведения. Способы те же, что у остальных тарифов.
+    if (!(await env.RATE_LIMIT.get(`gpdf:${tgid}`))) {
+      await reply(L === 'ru' ? 'Доплата доступна тем, кто уже купил гайд.' : 'The upgrade is for guide owners.',
+        { inline_keyboard: [[{ text: BL[L].kbBack, callback_data: 'shop' }]] });
+      return;
+    }
+    const names = { stars: '⭐ Telegram Stars', rub: '💳 Карта', sbp: '📲 СБП', crypto: '🪙 Крипта' };
+    const rows = enabledMethods(env).map((m) => [{ text: `${names[m] || m} — ${PACKS.gupg.rub}${m === 'stars' ? '⭐' : '₽'}`, callback_data: `pay:gupg:${m}` }]);
+    rows.push([{ text: BL[L].kbBack, callback_data: 'menu' }]);
+    await reply(L === 'ru'
+      ? `<b>Ведение на 90 дней</b>\n\nЗамер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю и 5 анализов на счёт.\n\nДоплата ${PACKS.gupg.rub} ₽ — вместе с гайдом ровно ${PACKS.guide.rub} ₽.`
+      : `<b>90-day coaching</b>\n\nA measurement every 10 days instead of 30, a chart across eight parameters, a weekly task and 5 analyses.\n\nUpgrade ${PACKS.gupg.rub} RUB — ${PACKS.guide.rub} together with the guide.`,
+      { inline_keyboard: rows }, { parse_mode: 'HTML' });
+    return;
   } else if (data.startsWith('pay:')) {
     // Шаг 2: выставление счёта выбранным способом.
     const [, packId, method] = data.split(':');
     const pack = PACKS[packId];
     if (!pack) return;
+    // Доплата продаётся ТОЛЬКО владельцу PDF-гайда. Иначе кто угодно купил бы полное
+    // ведение за 600 вместо 999, просто нажав кнопку из чужого сообщения.
+    if (packId === 'gupg' && !(await env.RATE_LIMIT.get(`gpdf:${tgid}`))) {
+      await reply(L === 'ru' ? 'Доплата доступна тем, кто уже купил гайд.' : 'The upgrade is for guide owners.',
+        { inline_keyboard: [[{ text: BL[L].kbBack, callback_data: 'shop' }]] });
+      return;
+    }
     const discPct = await buyerDiscountPct(env, tgid, packId);
     // Скидку больше НЕ гасим здесь — раньше она пропадала уже при выставлении счёта, даже
     // если человек его не оплатил (просто посмотрел цену ещё раз). Теперь гасится только
@@ -2408,7 +2440,23 @@ async function handlePayment(env, msg, L) {
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
     const extra = [gotBonus ? b.firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? b.trackingOpen : '', await m1UpsellText(env, tgid, pack, L || 'en')].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.payOk(note, orderId, extra), reply_markup: menuKb(L || 'en'), parse_mode: 'HTML' });
+    await offerUpgrade(env, tgid, pack, L || 'en');
   } catch { /* payload сломан — молча игнор */ }
+}
+
+// Предложение доплатить до ведения — сразу после покупки PDF-гайда. Момент выбран не
+// случайно: человек только что заплатил и держит файл в руках, дальше интерес падает.
+async function offerUpgrade(env, tgid, pack, L) {
+  if (pack?.type !== 'guidepdf') return;
+  if ((await env.RATE_LIMIT.get(`guide:${tgid}`)) === '1') return;   // ведение уже есть
+  const u = PACKS.gupg;
+  await tgApi(env, 'sendMessage', {
+    chat_id: tgid, parse_mode: 'HTML',
+    text: L === 'ru'
+      ? `📕 Гайд у тебя. Чего в нём нет — это обратной связи.\n\n<b>Ведение на 90 дней</b> добавляет к тексту: замер раз в 10 дней вместо 30, график по восьми параметрам, задание каждую неделю в бота и 5 анализов на счёт.\n\nДоплата — ${u.rub} ₽. Вместе с гайдом выходит ${PACKS.guide.rub} ₽, ровно как если бы взял всё сразу.`
+      : `📕 The guide is yours. What it lacks is feedback.\n\n<b>90-day coaching</b> adds a measurement every 10 days instead of 30, a chart across eight parameters, a weekly task in the bot and 5 analyses.\n\nUpgrade costs ${u.rub} RUB. With the guide that is ${PACKS.guide.rub} total — the same as buying everything at once.`,
+    reply_markup: { inline_keyboard: [[{ text: L === 'ru' ? '➕ Добавить ведение' : '➕ Add coaching', callback_data: 'upg' }]] },
+  }).catch(() => {});
 }
 
 // Начисление тарифа. sp — successful_payment (только для Stars-подписки), может отсутствовать.
@@ -2450,6 +2498,9 @@ async function grantPack(env, tgid, pack, L, sp) {
           ? '📕 Твой гайд на 25 страниц.\n\nНачни с главы 11 — там план на 90 дней, его можно вести самому.\n\nЗамер прогресса раз в 30 дней уже открыт: facerate.ru, вкладка «Ведение».'
           : '📕 Your 25-page guide.\n\nStart with chapter 11 — the 90-day plan, which you can follow on your own.\n\nA progress measurement every 30 days is already unlocked: facerate.ru, the «Ведение» tab.' }).catch(() => {});
     }
+    // Флаг нужен обработчику оплаты: доплату до ведения можно продать только тому,
+    // кто PDF действительно купил.
+    await env.RATE_LIMIT.put(`gpdf:${tgid}`, '1');
     return L === 'ru' ? 'гайд отправлен файлом выше' : 'the guide has been sent as a file above';
   }
   if (pack?.type === 'sub') {
