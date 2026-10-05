@@ -24,8 +24,8 @@ assert.ok(/blocked\|chat not found\|deactivated/.test(cron), 'заблокиро
 // ── Очередь ──
 assert.ok(/if \(isFirst\) await trackTouch/.test(w), 'покупатель не попадает в очередь');
 // Три вызова плюс само объявление функции.
-assert.strictEqual(w.split('await trackTouch(env, ').length - 1, 3,
-  'очередь должна ставиться при покупке, обновляться после замера и чиститься при покупке гайда');
+assert.strictEqual(w.split('await trackTouch(env, ').length - 1, 4,
+  'очередь: ставится при покупке, двигается после замера, чистится при покупке гайда и при отказе от писем');
 assert.ok(/trackTouch\(env, tgid, \{ remove: true \}\)/.test(w), 'купивший гайд остаётся в очереди замеров');
 const save = w.slice(w.indexOf('async function progSave'), w.indexOf('/* ---------- ПРОМПТ ЗАМЕРА'));
 assert.ok(save.includes('trackTouch'), 'после замера срок напоминания не сдвигается');

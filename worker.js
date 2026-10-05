@@ -151,6 +151,7 @@ export default {
     ctx.waitUntil(progressCron(env));
     ctx.waitUntil(trackCron(env));
     ctx.waitUntil(unameSeed(env).catch(() => {}));
+    ctx.waitUntil(winbackCron(env));
     ctx.waitUntil(checkOpenRouterBalance(env));
   },
 };
@@ -555,6 +556,15 @@ async function analyze(request, env) {
     // 60 дней: за это время лицо меняется, и новый разбор уже честнее старого.
     await env.RATE_LIMIT.put(cacheKey, data.choices[0].message.content, { expirationTtl: 60 * 24 * 3600 });
   }
+  // Последний балл — чтобы письмо дожима было про него, а не безликое. Одна запись
+  // на разбор; текст отчёта по человеку найти нельзя, он лежит в кэше по хэшу фото.
+  if (!isMeasure && !body.compare) {
+    const m = String(data.choices[0].message.content).match(/\u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b\s*:\s*([0-9]+(?:[.,][0-9])?)/);
+    if (m) await env.RATE_LIMIT.put(`lastscore:${tgid}`, m[1].replace(',', '.'), { expirationTtl: 90 * 24 * 3600 }).catch(() => {});
+  }
+  // Бесплатный разбор без покупок — ставим в очередь дожима (письмо через сутки).
+  if (!buyer && (mode === 'free' || mode === 'holder')) await wbEnqueue(env, tgid).catch(() => {});
+
   const rates = ratesP ? await ratesP : null;
   return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback, rates });
 }
@@ -1388,6 +1398,15 @@ const BL = {
     remindFirst: (tip) => `📈 A month has passed since your analysis.\n\nA free measurement is available — same conditions, same frame. The chart will show what has actually changed, which is impossible to judge in the mirror: the face changes slower than you look at it.${tip ? `\n\n<b>What you were going to work on:</b>\n${tip}` : ''}`,
     remindAgain: (tip) => `📈 Thirty days since your last measurement — the next free one is available.\n\nShoot in the same light and at the same angle, otherwise the chart will show the camera rather than you.${tip ? `\n\n<b>From your own report:</b>\n${tip}` : ''}`,
     remindBtn: '📊 Take a measurement',
+    wbFirst: (score) => (score
+        ? `Yesterday the bot gave you ${score} out of 8.\n\nThat was three categories out of eight — the other five stay closed on the free report.`
+        : `Your report is unfinished.\n\nThe free one shows three categories out of eight; the other five stay closed.`)
+      + `\n\nThe closed ones are the ones that usually drag the score down: jawline, maxilla, nose, lips and cheekbones, grooming. Plus eight recommendations for your face specifically — what to do and in what order.`,
+    wbFirstBtn: 'Open the full report',
+    wbSecond: (pct) => `A score on its own says little — it makes sense in comparison.\n\nUpload your photo and a friend's: the bot rates both separately and says who mogs whom, and why. The loser usually demands a rematch.\n\n${pct}% off is on your account and expires in three days.`,
+    wbSecondBtn: '⚔ Compare with a friend',
+    wbStop: 'Stop writing to me',
+    wbStopped: 'We will not write again. Change your mind — just come back to facerate.ru.',
     pastBuyerBonus: (p) => `🎁 A little thank-you for being a customer! We've added ${p}% off your next purchase — it's already applied automatically, just buy within 30 days.`,
     langSet: '🌍 Language set: English.',
     pickLang: '🌍 Choose language / Выбери язык:',
@@ -1469,6 +1488,17 @@ const BL = {
     remindFirst: (tip) => `📈 С твоего разбора прошёл месяц.\n\nБесплатный замер уже доступен — те же условия, тот же ракурс. График покажет, что реально изменилось: в зеркале этого не увидеть, лицо меняется медленнее, чем мы на него смотрим.${tip ? `\n\n<b>Над чем ты собирался работать:</b>\n${tip}` : ''}`,
     remindAgain: (tip) => `📈 Тридцать дней с прошлого замера — следующий бесплатный доступен.\n\nСнимайся при том же свете и в том же ракурсе, иначе график покажет камеру, а не тебя.${tip ? `\n\n<b>Из твоего же отчёта:</b>\n${tip}` : ''}`,
     remindBtn: '📊 Сделать замер',
+    // Дожим. Пишем как человек, а не как рассылка: ни «привет», ни «мы заметили»,
+    // ни восклицаний. Короткая констатация и одна мысль на письмо.
+    wbFirst: (score) => (score
+        ? `Вчера бот дал тебе ${score} из 8.\n\nЭто по трём категориям из восьми — остальные пять в бесплатном закрыты.`
+        : `Твой разбор остался недоделанным.\n\nБесплатный показывает три категории из восьми, остальные пять закрыты.`)
+      + `\n\nЗакрыты как раз те, что чаще всего и тянут балл вниз: джоулайн, максилла, нос, губы и скулы, груминг. И восемь рекомендаций под конкретно твоё лицо — что делать и в каком порядке.\n\nПолный разбор — 79 ₽ до 9 октября, дальше 99.`,
+    wbFirstBtn: 'Открыть полный разбор',
+    wbSecond: (pct) => `Разбор в одиночку мало о чём говорит — балл становится понятен в сравнении.\n\nЗакинь своё фото и фото друга: бот оценит обоих по отдельности и скажет, кто кого моггает и почему. Проигравший обычно требует реванша.\n\nСкидка ${pct}% на счету, сгорит через трое суток.`,
+    wbSecondBtn: '⚔ Сравнить с другом',
+    wbStop: 'Не писать мне',
+    wbStopped: 'Больше не напишем. Если передумаешь — просто вернись на facerate.ru.',
     pastBuyerBonus: (p) => `🎁 Небольшой подарок за то, что ты с нами! Начислили скидку ${p}% на следующую покупку — она уже применена автоматически, просто купи в течение 30 дней.`,
     langSet: '🌍 Язык переключён: русский.',
     pickLang: '🌍 Choose language / Выбери язык:',
@@ -2084,6 +2114,18 @@ async function handleCallback(env, cq) {
   const reply = (text, kb, extra) => editOrSend((m, bd) => tgApi(env, m, bd), chat, mid, text, kb, extra);
   await tgApi(env, 'answerCallbackQuery', { callback_query_id: cq.id });
   let L = await userLang(env, tgid);
+
+  // Отказ от писем. Касается ВСЕХ рассылок, а не только той, из которой нажали: человек
+  // просит не писать ему, а не «не писать мне про это». Без TTL — отказ бессрочный.
+  // Это не вежливость, а защита бота: альтернатива кнопке — жалоба на спам, а через
+  // этого бота идут все платежи.
+  if (data === 'nomail') {
+    await env.RATE_LIMIT.put(`nomail:${tgid}`, '1');
+    await wbDrop(env, tgid).catch(() => {});
+    await trackTouch(env, tgid, { remove: true }).catch(() => {});
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: BL[L].wbStopped });
+    return;
+  }
 
   // Переключение языка
   if (data === 'lang:ru' || data === 'lang:en') {
@@ -3408,6 +3450,8 @@ async function recordOrder(env, entry) {
   await env.RATE_LIMIT.put(`everBought:${entry.tgid}`, '1');
   // Очередь напоминаний о бесплатном замере — ставим с первой же покупки.
   if (isFirst) await trackTouch(env, entry.tgid).catch(() => {});
+  // И убираем из дожима: человек купил, дожимать нечего.
+  await wbDrop(env, entry.tgid).catch(() => {});
   return { id, isFirst };
 }
 
@@ -5452,6 +5496,8 @@ async function trackCron(env) {
     const tgid = row.id;
     // Купил гайд после того, как попал в список — у него своя рассылка.
     if ((await env.RATE_LIMIT.get(`guide:${tgid}`)) === '1') { row.n = TRACK_REMIND_MAX; changed = true; continue; }
+    // Отказался от писем — это касается всех рассылок, а не только той, где он нажал.
+    if (await env.RATE_LIMIT.get(`nomail:${tgid}`)) { row.n = TRACK_REMIND_MAX; changed = true; continue; }
 
     // Уже сделал замер сам — двигаем срок и молчим.
     const plist = await progList(env, tgid);
@@ -5485,6 +5531,109 @@ async function trackCron(env) {
   }
   if (changed) await putList(env, 'tracklist', list);
   if (sent) console.log('track reminders', JSON.stringify({ sent, hourMsk }));
+}
+
+/* ───────────────────── Дожим после бесплатного разбора ─────────────────────
+   Около 800 человек в неделю делают бесплатный разбор и уходят (ключи qw: за неделю
+   против 85 покупок). Это и есть аудитория: 87% покупок случаются в первый час, значит
+   те, кто не купил сразу, без письма не вернутся вообще.
+
+   Зацепка — не скидка, а его собственный недоделанный отчёт: в бесплатном видно
+   3 категории из 8, остальные пять и все рекомендации закрыты.
+
+   Письмо 1 (через сутки) — про закрытые категории.
+   Письмо 2 (через трое суток) — другой механизм, а не то же самое громче: дуэль
+   (единственное, что тянет за собой второго человека) плюс скидка.
+
+   Жёстко: не больше ДВУХ писем за всю жизнь, кнопка «не писать» в каждом, остановка
+   при покупке, дневные часы. Это непрошеная рассылка, и если люди начнут жать «спам»,
+   Telegram ограничит бота — а через него идут все деньги.
+   ------------------------------------------------------------------------- */
+const WB_FIRST_AFTER   = 24 * 3600e3;       // первое письмо — через сутки
+const WB_SECOND_AFTER  = 2 * 24 * 3600e3;   // второе — ещё через двое (итого третий день)
+const WB_MAX           = 2;                 // писем за всю жизнь
+const WB_PER_RUN       = 60;                // за один прогон крона
+const WB_DISCOUNT_PCT  = 25;                // скидка во втором письме
+
+async function wbList(env) { return getList(env, 'wblist'); }
+
+// Поставить в очередь после бесплатного разбора. Повторный бесплатный разбор срок НЕ
+// двигает: иначе человек, заходящий раз в неделю, не получит письмо никогда.
+async function wbEnqueue(env, tgid) {
+  const id = String(tgid);
+  if (await env.RATE_LIMIT.get(`nomail:${id}`)) return;
+  const list = await wbList(env);
+  if (list.some((x) => String(x.id) === id)) return;
+  list.push({ id, due: Date.now() + WB_FIRST_AFTER, n: 0 });
+  await putList(env, 'wblist', list.slice(-20000));
+}
+
+async function wbDrop(env, tgid) {
+  const id = String(tgid);
+  const list = await wbList(env);
+  const next = list.filter((x) => String(x.id) !== id);
+  if (next.length !== list.length) await putList(env, 'wblist', next);
+}
+
+async function winbackCron(env) {
+  const hourMsk = (new Date().getUTCHours() + 3) % 24;
+  if (hourMsk < TRACK_HOUR_FROM || hourMsk >= TRACK_HOUR_TO) return;
+
+  const list = await wbList(env);
+  const now = Date.now();
+  let sent = 0, changed = false;
+
+  for (const row of list) {
+    if (sent >= WB_PER_RUN) break;
+    if (!row || row.due > now || (row.n || 0) >= WB_MAX) continue;
+    const tgid = row.id;
+
+    // Купил — дожимать больше нечего.
+    if (await env.RATE_LIMIT.get(`everBought:${tgid}`)) { row.n = WB_MAX; changed = true; continue; }
+    if (await env.RATE_LIMIT.get(`nomail:${tgid}`)) { row.n = WB_MAX; changed = true; continue; }
+
+    const L = await userLang(env, tgid);
+    const b = BL[L] || BL.en;
+    const first = (row.n || 0) === 0;
+
+    let text, kb;
+    if (first) {
+      // Балл показываем, только если он у нас есть: выдумывать число нельзя, а без него
+      // письмо всё равно работает — закрытые категории и так его.
+      const sc = await env.RATE_LIMIT.get(`lastscore:${tgid}`);
+      text = b.wbFirst(sc || '');
+      kb = [[{ text: b.wbFirstBtn, url: 'https://facerate.ru/#analyze' }]];
+    } else {
+      // Скидку ставим только если своей нет или она меньше: перебивать более щедрую
+      // (рефералка, промокод) нельзя.
+      const pd = parseInt(await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`) || '0', 10);
+      const pct = Math.max(pd, WB_DISCOUNT_PCT);
+      if (pd < WB_DISCOUNT_PCT) {
+        await env.RATE_LIMIT.put(`pendingDiscount:${tgid}`, String(WB_DISCOUNT_PCT), { expirationTtl: 3 * 24 * 3600 });
+      }
+      text = b.wbSecond(pct);
+      kb = [[{ text: b.wbSecondBtn, url: 'https://facerate.ru/#compare' }]];
+    }
+    kb.push([{ text: b.wbStop, callback_data: 'nomail' }]);
+
+    const r = await tgApi(env, 'sendMessage', {
+      chat_id: tgid, parse_mode: 'HTML', text,
+      reply_markup: { inline_keyboard: kb },
+      link_preview_options: { is_disabled: true },
+    }).catch(() => ({ ok: false }));
+
+    if (!r.ok && /blocked|chat not found|deactivated/i.test(r.description || '')) {
+      row.n = WB_MAX; changed = true; continue;
+    }
+    row.n = (row.n || 0) + 1;
+    row.due = now + WB_SECOND_AFTER;
+    changed = true;
+    sent++;
+  }
+  // Отработавших выбрасываем: список иначе растёт бесконечно и его становится дорого читать.
+  const left = list.filter((x) => (x.n || 0) < WB_MAX);
+  if (changed || left.length !== list.length) await putList(env, 'wblist', left);
+  if (sent) console.log('winback', JSON.stringify({ sent, hourMsk }));
 }
 
 /* ============================================================================
