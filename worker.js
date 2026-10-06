@@ -5007,6 +5007,61 @@ function normInv(p) {
 }
 
 // «РЕДКОСТЬ: ЛУЧШЕ 1 из N» → PSL 0-8, либо null.
+/* ═══════════ Оценка по методике дата-шита (копия из app.js) ═══════════
+   Балл считается одинаково в разборе, дуэли и замере — иначе один и тот же человек
+   видит разные числа в двух местах сервиса. Совпадение копий держит test_measurepsl.mjs. */
+var METHOD_SCALE = "RATING SCALE -- this is the scale of the reference guide, 0 to 10, and 5 is an ORDINARY man:\n"
+  + "- 9-10 strikingly attractive (Matt Bomer, Hernan Drago)\n"
+  + "- 8.5 exceptionally attractive (Tom Welling, Ian Somerhalder)\n"
+  + "- 8 extremely attractive (Jensen Ackles, Chace Crawford)\n"
+  + "- 7.5 an average working top model (young Leonardo DiCaprio)\n"
+  + "- 7.25 top 20% among models (Zac Efron, Cillian Murphy, Zayn Malik)\n"
+  + "- 6.75 model benchmark, an agency would sign him (Orlando Bloom, Jacob Elordi)\n"
+  + "- 6 attractive (Tom Holland, Justin Timberlake; Ryan Gosling is 5.75)\n"
+  + "- 4.5 to 5.5 ORDINARY facial attractiveness -- this is where most men are, and most faces you see belong here\n"
+  + "- 4 somewhat unattractive\n"
+  + "- 3.5 unattractive\n"
+  + "- 3 or below extremely unattractive\n"
+  + "Most ordinary men land between 4 and 5.5. Do not drift upward to be kind: a face with no striking feature is a 5, not a 6.\n\n"
+  // Без этого абзаца верхняя полоса занижалась на 0.62: модель избегала высоких чисел.
+  + "TWO MISTAKES, BOTH EQUALLY BAD. One is giving 6 or more to an ordinary face to be polite. The other is refusing to give 8.5, 9 or 10 to a face that genuinely has it, because high numbers feel like flattery. A face that would be signed by a top agency today IS 8.5 or above on this scale, and a face that is plainly one of the best-looking men you have seen IS 9 or above. Use the whole range in both directions.";
+var METHOD_GROUPS = "RATE THESE, each 0-10 on the scale above.\n\n"
+  + "FOUR PILLARS:\n"
+  + "HARMONY -- proportions and angles of the face: thirds, fifths, facial width to height, how the parts fit together.\n"
+  + "DIMORPHISM -- masculinity: brow ridge, jaw mass, overall robustness, how male the face reads.\n"
+  + "ANGULARITY -- jaw angularity (gonial width, sharpness, lateral concavity under the cheekbone), midface three-dimensionality, cheekbone taper, cheek hollowness, little volume under the chin.\n"
+  + "FEATURES -- the seven groups below; rate each group separately.\n\n"
+  + "SEVEN FEATURE GROUPS (weights in the reference methodology are given so you know what matters, do not output them):\n"
+  + "SKIN (heaviest group) -- overall quality and smoothness above all, then nasolabial folds, tear troughs, forehead lines.\n"
+  + "HAIR -- density and hairline above all, then eyebrow density, then facial hair.\n"
+  + "MOUTH -- straight teeth and tooth shade above all, then lip fullness, lip hydration, vermillion border.\n"
+  + "EYES -- periorbital darkness and eye shape above all, then lid exposure, lash length, scleral whiteness.\n"
+  + "SYMMETRY -- of the eyes and the jaw above all, then ears, nose, brows, lips.\n"
+  + "NOSE -- tip thickness and the dorsum above all, then columella, radix.\n"
+  + "EARS -- how far they stick out, then size relative to the head.";
+var METHOD_INSTRUCTIONS = METHOD_SCALE + "\n\n" + METHOD_GROUPS
+  + "\n\nWrite these ten lines FIRST, before anything else, one decimal each, no extra words:\n"
+  + "HARMONY: 0.0\nDIMORPHISM: 0.0\nANGULARITY: 0.0\nSKIN: 0.0\nHAIR: 0.0\nMOUTH: 0.0\nEYES: 0.0\nSYMMETRY: 0.0\nNOSE: 0.0\nEARS: 0.0";
+var FEATURE_WEIGHTS = { SKIN: 0.214, HAIR: 0.197, MOUTH: 0.164, EYES: 0.149, SYMMETRY: 0.129, NOSE: 0.079, EARS: 0.068 };
+var PILLAR_WEIGHTS = { HARMONY: 0.32, DIMORPHISM: 0.2, ANGULARITY: 0.2, FEATURES: 0.28 };
+var PSL_FROM_METHOD = 0.8;
+var METHOD_KEYS = ["HARMONY", "DIMORPHISM", "ANGULARITY", "SKIN", "HAIR", "MOUTH", "EYES", "SYMMETRY", "NOSE", "EARS"];
+function scoreFromPillars(text) {
+  var v = {}, i, m;
+  for (i = 0; i < METHOD_KEYS.length; i++) {
+    // Модель иногда добавляет маркер, звёздочки или пояснение в скобках — на балл это
+    // не влияет, а строгий разбор из-за этого терял весь ответ целиком.
+    m = String(text || "").match(new RegExp("[*_\\-\\s]*" + METHOD_KEYS[i] + "[*_\\s]*:\\s*\\**\\s*([0-9]+(?:[.,][0-9])?)", "i"));
+    if (!m) return null;
+    v[METHOD_KEYS[i]] = parseFloat(m[1].replace(",", "."));
+  }
+  var feats = 0, k;
+  for (k in FEATURE_WEIGHTS) feats += v[k] * FEATURE_WEIGHTS[k];
+  var raw = PILLAR_WEIGHTS.HARMONY * v.HARMONY + PILLAR_WEIGHTS.DIMORPHISM * v.DIMORPHISM
+    + PILLAR_WEIGHTS.ANGULARITY * v.ANGULARITY + PILLAR_WEIGHTS.FEATURES * feats;
+  return Math.round(Math.max(0, Math.min(PSL_MAX, PSL_FROM_METHOD * raw)) * 10) / 10;
+}
+
 function scoreFromRarity(text) {
   const m = String(text || '').match(/РЕДКОСТЬ:\s*(ЛУЧШЕ|ХУЖЕ)\s*1\s*из\s*([\d\s]+)/i);
   if (!m) return null;
@@ -5016,14 +5071,24 @@ function scoreFromRarity(text) {
 }
 
 // Текст замера показывается человеку как есть и уходит в историю. Строку редкости
-// убираем — это служебная калибровка. ОБЩИЙ_БАЛЛ оставляем тем, что написала модель:
-// в замере она пишет редкость только ступенями лестницы (замер 14.09: 1 из 2, 6, 44, 740),
-// и балл по ней шагал бы целыми, а графику прогресса нужны десятые. Если «/8» модель
-// не написала, ставим PSL по редкости, чтобы текст и график не разошлись.
+// убираем — это служебная калибровка, человеку её видеть незачем. На их место ставим
+// «ОБЩИЙ_БАЛЛ: X/8» с НАШИМ числом: ниже по течению всё — parseScores, график прогресса,
+// вырезание прошлых баллов из промпта, экран «Ведения» — ждёт именно эту строку, и так
+// её менять не приходится. Балл считается по методике тем же счётчиком, что в разборе и
+// дуэли (с 06.10.2026): одно лицо не должно получать разные числа в двух местах сервиса.
+// Старые пути (строка редкости, своё число модели) оставлены запасными: по ним
+// разбираются замеры, снятые до перехода.
 function normalizeMeasureText(text) {
-  const psl = scoreFromRarity(text);
+  const byMethod = scoreFromPillars(text);
+  const psl = byMethod !== null ? byMethod : scoreFromRarity(text);
   if (psl === null) return text;
-  const out = text.replace(/^[ \t]*РЕДКОСТЬ\s*:[^\n]*\n?(\s*\n)?/mi, '');
+  let out = text.replace(/^[ \t]*РЕДКОСТЬ\s*:[^\n]*\n?(\s*\n)?/mi, '');
+  if (byMethod !== null) {
+    // Десять служебных строк вон, а вердикт получает балл: он и показывается человеку.
+    for (const k of METHOD_KEYS) out = out.replace(new RegExp('^[ \\t]*[*_\\-\\s]*' + k + '[*_\\s]*:[^\\n]*\\n?', 'mi'), '');
+    out = out.replace(/^[ \t]*ОБЩИЙ_ВЕРДИКТ\s*:/mi, `ОБЩИЙ_БАЛЛ: ${psl.toFixed(1)}/8`);
+    return out.replace(/^\s+/, '').replace(/\n{3,}/g, '\n\n');
+  }
   if (/ОБЩИЙ_БАЛЛ\s*:\s*[0-9]+(?:[.,][0-9])?\s*\/\s*8\b/i.test(out)) return out;
   return out.replace(/(ОБЩИЙ_БАЛЛ\s*:\s*)[0-9]+(?:[.,][0-9])?\s*\/\s*10/i, `$1${psl.toFixed(1)}/8`);
 }
@@ -5068,30 +5133,34 @@ const MEASURE_BASE = `Ты - измерительный инструмент д�
    При НЕ УВЕРЕН сравнивай осторожно и скажи, что именно вызывает сомнение.
 
 ДВЕ РАЗНЫЕ ШКАЛЫ, НЕ ПУТАЙ ИХ:
-- ОБЩИЙ_БАЛЛ - это PSL от 0 до 8. 4 - ровно средний мужчина, 4.7 - привлекательный
-  (лучше 1 из 6), 5.5 - модельный уровень, такого взяло бы агентство (1 из 44), 6.2 - топ-модель
-  или актёр на пике формы (1 из 740), 7 и выше - единицы на десятки тысяч, 8 - теоретический
-  предел. 3.3 - ниже среднего, 2.5 - явно непривлекательное лицо.
 - Восемь категорий - отдельная шкала от 0 до 10: 5 - обычная черта, 6 - хорошая,
   7 - модельная, 8 - одна из лучших, что встречаются, 9 и выше - почти никогда.
+- Десять оценок ниже - шкала справочника, тоже 0-10, но там 5 - ОБЫЧНЫЙ ЧЕЛОВЕК целиком,
+  а не обычная черта. Общий балл НЕ СТАВЬ и не упоминай: он считается из этих десяти
+  оценок и строится по нему график прогресса. Тир словом (МТН, ХТН, Chadlite и прочие)
+  тоже не называй - его показывает интерфейс по своему числу.
 
-СТРОКА РЕДКОСТЬ. Представь всех мужчин возраста этого человека. Если он красивее среднего,
-пиши ЛУЧШЕ 1 из N: только один из N выглядит так же или лучше. Если хуже среднего - ХУЖЕ 1 из N:
-только один из N выглядит так же или хуже. Совсем обычный мужчина - ЛУЧШЕ 1 из 2.
-Ставь по этой лестнице, N можно брать и между ступенями:
-${RARITY_LADDER}
-Свет, качество фото, стрижка и стиль сдвигают эту строку не больше чем на одну ступень.
-Реши эту строку ПЕРВОЙ, а ОБЩИЙ_БАЛЛ ставь согласованно с ней.
-ОБЩИЙ_БАЛЛ пиши с одним знаком после точки и различай десятые (например, 4.3 или 5.6): по нему
-строится график прогресса, и округление до ступеней лестницы спрятало бы реальные изменения.
+ОЦЕНКА ПО МЕТОДИКЕ. Десять оценок ниже - это то, из чего считается балл замера. Шкала,
+критерии и формат - строго как написано, по-английски, это ключи для разбора:
+
+${METHOD_INSTRUCTIONS}
 
 ФОРМАТ ОТВЕТА - простой текст, без markdown, строго в этом порядке:
 
-РЕДКОСТЬ: ЛУЧШЕ 1 из N
-[ровно одна строка в таком виде - ЛУЧШЕ или ХУЖЕ, N целое число]
+HARMONY: X
+DIMORPHISM: X
+ANGULARITY: X
+SKIN: X
+HAIR: X
+MOUTH: X
+EYES: X
+SYMMETRY: X
+NOSE: X
+EARS: X
+[ровно десять строк, по шкале справочника, одна цифра после точки, без лишних слов]
 
-ОБЩИЙ_БАЛЛ: X/8
-[2-3 предложения о текущем состоянии]
+ОБЩИЙ_ВЕРДИКТ:
+[2-3 предложения о текущем состоянии, без общего балла и без названия тира]
 
 СИММЕТРИЯ: X/10
 ГЛАЗА_CANTHAL_TILT: X/10

@@ -14,12 +14,20 @@ const W = new Function(`
   ${pick(workerSrc, /^const RARITY_LADDER = \[[\s\S]*?\]\.join\('\\n'\);/m)}
   ${pick(workerSrc, /^function normInv[\s\S]*?^\}/m)}
   ${pick(workerSrc, /^function scoreFromRarity[\s\S]*?^\}/m)}
+  ${pick(workerSrc, /^var METHOD_SCALE = [\s\S]*?";\n/m)}
+  ${pick(workerSrc, /^var METHOD_GROUPS = [\s\S]*?";\n/m)}
+  ${pick(workerSrc, /^var METHOD_INSTRUCTIONS = [\s\S]*?";\n/m)}
+  ${pick(workerSrc, /^var FEATURE_WEIGHTS = \{[^}]*\};/m)}
+  ${pick(workerSrc, /^var PILLAR_WEIGHTS = \{[^}]*\};/m)}
+  ${pick(workerSrc, /^var PSL_FROM_METHOD = [\d.]+;/m)}
+  ${pick(workerSrc, /^var METHOD_KEYS = \[[^\]]*\];/m)}
+  ${pick(workerSrc, /^function scoreFromPillars[\s\S]*?^\}/m)}
   ${pick(workerSrc, /^function normalizeMeasureText[\s\S]*?^\}/m)}
   const PROG_CATS = ['СИММЕТРИЯ', 'КОЖА'];
   ${pick(workerSrc, /^function parseScores[\s\S]*?^\}/m)}
   const MEASURE_BASE = ${pick(workerSrc, /^const MEASURE_BASE = (`[\s\S]*?`);/m).replace(/^const MEASURE_BASE = /, '').replace(/;$/, '')};
   ${pick(workerSrc, /^function buildMeasurePrompt[\s\S]*?^\}/m)}
-  return { RARITY_LADDER, scoreFromRarity, normalizeMeasureText, parseScores, buildMeasurePrompt, MEASURE_BASE };
+  return { RARITY_LADDER, scoreFromRarity, normalizeMeasureText, parseScores, buildMeasurePrompt, MEASURE_BASE, scoreFromPillars, METHOD_INSTRUCTIONS, METHOD_KEYS };
 `)();
 const A = new Function(`
   ${pick(app, /var PSL_MID = \d+;/)}
@@ -29,7 +37,15 @@ const A = new Function(`
   ${pick(app, /^function normInv[\s\S]*?^\}/m)}
   ${pick(app, /^function scoreFromRarity[\s\S]*?^\}/m)}
   ${pick(app, /^function measureOverallPsl[\s\S]*?^\}/m)}
-  return { RARITY_LADDER, scoreFromRarity, measureOverallPsl };
+  ${pick(app, /var METHOD_SCALE = [\s\S]*?";\n/)}
+  ${pick(app, /var METHOD_GROUPS = [\s\S]*?";\n/)}
+  ${pick(app, /var METHOD_INSTRUCTIONS = [\s\S]*?";\n/)}
+  ${pick(app, /var FEATURE_WEIGHTS = \{[^}]*\};/)}
+  ${pick(app, /var PILLAR_WEIGHTS = \{[^}]*\};/)}
+  ${pick(app, /var PSL_FROM_METHOD = [\d.]+;/)}
+  ${pick(app, /var METHOD_KEYS = \[[^\]]*\];/)}
+  ${pick(app, /^function scoreFromPillars[\s\S]*?^\}/m)}
+  return { RARITY_LADDER, scoreFromRarity, measureOverallPsl, scoreFromPillars, METHOD_INSTRUCTIONS };
 `)();
 
 assert.equal(W.RARITY_LADDER, A.RARITY_LADDER, 'лестница в воркере и на сайте совпадает слово в слово');
@@ -52,10 +68,28 @@ const old10 = W.normalizeMeasureText('РЕДКОСТЬ: ЛУЧШЕ 1 из 44\nО
 assert.match(old10, /^ОБЩИЙ_БАЛЛ: 5\.5\/8$/m, 'модель по привычке написала «/10» — ставим PSL по редкости');
 assert.equal(W.normalizeMeasureText('ОБЩИЙ_БАЛЛ: 4.6/8'), 'ОБЩИЙ_БАЛЛ: 4.6/8', 'без строки редкости текст не трогаем');
 
-assert.match(W.MEASURE_BASE, /ОБЩИЙ_БАЛЛ: X\/8/, 'промпт просит общий балл из 8');
-assert.match(W.MEASURE_BASE, /1 из 44: model benchmark/, 'в промпт подставлена лестница');
+assert.equal(W.METHOD_INSTRUCTIONS, A.METHOD_INSTRUCTIONS, 'блок методики в воркере и на сайте совпадает слово в слово');
+for (const v of [5, 6.5, 3.2, 8]) {
+  const txt = W.METHOD_KEYS.map((k) => k + ': ' + v.toFixed(1)).join('\n');
+  assert.equal(W.scoreFromPillars(txt), A.scoreFromPillars(txt), 'замер и разбор считают один балл при оценках ' + v);
+}
+assert.ok(!/ОБЩИЙ_БАЛЛ: X\/8/.test(W.MEASURE_BASE), 'промпт замера больше не просит балл у модели');
+assert.match(W.MEASURE_BASE, /HARMONY: X/, 'промпт замера просит десять оценок методики');
+assert.match(W.MEASURE_BASE, /ОБЩИЙ_ВЕРДИКТ:/, 'вердикт без числа');
+assert.match(W.MEASURE_BASE, /5 is an ORDINARY man/, 'и шкалу справочника');
 assert.match(W.MEASURE_BASE, /СИММЕТРИЯ: X\/10/, 'категории в промпте остаются из 10');
-assert.match(W.MEASURE_BASE, /различай десятые/, 'промпт просит общий балл с десятыми');
+
+// Десять служебных строк человеку не показываем, а балл в текст ставим свой: ниже по
+// течению всё (график, вырезание прошлых баллов, экран «Ведения») ждёт «ОБЩИЙ_БАЛЛ: X/8».
+const byMethod = W.METHOD_KEYS.map((k) => k + ': 5.0').join('\n')
+  + '\n\nОБЩИЙ_ВЕРДИКТ:\nЛицо обычное.\n\nСИММЕТРИЯ: 5.0/10\nКОЖА: 5.0/10\n\nКАЧЕСТВО_СЪЁМКИ: СОПОСТАВИМО';
+const nm = W.normalizeMeasureText(byMethod);
+for (const k of W.METHOD_KEYS) assert.ok(!new RegExp('^' + k + ':', 'm').test(nm), 'строка ' + k + ' не показывается человеку');
+assert.match(nm, /^ОБЩИЙ_БАЛЛ: 4\.0\/8$/m, 'балл в тексте — наш, посчитанный по методике');
+assert.ok(!/ОБЩИЙ_ВЕРДИКТ/.test(nm), 'метка вердикта заменена на строку балла');
+assert.equal(W.parseScores(nm).overall, 4, 'текст и график показывают одно число');
+assert.deepEqual(W.parseScores(nm).cats, { 'СИММЕТРИЯ': 5, 'КОЖА': 5 }, 'категории не пострадали');
+assert.equal(W.parseScores(nm).quality, 'СОПОСТАВИМО', 'качество съёмки читается');
 
 // Прошлые баллы модель видеть не должна — ни «/8», ни «/10», ни строку редкости.
 const prompt = W.buildMeasurePrompt({}, [
