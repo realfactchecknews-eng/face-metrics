@@ -399,7 +399,7 @@ async function analyze(request, env) {
   // Тизер (isTeaser, только новички без покупок): урезаем ответ ИИ до общего балла + 3 категорий,
   // без остальных 5 и без рекомендаций — экономит токены (меньше вывода) и мотивирует купить
   // полный разбор. Промпт после этого суффикса не меняем, просто просим модель не выводить лишнее.
-  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: the ten rating lines (HARMONY through EARS, exactly as instructed above -- all ten are REQUIRED, never omit any of them, the score is computed from them), ОБЩИЙ_ВЕРДИКТ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
+  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: the ten rating lines (HARMONY through EARS, exactly as instructed above -- all ten are REQUIRED, never omit any of them, the score is computed from them), ОБЩИЙ_ВЕРДИКТ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after ГЛАЗА_CANTHAL_TILT.";
   const promptText = isMeasure
     ? buildMeasurePrompt(body, await progTexts(env, tgid))
     : (isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt);
@@ -5042,11 +5042,18 @@ var METHOD_GROUPS = "RATE THESE, each 0-10 on the scale above.\n\n"
 var METHOD_INSTRUCTIONS = METHOD_SCALE + "\n\n" + METHOD_GROUPS
   + "\n\nWrite these ten lines FIRST, before anything else, one decimal each, no extra words:\n"
   + "HARMONY: 0.0\nDIMORPHISM: 0.0\nANGULARITY: 0.0\nSKIN: 0.0\nHAIR: 0.0\nMOUTH: 0.0\nEYES: 0.0\nSYMMETRY: 0.0\nNOSE: 0.0\nEARS: 0.0";
-var FEATURE_WEIGHTS = { SKIN: 0.214, HAIR: 0.197, MOUTH: 0.164, EYES: 0.149, SYMMETRY: 0.129, NOSE: 0.079, EARS: 0.068 };
+// Кожа и волосы в балл НЕ входят: PSL — это геометрия, а они поверхностные признаки.
+// Веса пяти оставшихся групп — их же доли из листа «Формула особенностей», нормированные
+// на единицу (.164/.149/.129/.079/.068, сумма .589). Пересчёт по тем же 52 лицам:
+// ошибка 0.321 против 0.317 со всей методикой — то есть бесплатно, а тир стал совпадать
+// чаще: 75% против 71%. Кожу и волосы модель по-прежнему оценивает: они нужны видимой
+// категории КОЖА и рекомендациям, просто вес у них нулевой.
+var FEATURE_WEIGHTS = { MOUTH: 0.2785, EYES: 0.253, SYMMETRY: 0.219, NOSE: 0.1341, EARS: 0.1154 };
 var PILLAR_WEIGHTS = { HARMONY: 0.32, DIMORPHISM: 0.2, ANGULARITY: 0.2, FEATURES: 0.28 };
 var PSL_FROM_METHOD = 0.8;
 var METHOD_KEYS = ["HARMONY", "DIMORPHISM", "ANGULARITY", "SKIN", "HAIR", "MOUTH", "EYES", "SYMMETRY", "NOSE", "EARS"];
-function scoreFromPillars(text) {
+// Достаёт десять оценок из ответа модели, либо null, если хоть одной нет.
+function pillarsFromText(text) {
   var v = {}, i, m;
   for (i = 0; i < METHOD_KEYS.length; i++) {
     // Модель иногда добавляет маркер, звёздочки или пояснение в скобках — на балл это
@@ -5055,11 +5062,26 @@ function scoreFromPillars(text) {
     if (!m) return null;
     v[METHOD_KEYS[i]] = parseFloat(m[1].replace(",", "."));
   }
+  return v;
+}
+
+// Считает PSL 0-8 из готовых десяти оценок. Отдельно от разбора текста, потому что
+// блоку потенциала нужно посчитать балл по изменённым числам, а не по ответу модели.
+function scoreFromValues(v) {
+  if (!v) return null;
   var feats = 0, k;
-  for (k in FEATURE_WEIGHTS) feats += v[k] * FEATURE_WEIGHTS[k];
+  for (k in FEATURE_WEIGHTS) {
+    if (typeof v[k] !== "number") return null;
+    feats += v[k] * FEATURE_WEIGHTS[k];
+  }
+  if (typeof v.HARMONY !== "number" || typeof v.DIMORPHISM !== "number" || typeof v.ANGULARITY !== "number") return null;
   var raw = PILLAR_WEIGHTS.HARMONY * v.HARMONY + PILLAR_WEIGHTS.DIMORPHISM * v.DIMORPHISM
     + PILLAR_WEIGHTS.ANGULARITY * v.ANGULARITY + PILLAR_WEIGHTS.FEATURES * feats;
   return Math.round(Math.max(0, Math.min(PSL_MAX, PSL_FROM_METHOD * raw)) * 10) / 10;
+}
+
+function scoreFromPillars(text) {
+  return scoreFromValues(pillarsFromText(text));
 }
 
 function scoreFromRarity(text) {
@@ -5704,7 +5726,7 @@ async function trackCron(env) {
    те, кто не купил сразу, без письма не вернутся вообще.
 
    Зацепка — не скидка, а его собственный недоделанный отчёт: в бесплатном видно
-   3 категории из 8, остальные пять и все рекомендации закрыты.
+   2 категории из 6, остальные четыре и все рекомендации закрыты.
 
    Письмо 1 (через сутки) — про закрытые категории.
    Письмо 2 (через трое суток) — другой механизм, а не то же самое громче: дуэль

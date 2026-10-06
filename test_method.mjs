@@ -13,6 +13,8 @@ const { scoreFromPillars } = new Function(`
   ${pick(/var PILLAR_WEIGHTS = \{[^}]*\};/)}
   ${pick(/var PSL_FROM_METHOD = [\d.]+;/)}
   ${pick(/var METHOD_KEYS = \[[^\]]*\];/)}
+  ${pick(/^function pillarsFromText[\s\S]*?^\}/m)}
+  ${pick(/^function scoreFromValues[\s\S]*?^\}/m)}
   ${pick(/^function scoreFromPillars[\s\S]*?^\}/m)}
   return { scoreFromPillars };
 `)();
@@ -31,12 +33,15 @@ assert.equal(scoreFromPillars(all(3)), 2.4, 'низ шкалы достижим'
 const sumP = Object.values(new Function(`${pick(/var PILLAR_WEIGHTS = \{[^}]*\};/)} return PILLAR_WEIGHTS;`)()).reduce((a, b) => a + b, 0);
 const sumF = Object.values(new Function(`${pick(/var FEATURE_WEIGHTS = \{[^}]*\};/)} return FEATURE_WEIGHTS;`)()).reduce((a, b) => a + b, 0);
 assert.ok(Math.abs(sumP - 1) < 1e-9, 'веса столпов дают единицу');
-assert.ok(Math.abs(sumF - 1) < 1e-9, 'веса групп признаков дают единицу');
+assert.ok(Math.abs(sumF - 1) < 1e-9, 'веса оцениваемых групп дают единицу');
+assert.ok(!('SKIN' in new Function(`${pick(/var FEATURE_WEIGHTS = \{[^}]*\};/)} return FEATURE_WEIGHTS;`)()), 'кожи в весах нет');
 
-// Кожа — самая тяжёлая группа методики, уши — самая лёгкая.
+// PSL — это геометрия: кожа и волосы оцениваются, но в балл не входят вовсе.
 const bump = (key, by) => KEYS.map((k) => k + ': ' + (k === key ? 5 + by : 5).toFixed(1)).join('\n');
-assert.ok(scoreFromPillars(bump('SKIN', 3)) > scoreFromPillars(bump('EARS', 3)), 'кожа весит больше ушей');
-assert.ok(scoreFromPillars(bump('HARMONY', 3)) > scoreFromPillars(bump('SKIN', 3)), 'гармония весит больше любой группы признаков');
+assert.equal(scoreFromPillars(bump('SKIN', 5)), scoreFromPillars(all(5)), 'кожа балл не двигает');
+assert.equal(scoreFromPillars(bump('HAIR', 5)), scoreFromPillars(all(5)), 'волосы балл не двигают');
+assert.ok(scoreFromPillars(bump('MOUTH', 3)) > scoreFromPillars(bump('EARS', 3)), 'рот весит больше ушей');
+assert.ok(scoreFromPillars(bump('HARMONY', 3)) > scoreFromPillars(bump('MOUTH', 3)), 'гармония весит больше любой группы признаков');
 
 // Разбор не должен ломаться об оформление: модель добавляет маркер, звёздочки,
 // запятую вместо точки. Строгий разбор из-за этого терял весь ответ целиком.

@@ -25,6 +25,8 @@ const { parseCompare, duelRatePrompt } = new Function(`
   ${pick(src, /var PILLAR_WEIGHTS = \{[^}]*\};/)}
   ${pick(src, /var PSL_FROM_METHOD = [\d.]+;/)}
   ${pick(src, /var METHOD_KEYS = \[[^\]]*\];/)}
+  ${pick(src, /^function pillarsFromText[\s\S]*?^\}/m)}
+  ${pick(src, /^function scoreFromValues[\s\S]*?^\}/m)}
   ${pick(src, /^function scoreFromPillars[\s\S]*?^\}/m)}
   ${pick(src, /  function parseCompare\(txt, rates\)\{[\s\S]*?\n  \}/)}
   return { parseCompare, duelRatePrompt };

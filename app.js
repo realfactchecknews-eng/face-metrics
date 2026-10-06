@@ -85,12 +85,12 @@ var I18N = {
     scanning: "Scanning face geometry…",
     scoreEyebrow: "OVERALL SCORE · PSL RATING",
     recsEyebrow: "LOOKSMAXXING RECOMMENDATIONS",
-    potEyebrow: "YOUR POTENTIAL",
-    potNow: "now", potMax: "reachable",
-    potNote: "Bone does not change — this gain comes from skin, grooming and what reads on the jaw. None of it needs a surgeon.",
+    potEyebrow: "YOUR APPEARANCE, NOT YOUR PSL",
+    potNow: "appearance now", potMax: "within reach",
+    potNote: "Your PSL score is bone geometry and it does not move -- this is a separate number for how you look overall, on the same 0-8 scale. It rises from skin, hair and from losing facial puffiness, which is what makes the jaw and cheekbones read. No surgeon involved.",
     hudRoasting: "Rewriting in savage mode\u2026",
     toneInfoTitle: "What the savage mode changes",
-    toneInfoBody: "Only the wording. The score, the tier and all eight category numbers are worked out by the same neutral analysis and do not move \u2014 we measured that and built it so on purpose. What changes is the voice: no courtesy compliments, no softening, jabs about features, haircut and style. The verdict is the same, the delivery is not. It takes a few seconds longer, because the report is rewritten in a second pass.",
+    toneInfoBody: "Only the wording. The score, the tier and every category number are worked out by the same neutral analysis and do not move \u2014 we measured that and built it so on purpose. What changes is the voice: no courtesy compliments, no softening, jabs about features, haircut and style. The verdict is the same, the delivery is not. It takes a few seconds longer, because the report is rewritten in a second pass.",
     toneInfoClose: "Got it",
     potBtn: "Get the 90-day plan →",
     potBtnOwned: "Open coaching →",
@@ -143,7 +143,7 @@ var I18N = {
     gateHint: "After subscribing, come back and press “Analyze” again.",
     invoiceCreating: "Creating invoice…", invoiceOpening: "Opening Telegram…", invoiceErr: "Error, try again", netErr: "Network unavailable",
     pwPickMethod: "Choose payment method", pwPickPack: "Choose a package", payStars: "⭐ Telegram Stars", payCard: "💳 Card (RUB)", paySbp: "📲 SBP (RUB)", payCrypto: "🪙 Crypto", pwBack: "← Back",
-    teaserTitle: "Full report locked", teaserBody: "This free report shows only 3 of 8 categories. Unlock the full breakdown (Jaw, Maxilla, Nose, Lips/Cheekbones, Grooming) plus personal recommendations.", teaserBtn: "Unlock full report",
+    teaserTitle: "Full report locked", teaserBody: "This free report shows only 2 of 6 categories. Unlock the full breakdown (Jaw, Maxilla, Nose, Lips/Cheekbones) plus personal recommendations.", teaserBtn: "Unlock full report",
     histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
     histAvg: "Average score: ", histCount: " · analyses: ",
     howHtml: "<div class='how'>" +
@@ -209,12 +209,12 @@ var I18N = {
     scanning: "Сканирование геометрии лица…",
     scoreEyebrow: "ОБЩАЯ ОЦЕНКА · PSL РЕЙТИНГ",
     recsEyebrow: "РЕКОМЕНДАЦИИ ПО ЛУКСМАКСИНГУ",
-    potEyebrow: "ТВОЙ ПОТЕНЦИАЛ",
-    potNow: "сейчас", potMax: "достижимо",
-    potNote: "Кость не меняется — этот рост берётся из кожи, груминга и того, что читается на челюсти. Всё это делается без врача.",
+    potEyebrow: "ВНЕШНИЙ ВИД, А НЕ PSL",
+    potNow: "внешний вид сейчас", potMax: "достижимо",
+    potNote: "Балл PSL — это геометрия кости, он не меняется. Здесь другое число: как ты выглядишь в целом, по той же шкале 0-8. Оно растёт от кожи, волос и ухода отёка — именно они решают, читается ли челюсть и скулы. Без врача.",
     hudRoasting: "\u041f\u0435\u0440\u0435\u043f\u0438\u0441\u044b\u0432\u0430\u044e \u0432 \u0434\u0435\u0440\u0437\u043a\u043e\u043c \u0442\u043e\u043d\u0435\u2026",
     toneInfoTitle: "\u0427\u0442\u043e \u043c\u0435\u043d\u044f\u0435\u0442 \u0434\u0435\u0440\u0437\u043a\u0438\u0439 \u0440\u0435\u0436\u0438\u043c",
-    toneInfoBody: "\u0422\u043e\u043b\u044c\u043a\u043e \u0444\u043e\u0440\u043c\u0443\u043b\u0438\u0440\u043e\u0432\u043a\u0438. \u0411\u0430\u043b\u043b, \u0442\u0438\u0440 \u0438 \u0432\u0441\u0435 \u0432\u043e\u0441\u0435\u043c\u044c \u0446\u0438\u0444\u0440 \u043f\u043e \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f\u043c \u0441\u0447\u0438\u0442\u0430\u0435\u0442 \u043e\u0434\u0438\u043d \u0438 \u0442\u043e\u0442 \u0436\u0435 \u043d\u0435\u0439\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0430\u0437\u0431\u043e\u0440, \u0438 \u043e\u0442 \u0442\u0443\u043c\u0431\u043b\u0435\u0440\u0430 \u043e\u043d\u0438 \u043d\u0435 \u0434\u0432\u0438\u0433\u0430\u044e\u0442\u0441\u044f \u2014 \u044d\u0442\u043e \u0437\u0430\u043c\u0435\u0440\u0435\u043d\u043e \u0438 \u0441\u0434\u0435\u043b\u0430\u043d\u043e \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u044c\u043d\u043e. \u041c\u0435\u043d\u044f\u0435\u0442\u0441\u044f \u043f\u043e\u0434\u0430\u0447\u0430: \u0431\u0435\u0437 \u0434\u0435\u0436\u0443\u0440\u043d\u044b\u0445 \u043a\u043e\u043c\u043f\u043b\u0438\u043c\u0435\u043d\u0442\u043e\u0432, \u0431\u0435\u0437 \u0441\u043c\u044f\u0433\u0447\u0435\u043d\u0438\u0439, \u0441 \u043f\u043e\u0434\u043a\u043e\u043b\u0430\u043c\u0438 \u043f\u0440\u043e \u0447\u0435\u0440\u0442\u044b \u043b\u0438\u0446\u0430, \u0441\u0442\u0440\u0438\u0436\u043a\u0443 \u0438 \u0441\u0442\u0438\u043b\u044c. \u0412\u0435\u0440\u0434\u0438\u043a\u0442 \u0442\u043e\u0442 \u0436\u0435, \u0442\u043e\u043d \u0434\u0440\u0443\u0433\u043e\u0439. \u0417\u0430\u043d\u0438\u043c\u0430\u0435\u0442 \u043d\u0430 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0435\u043a\u0443\u043d\u0434 \u0434\u043e\u043b\u044c\u0448\u0435: \u043e\u0442\u0447\u0451\u0442 \u043f\u0435\u0440\u0435\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u0432\u0442\u043e\u0440\u044b\u043c \u043f\u0440\u043e\u0445\u043e\u0434\u043e\u043c.",
+    toneInfoBody: "\u0422\u043e\u043b\u044c\u043a\u043e \u0444\u043e\u0440\u043c\u0443\u043b\u0438\u0440\u043e\u0432\u043a\u0438. \u0411\u0430\u043b\u043b, \u0442\u0438\u0440 \u0438 \u0432\u0441\u0435 \u0446\u0438\u0444\u0440\u044b \u043f\u043e \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f\u043c \u0441\u0447\u0438\u0442\u0430\u0435\u0442 \u043e\u0434\u0438\u043d \u0438 \u0442\u043e\u0442 \u0436\u0435 \u043d\u0435\u0439\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0430\u0437\u0431\u043e\u0440, \u0438 \u043e\u0442 \u0442\u0443\u043c\u0431\u043b\u0435\u0440\u0430 \u043e\u043d\u0438 \u043d\u0435 \u0434\u0432\u0438\u0433\u0430\u044e\u0442\u0441\u044f \u2014 \u044d\u0442\u043e \u0437\u0430\u043c\u0435\u0440\u0435\u043d\u043e \u0438 \u0441\u0434\u0435\u043b\u0430\u043d\u043e \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u044c\u043d\u043e. \u041c\u0435\u043d\u044f\u0435\u0442\u0441\u044f \u043f\u043e\u0434\u0430\u0447\u0430: \u0431\u0435\u0437 \u0434\u0435\u0436\u0443\u0440\u043d\u044b\u0445 \u043a\u043e\u043c\u043f\u043b\u0438\u043c\u0435\u043d\u0442\u043e\u0432, \u0431\u0435\u0437 \u0441\u043c\u044f\u0433\u0447\u0435\u043d\u0438\u0439, \u0441 \u043f\u043e\u0434\u043a\u043e\u043b\u0430\u043c\u0438 \u043f\u0440\u043e \u0447\u0435\u0440\u0442\u044b \u043b\u0438\u0446\u0430, \u0441\u0442\u0440\u0438\u0436\u043a\u0443 \u0438 \u0441\u0442\u0438\u043b\u044c. \u0412\u0435\u0440\u0434\u0438\u043a\u0442 \u0442\u043e\u0442 \u0436\u0435, \u0442\u043e\u043d \u0434\u0440\u0443\u0433\u043e\u0439. \u0417\u0430\u043d\u0438\u043c\u0430\u0435\u0442 \u043d\u0430 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0435\u043a\u0443\u043d\u0434 \u0434\u043e\u043b\u044c\u0448\u0435: \u043e\u0442\u0447\u0451\u0442 \u043f\u0435\u0440\u0435\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u0432\u0442\u043e\u0440\u044b\u043c \u043f\u0440\u043e\u0445\u043e\u0434\u043e\u043c.",
     toneInfoClose: "\u041f\u043e\u043d\u044f\u0442\u043d\u043e",
     potBtn: "Забрать план на 90 дней →",
     potBtnOwned: "Открыть ведение →",
@@ -266,7 +266,7 @@ var I18N = {
     gateHint: "После подписки вернись и нажми «Анализировать» ещё раз.",
     invoiceCreating: "Создаю счёт…", invoiceOpening: "Открываю Telegram…", invoiceErr: "Ошибка, ещё раз", netErr: "Сеть недоступна",
     pwPickMethod: "Выбери способ оплаты", pwPickPack: "Выбери пакет", payStars: "⭐ Telegram Stars", payCard: "💳 Картой (₽)", paySbp: "📲 СБП (₽)", payCrypto: "🪙 Криптой", pwBack: "← Назад",
-    teaserTitle: "Полный разбор закрыт", teaserBody: "В бесплатном отчёте показаны только 3 категории из 8. Открой полный разбор (Джоулайн, Максилла, Нос, Губы/Скулы, Груминг) и персональные рекомендации.", teaserBtn: "Открыть полный разбор",
+    teaserTitle: "Полный разбор закрыт", teaserBody: "В бесплатном отчёте показаны только 2 категории из 6. Открой полный разбор (Джоулайн, Максилла, Нос, Губы/Скулы) и персональные рекомендации.", teaserBtn: "Открыть полный разбор",
     histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
     histAvg: "Средний балл: ", histCount: " · оценок: ",
     howHtml: "<div class='how'>" +
@@ -1794,7 +1794,7 @@ async function callAI(metrics, shapeInfo) {
   var maxillaInstruction = hasSide
     ? "For МИДФЕЙС_MAXILLA use the SECOND image (profile) -- sagittal maxillary projection (forward/recessed) is reliably and specifically assessed from the profile: upper jaw position relative to the forehead-to-chin line, nasolabial angle from the side, cheekbone projection from the side."
     : "No profile is available for МИДФЕЙС_MAXILLA -- sagittal projection (forward/recessed) CANNOT be reliably assessed from a single frontal photo, this is fundamentally a profile-dependent trait. Do NOT write 'recessed maxilla' or any other confident verdict by default unless you see clear frontal indicators (visibly flat/sunken midface, a strongly negative nasolabial angle, cheekbones that visually don't project). If nothing concerning is visible from the front, write a neutral-to-positive note (normal projection, nothing notable) and do NOT lowball the score at random. If you do choose to assess it, add the note '" + (lang() === "ru" ? "-- приблизительно, по одному анфас-фото без профиля." : "-- approximate, frontal-only, no profile.") + "'";
-  var prompt = "TWO FAILURE MODES, BOTH EQUALLY BAD: (1) scoring a face with real visible flaws generously just to be polite, and (2) refusing a genuinely model-tier face its real number because you are trying to look strict. You are a professional looksmaxxing analyst known specifically for being willing to score genuinely below-average faces low without softening -- that willingness is your defining trait and the entire reason this tool exists (a tool that never goes below average is useless and dishonest). Being 'nice' by inflating a low score is a FAILURE, not kindness. " + personaPrompt() + (lang() === "ru" ? " Write all explanatory text in Russian -- the format hints below are in English, they are instructions only, not something to translate or copy verbatim." : " Write all explanatory text and recommendations in English.") + " Keep the metric label keys (\u041e\u0411\u0429\u0418\u0419_\u0412\u0415\u0420\u0414\u0418\u041a\u0422, \u0421\u0418\u041c\u041c\u0415\u0422\u0420\u0418\u042f, etc.) EXACTLY as given in Cyrillic regardless of output language -- these are fixed parser keys, never translate or alter them." + "\n\n" + PSL_SCALE_PROMPT_METHOD + " Example of what an honest low score sounds like (tone reference, do not copy verbatim): \"\u0414\u0416\u041e\u0423\u041b\u0410\u0419\u041d_MANDIBLE: 3.4/10 -- soft, poorly defined jawline, gonial angle visually obtuse, weak chin, no clear submental boundary\" -- that is the tone a genuine low score must have, no softening, no apologetic hedging." + "\n\nTHE EIGHT CATEGORY SCORES MUST NOT CONTRADICT YOUR TEN RATINGS. They are shown on the same screen as the score, so a category that disagrees with the rating behind it reads as a mistake. Where they cover the same thing, keep them consistent: \u0421\u0418\u041c\u041c\u0415\u0422\u0420\u0418\u042f with SYMMETRY, \u041a\u041e\u0416\u0410 with SKIN, \u041d\u041e\u0421_NOSE with NOSE, \u0413\u0423\u0411\u042b_\u0421\u041a\u0423\u041b\u042b with MOUTH, \u0413\u041b\u0410\u0417\u0410_CANTHAL_TILT with EYES, \u0413\u0420\u0423\u041c\u0418\u041d\u0413_STYLE with HAIR. The other two, \u041c\u0418\u0414\u0424\u0415\u0419\u0421_MAXILLA and \u0414\u0416\u041e\u0423\u041b\u0410\u0419\u041d_MANDIBLE, describe what ANGULARITY and DIMORPHISM cover, so keep them in the same region of the scale.\n\nSPREAD: score each category strictly on its own merits. If the face is genuinely uneven the numbers will differ by themselves; if two categories deserve the same number, give them the same number. NEVER invent a weakness just to widen the spread, and never nudge a score off its honest value to avoid a repeat. If a face is genuinely consistent and strong across the board, say so and let every category sit high; that is what a model-tier face looks like." + "\n\nBREVITY -- THIS IS A HARD REQUIREMENT, NOT A STYLE PREFERENCE: each description under a CATEGORY label is EXACTLY ONE sentence, at most 18 words, naming only the two or three concrete features that actually drove that score. No preamble, no restating the label, no hedging clauses, no closing summary. This terseness applies ONLY to the 8 category lines -- the recommendations section stays detailed. Do not copy text between sections, do not repeat the overall verdict inside categories, do not duplicate the same observation twice." + "\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is OFTEN WRONG (it's computed from a handful of 2D points and easily thrown off by head angle/tilt). Determine the real face shape and cheekbone projection ONLY from what you visually see in the photo -- treat the geometric label as unreliable background noise, not a hint to lean on. If your visual read disagrees with the label, IGNORE the label completely and go with what you see." + "\n\nSKIN -- DO NOT INVENT BLEMISHES: only mention acne, scarring, redness or pores if you can ACTUALLY SEE them in the photo. If the skin looks clear/clean, say exactly that and score accordingly high -- never default to mentioning acne/imperfections as a generic checklist item when none are visible. Photo quality/lighting/compression can hide minor texture -- when in doubt, don't invent a flaw that isn't clearly visible." + "\n\nLIGHTING/ANGLE CAUTION: harsh side/back lighting or a steep up/down camera angle can create dramatic shadows that IMITATE a strong jawline/gonial angle/maxilla projection or hooded/hunter eyes, even when the underlying bone structure is average -- mentally picture the same face under neutral frontal lighting before scoring jaw/maxilla/eyes, and don't let shadow alone justify a high score. This cuts both ways -- don't deliberately lowball a face just because it's dramatically lit either, if the strong features are genuinely visible independent of the lighting, score them fairly." + "\n\nSCORE FORMAT -- CRITICAL: instead of 0.0, use a decimal number with EXACTLY ONE digit after the point (4.1, 4.8, 5.4, 3.6, and 5.0 is allowed too). Categories MAY share the same number when they honestly deserve it. Do NOT write square brackets [ ], placeholder words, or hint text in your reply -- replace the hint under each label with your own finished text about this photo." + "\n\nINTERNAL STEP (do not output this step): first mentally describe what you actually see in the photo -- eye shape, cheekbones, skin, nose, hair, proportions -- and only then assign scores consistent with what you observed. The overall score is a weighted impression of the categories, not a random number." + "\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports." + "\n\n" + targetFaceNote + "\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%" + poseNote + "\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)" + tiltNote + "\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (measured on our landmark set, where an average face is 1.13; above ~1.20 means a notably tapered jaw, below ~1.05 a wide/square one)\n- Widths relative to bizygomatic (=1.00): forehead " + (metrics.foreheadWidth / (metrics.cheekboneWidth || 1)).toFixed(2) + ", bigonial " + (metrics.jawWidth / (metrics.cheekboneWidth || 1)).toFixed(2) + " -- for reference, an average face measures forehead 0.97 and bigonial 0.89 on these same points\n- Face length to bizygomatic width: " + (metrics.faceHeight / (metrics.cheekboneWidth || 1)).toFixed(2) + " (average face: 1.34)" + "\n\n" + jawInstruction + "\n\n" + maxillaInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\n" + METHOD_INSTRUCTIONS + "\n\n\u041e\u0411\u0429\u0418\u0419_\u0412\u0415\u0420\u0414\u0418\u041a\u0422:\nAppearance verdict: honest but balanced, strengths first, then weaknesses. Exactly 2-3 sentences. NEVER name a tier (MTN, HTN, Chadlite, Chad, Adam-lite, Sub-3, LTN) anywhere in your reply and never state an overall number: the interface shows both, computed from your ten numbers, and a word that disagrees with them reads as a mistake.\n\n\u0421\u0418\u041c\u041c\u0415\u0422\u0420\u0418\u042f: 0.0/10\nMeasured symmetry = " + sym + "%. On this measurement almost every real face lands at 88-97%, plain faces included, so this number by itself NEVER earns more than 6. A turned or tilted head lowers it without any real asymmetry. Score symmetry on the same scale as every other category: 5 = normal everyday symmetry, with small differences you notice only when looking for them; 6 = noticeably even; 7 = model level, strikingly mirror-like; 8 or more = near-perfect, practically never. Go below 5 only for asymmetry that is visible without looking for it: a jaw or chin shifted to one side, eyes at clearly different heights, a nose bent to one side, one half of the face clearly fuller. Cite the specifics you see." + "\n\n\u0413\u041b\u0410\u0417\u0410_CANTHAL_TILT: 0.0/10\nName only the 2-3 most decisive of: canthal tilt (positive/negative/neutral), hunter vs prey eyes, lid hooding, orbital rim projection, IPD vs norm, scleral show.\n\n\u041c\u0418\u0414\u0424\u0415\u0419\u0421_MAXILLA: 0.0/10\nName only the 2-3 most decisive of: maxillary projection (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.\n\n\u0414\u0416\u041e\u0423\u041b\u0410\u0419\u041d_MANDIBLE: 0.0/10\nName only the 2-3 most decisive of: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.\n\n\u041d\u041e\u0421_NOSE: 0.0/10\nName only the 2-3 most decisive of: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.\n\n\u0413\u0423\u0411\u042b_\u0421\u041a\u0423\u041b\u042b: 0.0/10\nName only the 2-3 most decisive of: lip ratio ~1:1.6, vermillion, philtrum, Cupid's bow, cheekbone projection, malar fat pad.\n\n\u041a\u041e\u0416\u0410: 0.0/10\nTexture, tone evenness, pores, elasticity, approximate skin age -- but only mention acne/scarring/redness if ACTUALLY visible in the photo; if the skin is clear, say so and don't lowball for no reason.\n\n\u0413\u0420\u0423\u041c\u0418\u041d\u0413_STYLE: 0.0/10\nName only the 2-3 most decisive of: hairline, hair density, hairstyle fit, brow grooming, facial hair." + "\n\n\u0420\u0415\u041a\u041e\u041c\u0415\u041d\u0414\u0410\u0426\u0418\u0418:\nGive 8-9 specific, detailed recommendations tailored to this exact face. Two traits carry real weight in the rating above and are fixable, so name them whenever the photo actually shows them: ears that visibly stick out (a haircut that covers them, otoplasty as a hardmax) and teeth that are crooked or stained (hygienist, whitening, aligners). They are already part of your EARS and MOUTH ratings -- do not re-score them here, just say what to do about them. Each on ONE numbered line, 1-2 sentences explaining WHY it will work for these proportions and what effect it gives. Softmax first (haircut/style matched to face shape, beard/stubble, brows, skincare, posture/posing, flattering photo angles, body fat -- ONLY if the photo actually shows facial puffiness/softness, and if recommending weight loss keep it to a realistic 2-5kg or 3-5% body fat, NEVER write numbers above 5kg -- that changes the face far less than it seems and larger numbers look absurd; if there's no visible fat puffiness, don't mention weight loss at all), then Hardmax (procedures) with rationale and a realistic outcome. No generic phrases -- only what actually applies to this person.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
+  var prompt = "TWO FAILURE MODES, BOTH EQUALLY BAD: (1) scoring a face with real visible flaws generously just to be polite, and (2) refusing a genuinely model-tier face its real number because you are trying to look strict. You are a professional looksmaxxing analyst known specifically for being willing to score genuinely below-average faces low without softening -- that willingness is your defining trait and the entire reason this tool exists (a tool that never goes below average is useless and dishonest). Being 'nice' by inflating a low score is a FAILURE, not kindness. " + personaPrompt() + (lang() === "ru" ? " Write all explanatory text in Russian -- the format hints below are in English, they are instructions only, not something to translate or copy verbatim." : " Write all explanatory text and recommendations in English.") + " Keep the metric label keys (\u041e\u0411\u0429\u0418\u0419_\u0412\u0415\u0420\u0414\u0418\u041a\u0422, \u0421\u0418\u041c\u041c\u0415\u0422\u0420\u0418\u042f, etc.) EXACTLY as given in Cyrillic regardless of output language -- these are fixed parser keys, never translate or alter them." + "\n\n" + PSL_SCALE_PROMPT_METHOD + " Example of what an honest low score sounds like (tone reference, do not copy verbatim): \"\u0414\u0416\u041e\u0423\u041b\u0410\u0419\u041d_MANDIBLE: 3.4/10 -- soft, poorly defined jawline, gonial angle visually obtuse, weak chin, no clear submental boundary\" -- that is the tone a genuine low score must have, no softening, no apologetic hedging." + "\n\nTHE EIGHT CATEGORY SCORES MUST NOT CONTRADICT YOUR TEN RATINGS. They are shown on the same screen as the score, so a category that disagrees with the rating behind it reads as a mistake. Where they cover the same thing, keep them consistent: \u0421\u0418\u041c\u041c\u0415\u0422\u0420\u0418\u042f with SYMMETRY, \u041d\u041e\u0421_NOSE with NOSE, \u0413\u0423\u0411\u042b_\u0421\u041a\u0423\u041b\u042b with MOUTH, \u0413\u041b\u0410\u0417\u0410_CANTHAL_TILT with EYES. The other two, \u041c\u0418\u0414\u0424\u0415\u0419\u0421_MAXILLA and \u0414\u0416\u041e\u0423\u041b\u0410\u0419\u041d_MANDIBLE, describe what ANGULARITY and DIMORPHISM cover, so keep them in the same region of the scale.\n\nSPREAD: score each category strictly on its own merits. If the face is genuinely uneven the numbers will differ by themselves; if two categories deserve the same number, give them the same number. NEVER invent a weakness just to widen the spread, and never nudge a score off its honest value to avoid a repeat. If a face is genuinely consistent and strong across the board, say so and let every category sit high; that is what a model-tier face looks like." + "\n\nBREVITY -- THIS IS A HARD REQUIREMENT, NOT A STYLE PREFERENCE: each description under a CATEGORY label is EXACTLY ONE sentence, at most 18 words, naming only the two or three concrete features that actually drove that score. No preamble, no restating the label, no hedging clauses, no closing summary. This terseness applies ONLY to the 8 category lines -- the recommendations section stays detailed. Do not copy text between sections, do not repeat the overall verdict inside categories, do not duplicate the same observation twice." + "\n\nLOOK CAREFULLY at the actual photo for the cheekbones and overall face shape -- the geometric face-shape label below is only a ROUGH approximation from 2D landmarks and is OFTEN WRONG (it's computed from a handful of 2D points and easily thrown off by head angle/tilt). Determine the real face shape and cheekbone projection ONLY from what you visually see in the photo -- treat the geometric label as unreliable background noise, not a hint to lean on. If your visual read disagrees with the label, IGNORE the label completely and go with what you see." + "\n\nSKIN -- DO NOT INVENT BLEMISHES: only mention acne, scarring, redness or pores if you can ACTUALLY SEE them in the photo. If the skin looks clear/clean, say exactly that and score accordingly high -- never default to mentioning acne/imperfections as a generic checklist item when none are visible. Photo quality/lighting/compression can hide minor texture -- when in doubt, don't invent a flaw that isn't clearly visible." + "\n\nLIGHTING/ANGLE CAUTION: harsh side/back lighting or a steep up/down camera angle can create dramatic shadows that IMITATE a strong jawline/gonial angle/maxilla projection or hooded/hunter eyes, even when the underlying bone structure is average -- mentally picture the same face under neutral frontal lighting before scoring jaw/maxilla/eyes, and don't let shadow alone justify a high score. This cuts both ways -- don't deliberately lowball a face just because it's dramatically lit either, if the strong features are genuinely visible independent of the lighting, score them fairly." + "\n\nSCORE FORMAT -- CRITICAL: instead of 0.0, use a decimal number with EXACTLY ONE digit after the point (4.1, 4.8, 5.4, 3.6, and 5.0 is allowed too). Categories MAY share the same number when they honestly deserve it. Do NOT write square brackets [ ], placeholder words, or hint text in your reply -- replace the hint under each label with your own finished text about this photo." + "\n\nINTERNAL STEP (do not output this step): first mentally describe what you actually see in the photo -- eye shape, cheekbones, skin, nose, hair, proportions -- and only then assign scores consistent with what you observed. The overall score is a weighted impression of the categories, not a random number." + "\n\nCRITICAL -- no generic boilerplate. Base every single observation on what you ACTUALLY SEE in THIS specific photo: this person's real eye shape, hair, skin, exact proportions, distinctive details. Never write a sentence that could apply to any face. Two different people must produce clearly different reports." + "\n\n" + targetFaceNote + "\n\nGeometric data (MediaPipe, APPROXIMATE -- verify against the photo):\n- Approx. face shape (rough, may be wrong): " + shapeInfo.shape + "\n- Facial symmetry: " + sym + "%" + poseNote + "\n- fWHR: " + fwhr + " (masculine ideal 1.9-2.1)" + tiltNote + "\n- Cheekbone-to-jaw taper ratio: " + cbJawRatio + " (measured on our landmark set, where an average face is 1.13; above ~1.20 means a notably tapered jaw, below ~1.05 a wide/square one)\n- Widths relative to bizygomatic (=1.00): forehead " + (metrics.foreheadWidth / (metrics.cheekboneWidth || 1)).toFixed(2) + ", bigonial " + (metrics.jawWidth / (metrics.cheekboneWidth || 1)).toFixed(2) + " -- for reference, an average face measures forehead 0.97 and bigonial 0.89 on these same points\n- Face length to bizygomatic width: " + (metrics.faceHeight / (metrics.cheekboneWidth || 1)).toFixed(2) + " (average face: 1.34)" + "\n\n" + jawInstruction + "\n\n" + maxillaInstruction + "\n\nAnalyze each category in detail. Reply STRICTLY in this format (no markdown, no asterisks, plain text only):\n\n" + METHOD_INSTRUCTIONS + "\n\n\u041e\u0411\u0429\u0418\u0419_\u0412\u0415\u0420\u0414\u0418\u041a\u0422:\nAppearance verdict: honest but balanced, strengths first, then weaknesses. Exactly 2-3 sentences. NEVER name a tier (MTN, HTN, Chadlite, Chad, Adam-lite, Sub-3, LTN) anywhere in your reply and never state an overall number: the interface shows both, computed from your ten numbers, and a word that disagrees with them reads as a mistake.\n\n\u0421\u0418\u041c\u041c\u0415\u0422\u0420\u0418\u042f: 0.0/10\nMeasured symmetry = " + sym + "%. On this measurement almost every real face lands at 88-97%, plain faces included, so this number by itself NEVER earns more than 6. A turned or tilted head lowers it without any real asymmetry. Score symmetry on the same scale as every other category: 5 = normal everyday symmetry, with small differences you notice only when looking for them; 6 = noticeably even; 7 = model level, strikingly mirror-like; 8 or more = near-perfect, practically never. Go below 5 only for asymmetry that is visible without looking for it: a jaw or chin shifted to one side, eyes at clearly different heights, a nose bent to one side, one half of the face clearly fuller. Cite the specifics you see." + "\n\n\u0413\u041b\u0410\u0417\u0410_CANTHAL_TILT: 0.0/10\nName only the 2-3 most decisive of: canthal tilt (positive/negative/neutral), hunter vs prey eyes, lid hooding, orbital rim projection, IPD vs norm, scleral show.\n\n\u041c\u0418\u0414\u0424\u0415\u0419\u0421_MAXILLA: 0.0/10\nName only the 2-3 most decisive of: maxillary projection (forward/recessed), midface length, zygomatic arch, malar eminence, nasolabial angle.\n\n\u0414\u0416\u041e\u0423\u041b\u0410\u0419\u041d_MANDIBLE: 0.0/10\nName only the 2-3 most decisive of: mandible definition, gonial angle (ideal 120-125 deg), ramus height, taper ratio " + cbJawRatio + ", chin projection, submental angle.\n\n\u041d\u041e\u0421_NOSE: 0.0/10\nName only the 2-3 most decisive of: dorsum, tip projection, nasal tip rotation, alar width vs intercanthal distance, NLH, bridge deviation.\n\n\u0413\u0423\u0411\u042b_\u0421\u041a\u0423\u041b\u042b: 0.0/10\nName only the 2-3 most decisive of: lip ratio ~1:1.6, vermillion, philtrum, Cupid's bow, cheekbone projection, malar fat pad." + "\n\n\u0420\u0415\u041a\u041e\u041c\u0415\u041d\u0414\u0410\u0426\u0418\u0418:\nGive 8-9 specific, detailed recommendations tailored to this exact face. Two traits carry real weight in the rating above and are fixable, so name them whenever the photo actually shows them: ears that visibly stick out (a haircut that covers them, otoplasty as a hardmax) and teeth that are crooked or stained (hygienist, whitening, aligners). They are already part of your EARS and MOUTH ratings -- do not re-score them here, just say what to do about them. Each on ONE numbered line, 1-2 sentences explaining WHY it will work for these proportions and what effect it gives. Softmax first (haircut/style matched to face shape, beard/stubble, brows, skincare, posture/posing, flattering photo angles, body fat -- ONLY if the photo actually shows facial puffiness/softness, and if recommending weight loss keep it to a realistic 2-5kg or 3-5% body fat, NEVER write numbers above 5kg -- that changes the face far less than it seems and larger numbers look absurd; if there's no visible fat puffiness, don't mention weight loss at all), then Hardmax (procedures) with rationale and a realistic outcome. No generic phrases -- only what actually applies to this person.\n1. Softmax: ...\n2. Softmax: ...\n3. Softmax: ...\n4. Softmax: ...\n5. Softmax: ...\n6. Hardmax: ...\n7. Hardmax: ...\n8. Hardmax: ...";
 
   try {
     // Фронт и профиль шлём ОТДЕЛЬНЫМИ изображениями (не склеиваем), чтобы модель
@@ -1919,9 +1919,8 @@ function compositeToBase64(frontCvs, sideCvs, maxW) {
    Раньше общий балл модель называла сама «по впечатлению», и он гулял даже
    когда категории почти совпадали. */
 var OVERALL_WEIGHTS = {
-  "СИММЕТРИЯ": 0.12, "ГЛАЗА_CANTHAL_TILT": 0.16, "МИДФЕЙС_MAXILLA": 0.15,
-  "ДЖОУЛАЙН_MANDIBLE": 0.16, "НОС_NOSE": 0.11, "ГУБЫ_СКУЛЫ": 0.10,
-  "КОЖА": 0.11, "ГРУМИНГ_STYLE": 0.09,
+  "СИММЕТРИЯ": 0.15, "ГЛАЗА_CANTHAL_TILT": 0.2, "МИДФЕЙС_MAXILLA": 0.19,
+  "ДЖОУЛАЙН_MANDIBLE": 0.2, "НОС_NOSE": 0.13, "ГУБЫ_СКУЛЫ": 0.13,
 };
 
 // Считает общий балл из категорий. Возвращает null, если пришли не все восемь
@@ -2042,13 +2041,23 @@ var METHOD_INSTRUCTIONS = METHOD_SCALE + "\n\n" + METHOD_GROUPS
 // −0.16, 0.80 даёт −0.02 и ошибку 0.310, 0.82 уже +0.09. Подгонять ничего не пришлось.
 // Проверено замером: веса столпов НЕ подбирать под набор (лучшая ошибка 0.291, но
 // с диморфизмом в ноль — это подгонка под 52 лица, а не методика).
-var FEATURE_WEIGHTS = { SKIN: 0.214, HAIR: 0.197, MOUTH: 0.164, EYES: 0.149, SYMMETRY: 0.129, NOSE: 0.079, EARS: 0.068 };
+// Кожа и волосы в балл НЕ входят: PSL — это геометрия, а они поверхностные признаки.
+// Веса пяти оставшихся групп — их же доли из листа «Формула особенностей», нормированные
+// на единицу (.164/.149/.129/.079/.068, сумма .589). Пересчёт по тем же 52 лицам:
+// ошибка 0.321 против 0.317 со всей методикой — то есть бесплатно, а тир стал совпадать
+// чаще: 75% против 71%. Кожу и волосы модель по-прежнему оценивает: они нужны видимой
+// рекомендациям и блоку потенциала, просто вес у них нулевой.
+var FEATURE_WEIGHTS = { MOUTH: 0.2785, EYES: 0.253, SYMMETRY: 0.219, NOSE: 0.1341, EARS: 0.1154 };
+// Доли групп как они и записаны в листе «Формула особенностей» — по ним считается
+// appeal, то есть внешний вид целиком. PSL из них берёт только геометрические пять.
+var APPEAL_FEATURE_WEIGHTS = { SKIN: 0.214, HAIR: 0.197, MOUTH: 0.164, EYES: 0.149, SYMMETRY: 0.129, NOSE: 0.079, EARS: 0.068 };
 var PILLAR_WEIGHTS = { HARMONY: 0.32, DIMORPHISM: 0.2, ANGULARITY: 0.2, FEATURES: 0.28 };
 var PSL_FROM_METHOD = 0.8;
 var METHOD_KEYS = ["HARMONY", "DIMORPHISM", "ANGULARITY", "SKIN", "HAIR", "MOUTH", "EYES", "SYMMETRY", "NOSE", "EARS"];
 
 // Считает PSL 0-8 из десяти оценок модели, либо null, если хоть одной нет.
-function scoreFromPillars(text) {
+// Достаёт десять оценок из ответа модели, либо null, если хоть одной нет.
+function pillarsFromText(text) {
   var v = {}, i, m;
   for (i = 0; i < METHOD_KEYS.length; i++) {
     // Модель иногда добавляет маркер, звёздочки или пояснение в скобках — на балл это
@@ -2057,11 +2066,32 @@ function scoreFromPillars(text) {
     if (!m) return null;
     v[METHOD_KEYS[i]] = parseFloat(m[1].replace(",", "."));
   }
-  var feats = 0, k;
-  for (k in FEATURE_WEIGHTS) feats += v[k] * FEATURE_WEIGHTS[k];
+  return v;
+}
+
+// Считает PSL 0-8 из готовых десяти оценок. Отдельно от разбора текста, потому что
+// блоку потенциала нужно посчитать балл по изменённым числам, а не по ответу модели.
+function scoreFromValues(v, weights) {
+  if (!v) return null;
+  var gw = weights || FEATURE_WEIGHTS, feats = 0, k;
+  for (k in gw) {
+    if (typeof v[k] !== "number") return null;
+    feats += v[k] * gw[k];
+  }
+  if (typeof v.HARMONY !== "number" || typeof v.DIMORPHISM !== "number" || typeof v.ANGULARITY !== "number") return null;
   var raw = PILLAR_WEIGHTS.HARMONY * v.HARMONY + PILLAR_WEIGHTS.DIMORPHISM * v.DIMORPHISM
     + PILLAR_WEIGHTS.ANGULARITY * v.ANGULARITY + PILLAR_WEIGHTS.FEATURES * feats;
   return Math.round(Math.max(0, Math.min(PSL_MAX, PSL_FROM_METHOD * raw)) * 10) / 10;
+}
+
+function scoreFromPillars(text) {
+  return scoreFromValues(pillarsFromText(text));
+}
+
+// Внешний вид целиком: та же формула, но с кожей и волосами. На балл PSL не влияет
+// и рядом с ним не показывается — живёт только в блоке потенциала.
+function appealFromValues(v) {
+  return scoreFromValues(v, APPEAL_FEATURE_WEIGHTS);
 }
 
 // Отдельная оценка одного лица из дуэли. В паре модель раздвигает лица: замер 14.09 —
@@ -2131,7 +2161,8 @@ function fixTierWord(desc, score) {
 
 function parseAIReport(text) {
   var result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
-  result.overallFromMethod = scoreFromPillars(text);
+  result.pillars = pillarsFromText(text);
+  result.overallFromMethod = scoreFromValues(result.pillars);
   // Старый формат остаётся разбираемым: в кэше rep: лежат отчёты со строкой редкости
   // и собственным баллом модели, и они доезжают до экрана повторно.
   result.overallFromRarity = scoreFromRarity(text);
@@ -2147,8 +2178,6 @@ function parseAIReport(text) {
     { key:"ДЖОУЛАЙН_MANDIBLE",  label:"Jawline / Mandible" },
     { key:"НОС_NOSE",              label:"Nose" },
     { key:"ГУБЫ_СКУЛЫ",        label:t("labelLips") },
-    { key:"КОЖА",               label:"Skin" },
-    { key:"ГРУМИНГ_STYLE",      label:"Grooming / Style" },
   ];
   cats.forEach(function(cat) {
     var esc = cat.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -2192,47 +2221,32 @@ function parseAIReport(text) {
   return result;
 }
 
-/* Потенциальный балл: сколько будет, если выжать то, что действительно меняется.
-   Кость (симметрия, глаза, мидфейс, нос, губы) не трогаем вообще — обещать по ней
-   рост значит врать. Кожа и груминг подтягиваются полностью, джоулайн частично:
-   его читаемость зависит от жира и отёка, а не только от гониального угла.
-   Считаем ДЕЛЬТУ через computeOverall и прибавляем её к показанному баллу: сам балл
-   приходит из перцентиля и живёт на своей шкале, смешивать их нельзя. */
-// Связка «категория ↔ PSL» по дата-шиту: обычная черта 5 ↔ PSL 4.0, модельная 7 ↔ PSL 5.3.
-var CAT_PER_PSL = 1.54;
-
-var POTENTIAL_CEILING = { "КОЖА": 8.5, "ГРУМИНГ_STYLE": 8.5 };
-// Прибавка к джоулайну тоже упирается в потолок: у кого челюсть уже читается,
-// сбрасывать нечего, и дорисовывать ему десятку — обман.
-var POTENTIAL_BONUS   = { "ДЖОУЛАЙН_MANDIBLE": { up: 0.8, max: 8.5 } };
+/* Потенциал: насколько поднимется ВНЕШНИЙ ВИД, если выжать то, что действительно
+   меняется. Балл PSL тут не растёт и расти не может — он считается по геометрии, и
+   уход за кожей его не двигает. Поэтому блок говорит не про балл, а про appeal:
+   ту же формулу дата-шита, но вместе с кожей и волосами.
+   Что поднимаем: кожу и волосы до потолка 8.5 — они целиком в руках человека; и
+   угловатость на 0.8, потому что отёк и лишний жир решают, читается ли челюсть.
+   Кость не трогаем вообще: обещать по ней рост значит врать. */
+var POTENTIAL_CEILING = { SKIN: 8.5, HAIR: 8.5 };
+// У кого щёки уже впалые, сбрасывать нечего, дорисовывать ему десятку — обман.
+var POTENTIAL_ANGULARITY = { up: 0.8, max: 8.5 };
 
 function computePotential(parsed) {
-  if (typeof parsed.overall !== "number" || !parsed.byKey) return null;
-  var wTotal = 0, gain = 0;
-  for (var k in OVERALL_WEIGHTS) {
-    wTotal += OVERALL_WEIGHTS[k];
-    // В бесплатном тизере пять категорий из восьми закрыты. Считать рост только по
-    // открытым — занизить его втрое: закрыты как раз груминг и джоулайн, где рост и
-    // живёт. Поэтому неизвестной категории подставляем уровень по общему баллу.
-    // Общий балл — PSL 0-8, категории — 0-10. По дата-шиту обычная черта 5 ↔ PSL 4.0,
-    // модельная 7 ↔ PSL 5.3, то есть один балл PSL ≈ 1.54 балла категории.
-    var v = typeof parsed.byKey[k] === "number" ? parsed.byKey[k] : 5 + (parsed.overall - PSL_MID) * CAT_PER_PSL;
-    var up = POTENTIAL_CEILING[k]
-      ? Math.max(0, POTENTIAL_CEILING[k] - v)
-      : POTENTIAL_BONUS[k]
-        ? Math.max(0, Math.min(v + POTENTIAL_BONUS[k].up, POTENTIAL_BONUS[k].max) - v)
-        : 0;
-    gain += up * OVERALL_WEIGHTS[k];
+  if (!parsed || !parsed.pillars) return null;
+  var v = parsed.pillars, lifted = {}, k;
+  for (k in v) lifted[k] = v[k];
+  for (k in POTENTIAL_CEILING) {
+    if (typeof lifted[k] !== "number") return null;
+    lifted[k] = Math.max(lifted[k], POTENTIAL_CEILING[k]);
   }
-  // Рост в баллах категорий переводится в PSL по той же связке: 1.54 балла категории
-  // на один балл PSL.
-  var up = gain / wTotal / CAT_PER_PSL;
-  // Ниже 0.2 блок обещает то, чего человек не заметит, и превращается в чистую
-  // рекламу гайда. В таком случае честнее его не показывать вовсе.
-  if (up < 0.2) return null;
-  // Потолок — начало тира Chad: выше него уходом за кожей и стрижкой не дотянуть.
-  var pot = Math.min(5.8, Math.round((parsed.overall + up) * 10) / 10);
-  return pot > parsed.overall ? pot : null;
+  if (typeof lifted.ANGULARITY !== "number") return null;
+  lifted.ANGULARITY = Math.min(lifted.ANGULARITY + POTENTIAL_ANGULARITY.up, POTENTIAL_ANGULARITY.max);
+  var now = appealFromValues(v), max = appealFromValues(lifted);
+  if (now === null || max === null) return null;
+  // Нечего обещать — блок прячем. Пустое место честнее, чем «потенциал: ровно столько же».
+  if (max - now < 0.2) return null;
+  return { now: now, max: max };
 }
 
 // Три коротких пункта из софтмакса: в блоке потенциала нужен не план, а доказательство,
@@ -2256,9 +2270,9 @@ function renderPotential(parsed) {
   box.innerHTML =
     '<span class="eyebrow">' + t("potEyebrow") + '</span>' +
     '<div class="pot-row">' +
-      '<div class="pot-cell"><b>' + parsed.overall.toFixed(1) + '</b><i>' + t("potNow") + '</i></div>' +
+      '<div class="pot-cell"><b>' + pot.now.toFixed(1) + '</b><i>' + t("potNow") + '</i></div>' +
       '<div class="pot-arrow" aria-hidden="true">&rarr;</div>' +
-      '<div class="pot-cell pot-cell-hi"><b>' + pot.toFixed(1) + '</b><i>' + t("potMax") + '</i></div>' +
+      '<div class="pot-cell pot-cell-hi"><b>' + pot.max.toFixed(1) + '</b><i>' + t("potMax") + '</i></div>' +
     '</div>' +
     '<p class="pot-note">' + t("potNote") + '</p>' +
     (recs.length ? '<ul class="pot-list"><li>' + recs.map(esc).join('</li><li>') + '</li></ul>' : '') +
@@ -2374,7 +2388,7 @@ function renderAIReport(text, skipSideEffects, isTeaser) {
     var cb = document.getElementById("toCompareBtn");
     if (cb) cb.classList.remove("hidden");
   }
-  // Бесплатный тир получает урезанный отчёт (3 из 8 категорий, без рекомендаций) —
+  // Бесплатный тир получает урезанный отчёт (2 из 6 категорий, без рекомендаций) —
   // показываем карточку с призывом купить полный разбор вместо оставшихся категорий.
   window._fmTeaser = !!isTeaser; // для share-карточки (замочек на балле)
   if (isTeaser) showTeaserUpsell(); else hideTeaserUpsell();
@@ -3770,8 +3784,6 @@ function pwRecheck(silent) {
     { key:"MANDIBLE", label:"Jawline / Mandible" },
     { key:"NOSE",     label:"Nose" },
     { key:"LIPS",     label:t("labelLips") },
-    { key:"SKIN",     label:"Skin" },
-    { key:"GROOM",    label:"Grooming / Style" },
   ];
 
   function comparePrompt(){
@@ -3781,7 +3793,7 @@ function pwRecheck(silent) {
       : "Write TRAITS_A, TRAITS_B and VERDICT in English.";
     var catLines = CMP_CATS.map(function(c){ return "CAT_" + c.key + ": A=0.0 B=0.0"; }).join("\n");
     return "You are a savage looksmaxxing judge. You are given TWO separate face photos: the FIRST image is person A, the SECOND image is person B. IMPORTANT -- do NOT confuse 'same face type/aesthetic' with 'same person': two DIFFERENT people can share a similar look (e.g. both have hunter eyes, positive canthal tilt, sharp jawline) and MUST still get DIFFERENT scores reflecting their individual differences in nose shape, skin, proportions, hair, exact bone structure etc. DEFAULT TO TWO DIFFERENT PEOPLE. Same hair colour, same age, same lighting, same room, same general type -- none of that makes it one person, and neither does a similar overall vibe. Declare the same individual ONLY when you can point to at least TWO matching unique markers: an identically placed mole or scar, an identical nose shape down to the tip and bridge, an identical eyebrow shape, an identical hairline pattern. If you are anything less than certain, treat them as two different people. Even when it IS clearly the same person in two shots, the two photos still differ in angle, lighting and expression, so the CAT_ scores must still differ by a couple of tenths and TRAITS_A must NOT repeat TRAITS_B word for word -- describe what is visible in each photo separately. Copying the same three traits into both lists is always wrong. LIGHTING/ANGLE CAUTION: harsh side/back lighting or a steep up/down camera angle can create dramatic shadows that IMITATE strong jawline/gonial angle/maxilla projection or hooded/hunter eyes, even when the underlying bone structure is average -- mentally picture the same face under neutral frontal lighting before scoring jaw/maxilla/eyes, and don't let shadow alone justify a high score. This cuts both ways -- don't deliberately lowball a face just because it's dramatically lit either, if the strong features are genuinely visible independent of the lighting, score them fairly. \n\n" + PSL_SCALE_PROMPT + "\n\n For each person, identify their 3 most defining facial traits (specific, visual, comparative — e.g. sharp jawline, hooded eyes, high cheekbones, weak chin, wide-set eyes). ABSOLUTE, NOT RELATIVE: score each face exactly as you would if it were the only photo in front of you. The same face must get the same number whether it is compared with a model or with an ordinary person. Never lower one face to make the winner look stronger, and never raise one to keep the duel close -- the gap has to fall out of two independent honest scores. If both photos contain more than one person, judge only the face that fills most of the frame. Then decide who MOGS the other (higher overall aesthetics) and WHY, referencing the actual traits that separate them. Be brutally honest and witty. " + langLine +
-      "\n\nAlso rate BOTH A and B on these 8 categories: Symmetry, Canthal Tilt/Eyes, Midface/Maxilla, Jawline/Mandible, Nose, Lips/Cheekbones, Skin, Grooming/Style. One decimal each (never .0), real spread between categories per person (do not give every category the same score) — this must be consistent with the overall SCORE_A/SCORE_B, which are PSL 0-8 while categories are 0-10.\n\nReply STRICTLY in this plain format, nothing else:\nRAR_A: ЛУЧШЕ 1 из N\nRAR_B: ЛУЧШЕ 1 из N\nEach line is either ЛУЧШЕ 1 из N or ХУЖЕ 1 из N, with N a whole number. Think of every man of that person's age in the world: ЛУЧШЕ 1 из N means only one man in N looks this good or better, ХУЖЕ 1 из N means only one man in N looks this bad or worse. A perfectly ordinary man is ЛУЧШЕ 1 из 2. Use this ladder, you may write any N between the steps:\n" + RARITY_LADDER + "\nRate each face on its own, exactly as you would if the other photo did not exist -- the loser must NOT be pushed down to widen the gap, and the gap has to fall out of two independent honest lines. Decide both lines FIRST, before the scores below.\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).\n" + catLines;
+      "\n\nAlso rate BOTH A and B on these 6 categories: Symmetry, Canthal Tilt/Eyes, Midface/Maxilla, Jawline/Mandible, Nose, Lips/Cheekbones. One decimal each (never .0), real spread between categories per person (do not give every category the same score) — this must be consistent with the overall SCORE_A/SCORE_B, which are PSL 0-8 while categories are 0-10.\n\nReply STRICTLY in this plain format, nothing else:\nRAR_A: ЛУЧШЕ 1 из N\nRAR_B: ЛУЧШЕ 1 из N\nEach line is either ЛУЧШЕ 1 из N or ХУЖЕ 1 из N, with N a whole number. Think of every man of that person's age in the world: ЛУЧШЕ 1 из N means only one man in N looks this good or better, ХУЖЕ 1 из N means only one man in N looks this bad or worse. A perfectly ordinary man is ЛУЧШЕ 1 из 2. Use this ladder, you may write any N between the steps:\n" + RARITY_LADDER + "\nRate each face on its own, exactly as you would if the other photo did not exist -- the loser must NOT be pushed down to widen the gap, and the gap has to fall out of two independent honest lines. Decide both lines FIRST, before the scores below.\nSCORE_A: 0.0\nTRAITS_A: trait one; trait two; trait three\nSCORE_B: 0.0\nTRAITS_B: trait one; trait two; trait three\nWINNER: A\nVERDICT: a sharp 2-3 sentence comparison explaining exactly why the winner mogs the loser, grounded in the specific traits of both faces (not a generic one-liner).\n" + catLines;
   }
 
   function doCompare(){
@@ -3849,7 +3861,7 @@ function pwRecheck(silent) {
     return { a:a, b:b, traitsA:traitsA, traitsB:traitsB, winner:winner, verdict: vm ? vm[1].replace(/\s+/g," ").trim() : "", cats:cats };
   }
 
-  // Отрисовка построчного сравнения по 8 категориям (A vs B) в DOM.
+  // Отрисовка построчного сравнения по категориям (A vs B) в DOM.
   function renderCmpCats(res){
     var box = $("cmpCatScores");
     if (!box) return;

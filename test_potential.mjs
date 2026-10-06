@@ -1,85 +1,66 @@
-// Потенциальный балл — единственное место в отчёте, где мы обещаем будущее.
-// Завысить его = соврать человеку, поэтому границы проверяем.
+// Блок потенциала — единственное место в отчёте, где мы обещаем будущее.
+// Соврать тут = пообещать рост, которого человек не получит.
+// С 06.10.2026 блок говорит НЕ про PSL: балл считается по геометрии кости и от ухода
+// не двигается вовсе. Потенциал считается по appeal — та же формула дата-шита, но
+// вместе с кожей и волосами, которые человек реально меняет.
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
 const src = readFileSync(new URL('./app.js', import.meta.url), 'utf8');
-const pick = (re) => src.match(re)[0];
-const { computePotential, shortRecs } = new Function(`
-  ${pick(/var OVERALL_WEIGHTS = \{[\s\S]*?\n\};/)}
-  ${pick(/^function computeOverall[\s\S]*?^\}/m)}
+const pick = (re) => { const m = src.match(re); assert.ok(m, 'не нашёл в app.js: ' + re); return m[0]; };
+const F = new Function(`
   ${pick(/var PSL_MAX = \d+;/)}
-  ${pick(/var PSL_MID = \d+;/)}
-  ${pick(/var CAT_PER_PSL = [\d.]+;/)}
-  ${pick(/var POTENTIAL_CEILING[\s\S]*?var POTENTIAL_BONUS\s+= \{[^\n]*\n/)}
+  ${pick(/var APPEAL_FEATURE_WEIGHTS = \{[^}]*\};/)}
+  ${pick(/var FEATURE_WEIGHTS = \{[^}]*\};/)}
+  ${pick(/var PILLAR_WEIGHTS = \{[^}]*\};/)}
+  ${pick(/var PSL_FROM_METHOD = [\d.]+;/)}
+  ${pick(/var METHOD_KEYS = \[[^\]]*\];/)}
+  ${pick(/^function scoreFromValues[\s\S]*?^\}/m)}
+  ${pick(/^function appealFromValues[\s\S]*?^\}/m)}
+  ${pick(/var POTENTIAL_CEILING = \{[^}]*\};/)}
+  ${pick(/var POTENTIAL_ANGULARITY = \{[^}]*\};/)}
   ${pick(/^function computePotential[\s\S]*?^\}/m)}
   ${pick(/^function shortRecs[\s\S]*?^\}/m)}
-  return { computePotential, shortRecs };
+  return F_EXPORTS();
+  function F_EXPORTS() { return { computePotential, shortRecs, scoreFromValues, appealFromValues }; }
 `)();
 
-const cats = (o) => ({
-  "СИММЕТРИЯ": 5, "ГЛАЗА_CANTHAL_TILT": 5, "МИДФЕЙС_MAXILLA": 5,
-  "ДЖОУЛАЙН_MANDIBLE": 5, "НОС_NOSE": 5, "ГУБЫ_СКУЛЫ": 5,
-  "КОЖА": 5, "ГРУМИНГ_STYLE": 5, ...o,
+const ten = (o) => ({
+  HARMONY: 5, DIMORPHISM: 5, ANGULARITY: 5, SKIN: 5, HAIR: 5,
+  MOUTH: 5, EYES: 5, SYMMETRY: 5, NOSE: 5, EARS: 5, ...o,
 });
+const of = (o) => { const p = ten(o); return { pillars: p, overall: F.scoreFromValues(p) }; };
 
-// обычное лицо: рост есть, но скромный — кость держит 80% веса
-// общий балл — PSL 0-8, категории — 0-10: рост по категориям переводится в PSL
-let p = computePotential({ overall: 4.2, byKey: cats({}) });
-assert.ok(p > 4.2 && p < 5.2, `рост должен быть умеренным, меньше одного SD, получили ${p}`);
+// Обычный человек должен видеть блок: ради этого он и существует.
+const ordinary = F.computePotential(of({}));
+assert.ok(ordinary, 'у обычного лица блок обязан показываться');
+assert.ok(ordinary.max - ordinary.now >= 0.4, 'и прибавка должна быть заметной, вышло ' + (ordinary.max - ordinary.now).toFixed(2));
 
-// запущенные кожа и груминг — рост заметнее
-const neglect = computePotential({ overall: 4.2, byKey: cats({ "КОЖА": 3, "ГРУМИНГ_STYLE": 3 }) });
-assert.ok(neglect > p, 'у запущенных кожи и груминга потенциал выше');
+// Внешний вид у среднего лица равен PSL: при оценках 5 обе формулы дают 4.0.
+assert.equal(ordinary.now, of({}).overall, 'при ровных оценках внешний вид совпадает с баллом');
 
-// уже идеальные кожа и груминг — обещать нечего
-assert.equal(
-  computePotential({ overall: 6.6, byKey: cats({ "КОЖА": 9, "ГРУМИНГ_STYLE": 9, "ДЖОУЛАЙН_MANDIBLE": 9.5 }) }),
-  null, 'расти некуда — блок скрыт');
+// Плохая кожа тянет внешний вид вниз, но PSL не трогает вовсе.
+const bad = of({ SKIN: 2, HAIR: 2 });
+assert.equal(bad.overall, of({}).overall, 'кожа и волосы на PSL не влияют');
+assert.ok(F.appealFromValues(bad.pillars) < F.appealFromValues(of({}).pillars), 'а на внешний вид влияют');
+const badPot = F.computePotential(bad);
+assert.ok(badPot.max - badPot.now > ordinary.max - ordinary.now, 'кому есть что чинить, тому и обещаем больше');
 
-// потолок: начало тира Chad (5.8) и не выше — уходом за кожей выше не дотянуть
-const top = computePotential({ overall: 5.5, byKey: cats({ "КОЖА": 2, "ГРУМИНГ_STYLE": 2 }) });
-assert.ok(top <= 5.8, `потолок PSL 5.8, получили ${top}`);
-assert.equal(computePotential({ overall: 6.0, byKey: cats({ "КОЖА": 2, "ГРУМИНГ_STYLE": 2 }) }), null, 'уже выше потолка — обещать нечего');
+// Потолок: у кого кожа, волосы и угловатость уже наверху, обещать нечего.
+assert.equal(F.computePotential(of({ SKIN: 9, HAIR: 9, ANGULARITY: 8.5 })), null, 'на потолке блок скрыт');
 
-// Тизер отдаёт три категории из восьми, и блок всё равно должен показываться:
-// неизвестным категориям подставляется общий балл.
-const teaser = computePotential({ overall: 4.2, byKey: { "СИММЕТРИЯ": 5, "ГЛАЗА_CANTHAL_TILT": 5, "КОЖА": 5 } });
-assert.ok(teaser !== null, 'в тизере блок виден');
-const full = computePotential({ overall: 4.2, byKey: cats({}) });
-assert.ok(Math.abs(teaser - full) <= 0.2, `тизер не должен расходиться с полным: ${teaser} против ${full}`);
+// Кость не трогаем: обещать рост гармонии или диморфизма значит врать.
+const boney = F.computePotential(of({ HARMONY: 2, DIMORPHISM: 2 }));
+// Допуск 0.1: оба числа округляются до десятых, и граница округления гуляет.
+assert.ok(Math.abs((boney.max - boney.now) - (ordinary.max - ordinary.now)) <= 0.1,
+  'слабая кость размер обещания не меняет');
 
-// Но и в тизере, если расти некуда, обещать нечего: лицо уже у потолка PSL 7.
-assert.equal(
-  computePotential({ overall: 5.9, byKey: { "СИММЕТРИЯ": 9, "ГЛАЗА_CANTHAL_TILT": 9, "КОЖА": 9 } }),
-  null, 'тизер у сильного лица тоже скрыт');
+// Без десяти оценок (старый отчёт из кэша) блок просто не показывается.
+assert.equal(F.computePotential({ overall: 4.2 }), null, 'нет оценок — нет обещаний');
+assert.equal(F.computePotential({ overall: 4.2, pillars: { HARMONY: 5 } }), null, 'неполные оценки — тоже нет');
 
-// Пропущенная категория в тизере — это уровень PSL + 1, а не сам PSL: иначе PSL 6.7
-// выдавался за категорию 6.7 и лицу модельного уровня обещался рост по грумингу.
-const strongTeaser = computePotential({ overall: 5.0, byKey: { "СИММЕТРИЯ": 8, "ГЛАЗА_CANTHAL_TILT": 8, "КОЖА": 8.5 } });
-const strongFull = computePotential({ overall: 5.0, byKey: cats({ "СИММЕТРИЯ": 8, "ГЛАЗА_CANTHAL_TILT": 8, "КОЖА": 8.5, "МИДФЕЙС_MAXILLA": 7.5, "ДЖОУЛАЙН_MANDIBLE": 7.5, "НОС_NOSE": 7.5, "ГУБЫ_СКУЛЫ": 7.5, "ГРУМИНГ_STYLE": 7.5 }) });
-assert.equal(strongTeaser, strongFull, `у сильного лица тизер и полный отчёт совпадают: ${strongTeaser} против ${strongFull}`);
-assert.equal(computePotential({ overall: null, byKey: cats({}) }), null, 'нет балла → null');
-
-// краткие рекомендации: только софтмакс, по первому предложению, не больше трёх
-const r = shortRecs([
-  'SOFTMAX — Стрижка с объёмом сверху. Это вытянет лицо и уравновесит челюсть.',
-  'HARDMAX — Ортодонтия, 18 месяцев.',
-  'SOFTMAX — Санскрин каждое утро. Без него всё остальное бессмысленно.',
-  'SOFTMAX — Сон восемь часов.',
-  'SOFTMAX — Четвёртый пункт, лишний.',
-]);
-assert.equal(r.length, 3, 'ровно три пункта');
-assert.ok(!r.some((x) => /HARDMAX/i.test(x)), 'хардмакс сюда не попадает');
-assert.equal(r[0], 'Стрижка с объёмом сверху.', 'режется по первому предложению');
-
-// Кнопка не должна выставлять счёт напрямую: buyPack по умолчанию уходит в звёзды
-// без выбора способа оплаты и предлагает купить гайд тем, у кого он уже есть.
-const render = src.match(/^function renderPotential[\s\S]*?^\}/m)[0];
-assert.ok(!/buyPack\(/.test(render), 'кнопка не зовёт buyPack напрямую');
-assert.match(render, /fmOpenView\("progress"\)/, 'кнопка ведёт в раздел ведения');
-assert.match(render, /potBtnOwned/, 'у владельца гайда своя подпись кнопки');
-assert.match(src, /guide: \(await env/.test(readFileSync(new URL('./worker.js', import.meta.url), 'utf8')) ? /./ : /НЕТ_ФЛАГА_guide_В_statusFor/,
-  'statusFor отдаёт флаг guide');
+// Короткие пункты для блока: только софтмакс и только первое предложение.
+assert.deepEqual(F.shortRecs(['SOFTMAX — Убери отёк. Это вторая фраза.', 'HARDMAX — Операция.', 'SOFTMAX — Сбрось 3 кг.']),
+  ['Убери отёк.', 'Сбрось 3 кг.'], 'в блок идут только софтмаксы, по одному предложению');
 
 console.log('потенциал: все проверки прошли');

@@ -21,6 +21,8 @@ const W = new Function(`
   ${pick(workerSrc, /^var PILLAR_WEIGHTS = \{[^}]*\};/m)}
   ${pick(workerSrc, /^var PSL_FROM_METHOD = [\d.]+;/m)}
   ${pick(workerSrc, /^var METHOD_KEYS = \[[^\]]*\];/m)}
+  ${pick(workerSrc, /^function pillarsFromText[\s\S]*?^\}/m)}
+  ${pick(workerSrc, /^function scoreFromValues[\s\S]*?^\}/m)}
   ${pick(workerSrc, /^function scoreFromPillars[\s\S]*?^\}/m)}
   ${pick(workerSrc, /^function normalizeMeasureText[\s\S]*?^\}/m)}
   const PROG_CATS = ['СИММЕТРИЯ', 'КОЖА'];
@@ -44,6 +46,8 @@ const A = new Function(`
   ${pick(app, /var PILLAR_WEIGHTS = \{[^}]*\};/)}
   ${pick(app, /var PSL_FROM_METHOD = [\d.]+;/)}
   ${pick(app, /var METHOD_KEYS = \[[^\]]*\];/)}
+  ${pick(app, /^function pillarsFromText[\s\S]*?^\}/m)}
+  ${pick(app, /^function scoreFromValues[\s\S]*?^\}/m)}
   ${pick(app, /^function scoreFromPillars[\s\S]*?^\}/m)}
   return { RARITY_LADDER, scoreFromRarity, measureOverallPsl, scoreFromPillars, METHOD_INSTRUCTIONS };
 `)();
