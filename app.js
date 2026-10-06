@@ -85,7 +85,7 @@ var I18N = {
     scanning: "Scanning face geometry…",
     scoreEyebrow: "OVERALL SCORE · PSL RATING",
     recsEyebrow: "LOOKSMAXXING RECOMMENDATIONS",
-    catHarmony: "Harmony / Proportions", catAngularity: "Jawline / Cheekbones", catDimorphism: "Masculinity",
+    catHarmony: "Harmony", catAngularity: "Jawline / Cheekbones", catDimorphism: "Masculinity",
     catSymmetry: "Symmetry", catEyes: "Eyes", catMouth: "Mouth / Lips", catNose: "Nose", catEars: "Ears",
     potEyebrow: "YOUR APPEARANCE, NOT YOUR PSL",
     potNow: "appearance now", potMax: "within reach",
@@ -211,7 +211,7 @@ var I18N = {
     scanning: "Сканирование геометрии лица…",
     scoreEyebrow: "ОБЩАЯ ОЦЕНКА · PSL РЕЙТИНГ",
     recsEyebrow: "РЕКОМЕНДАЦИИ ПО ЛУКСМАКСИНГУ",
-    catHarmony: "Гармония и пропорции", catAngularity: "Джоулайн и скулы", catDimorphism: "Маскулинность",
+    catHarmony: "Гармония", catAngularity: "Джоулайн и скулы", catDimorphism: "Маскулинность",
     catSymmetry: "Симметрия", catEyes: "Глаза", catMouth: "Рот и губы", catNose: "Нос", catEars: "Уши",
     potEyebrow: "ВНЕШНИЙ ВИД, А НЕ PSL",
     potNow: "внешний вид сейчас", potMax: "достижимо",
@@ -2822,9 +2822,8 @@ function _buildShareCard() {
         })
       : realCats.slice(0, 8).map(function(c){ return { label: c.label, score: c.score, locked: false }; });
     // Иконки идут в том же порядке, что и FULL_CAT_LABELS.
-    // Иконки в порядке SCORED_CATS. Своей картинки нет только у ушей — рисуем ту же,
-    // что у симметрии: дублированная иконка лучше, чем откровенно чужая.
-    var CAT_ICONS = ["midface", "jaw", "hair", "sym", "eyes", "lips", "nose", "sym"];
+    // Иконки в порядке SCORED_CATS, у каждой категории своя.
+    var CAT_ICONS = ["harmony", "jaw", "dimorphism", "sym", "eyes", "lips", "nose", "ears"];
     var cy0 = dy + 62, rowH = 92, colW = 400;
     // Колонки заполняются СТОЛБЦАМИ, а не строками: сначала все четыре строки
     // левой колонки, потом правой — так же, как в макете.
@@ -2895,7 +2894,9 @@ function _buildShareCard() {
     g.font = "22px Georgia, serif"; ls(6); g.fillStyle = GOLD;
     g.fillText("ANALYSIS SUMMARY", 205, sy + 46); ls(0);
     var ov = parsed.overall || 0;
-    var potential = ov >= 6 ? "HIGH" : ov >= 5 ? "GOOD" : ov >= 3.5 ? "MODERATE" : "LOW";   // PSL 0-8
+    var pot = computePotential(parsed);
+    var potTier = pot ? pslTier(pot.max).label : pslTier(ov).label;
+    var potNum  = pot ? pot.max.toFixed(1) : (ov ? ov.toFixed(1) : "--");
     var summary = (parsed.overallDesc || "").replace(/\s+/g, " ").trim();
     // бейдж POTENTIAL — геометрия нужна заранее, чтобы текст summary не залезал под него
     var bwd = 185, bx2 = W - 90 - 24 - bwd, by2 = sy + 24;
@@ -2914,12 +2915,14 @@ function _buildShareCard() {
     }
     sLines.forEach(function(l, i) { g.fillText(l, 205, sy + 80 + i * 28); });
     g.strokeStyle = "rgba(196,164,107,0.55)"; g.lineWidth = 1.5;
-    roundRect(g, bx2, by2, bwd, sh - 48, 12); g.stroke();
+    roundRect(g, bx2, by2, bwd, sh - 32, 12); g.stroke();
     g.textAlign = "center";
     g.font = "17px Georgia, serif"; ls(5); g.fillStyle = DIM;
-    g.fillText("POTENTIAL", bx2 + bwd / 2, by2 + 32); ls(0);
+    g.fillText(pot ? "POTENTIAL" : "APPEARANCE", bx2 + bwd / 2, by2 + 26); ls(0);
     g.font = "30px Georgia, serif"; ls(3); g.fillStyle = GOLD_HI;
-    g.fillText(potential, bx2 + bwd / 2, by2 + 66); ls(0);
+    g.fillText(potTier, bx2 + bwd / 2, by2 + 60); ls(0);
+    g.font = "21px Georgia, serif"; ls(2); g.fillStyle = GOLD;
+    g.fillText(potNum + "/8", bx2 + bwd / 2, by2 + 86); ls(0);
 
     // ── Футер ──
     g.font = "46px Georgia, serif"; ls(2);
@@ -2941,8 +2944,13 @@ function _buildShareCard() {
    через source-in, поэтому одна и та же картинка годится и для золотой строки,
    и для приглушённой закрытой на тизере. */
 var CAT_ICON_FILES = {
-  sym: 'sym', eyes: 'eyes', midface: 'midface', jaw: 'jaw',
-  nose: 'nose', lips: 'lips', skin: 'skin', hair: 'hair',
+  // Восемь под нынешние категории: гармония, джоулайн, маскулинность, симметрия,
+  // глаза, рот, нос, уши. harmony/dimorphism/ears дорисованы 07.10.2026 в том же
+  // стиле (~/Downloads/facerate/icons/make-icons.py), старые midface/skin больше
+  // не нужны отчёту, но остаются для карточек из кэша.
+  harmony: 'harmony', jaw: 'jaw', dimorphism: 'dimorphism', sym: 'sym',
+  eyes: 'eyes', lips: 'lips', nose: 'nose', ears: 'ears',
+  midface: 'midface', skin: 'skin', hair: 'hair',
 };
 var _catIcons = null, _catIconTint = {};
 
