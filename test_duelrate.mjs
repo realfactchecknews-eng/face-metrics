@@ -18,10 +18,19 @@ const { parseCompare, duelRatePrompt } = new Function(`
   ${pick(src, /^function duelRatePrompt[\s\S]*?^\}/m)}
   ${pick(src, /^function normInv[\s\S]*?^\}/m)}
   ${pick(src, /^function scoreFromRarity[\s\S]*?^\}/m)}
+  ${pick(src, /var METHOD_SCALE = [\s\S]*?";\n/)}
+  ${pick(src, /var METHOD_GROUPS = [\s\S]*?";\n/)}
+  ${pick(src, /var METHOD_INSTRUCTIONS = [\s\S]*?";\n/)}
+  ${pick(src, /var FEATURE_WEIGHTS = \{[^}]*\};/)}
+  ${pick(src, /var PILLAR_WEIGHTS = \{[^}]*\};/)}
+  ${pick(src, /var PSL_FROM_METHOD = [\d.]+;/)}
+  ${pick(src, /var METHOD_KEYS = \[[^\]]*\];/)}
+  ${pick(src, /^function scoreFromPillars[\s\S]*?^\}/m)}
   ${pick(src, /  function parseCompare\(txt, rates\)\{[\s\S]*?\n  \}/)}
   return { parseCompare, duelRatePrompt };
 `)();
 
+const KEYS5 = ['HARMONY', 'DIMORPHISM', 'ANGULARITY', 'SKIN', 'HAIR', 'MOUTH', 'EYES', 'SYMMETRY', 'NOSE', 'EARS'].map((k) => k + ': 5.0').join('\n');
 const pair = 'RAR_A: ХУЖЕ 1 из 4\nRAR_B: ЛУЧШЕ 1 из 550\nSCORE_A: 3.9\nSCORE_B: 6.9\nWINNER: B\nVERDICT: B mogs.';
 const alone = ['РЕДКОСТЬ: ЛУЧШЕ 1 из 2', 'РЕДКОСТЬ: ЛУЧШЕ 1 из 35'];
 
@@ -40,10 +49,13 @@ r = parseCompare('WINNER: B', ['РЕДКОСТЬ: ЛУЧШЕ 1 из 6', 'РЕД�
 assert.equal(r.winner, 'B', 'почти равных оставляем на вердикт модели');
 
 const p = duelRatePrompt();
-assert.match(p, /РЕДКОСТЬ|\u0420\u0415\u0414\u041a\u041e\u0421\u0422\u042c/, 'отдельная оценка просит ту же строку редкости');
-assert.match(p, /1 \u0438\u0437 44: model benchmark/, 'и ту же лестницу, что обычный разбор');
+assert.match(p, /HARMONY: 0\.0/, 'отдельная оценка просит те же десять оценок, что и разбор');
+assert.match(p, /5 is an ORDINARY man/, 'и ту же шкалу справочника');
 assert.match(p, /young Leonardo DiCaprio/, 'и те же якорные лица');
-assert.ok(/" \+ RARITY_INSTRUCTIONS \+ "/.test(src), 'обычный разбор берёт инструкцию из той же переменной');
+assert.ok(!/PSL SCORING/.test(p), 'шкалы PSL здесь нет: общий балл этот запрос не пишет');
+// Балл обоих лиц считается по методике, со старой редкостью как запасным путём.
+assert.equal(parseCompare('WINNER: A', [KEYS5, KEYS5]).a, 4, 'обычное лицо в дуэли — ровно 4');
+assert.ok(/duelRatePrompt[\s\S]{0,400}METHOD_INSTRUCTIONS/.test(src), 'дуэль берёт инструкцию методики из общей переменной');
 
 // Воркер: по одному запросу на лицо, одна картинка в каждом, ошибка одного — null.
 const worker = readFileSync(new URL('./worker.js', import.meta.url), 'utf8');

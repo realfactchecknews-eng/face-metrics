@@ -73,8 +73,12 @@ assert.ok(/5\.3-5\.7 Chadlite: model benchmark/.test(src), 'модельный �
 assert.match(src, /RARITY_ANCHORS/, 'в промпте есть якорные лица');
 assert.match(src, /young Leonardo DiCaprio/, 'Ди Каприо среди якорей');
 assert.ok(/CATEGORY SCORES \(the eight features\) use a SEPARATE 0-10 scale/.test(src), 'категории остаются 0-10');
-assert.ok(/0\.0\/8\\nOverall PSL/.test(src), 'модель пишет общий балл «/8»');
+// Балл в разборе считаем мы по десяти оценкам, поэтому модели его писать нечем:
+// пока в промпте оставалось хоть одно упоминание, она подгоняла под своё число вердикт.
+assert.ok(!/\u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b: 0\.0\/8/.test(src), 'разбор больше не просит у модели общий балл');
+assert.ok(/" \+ METHOD_INSTRUCTIONS \+ "/.test(src), 'разбор просит десять оценок по методике');
+assert.ok(/NEVER name a tier \(MTN, HTN/.test(src), 'называть тир словом запрещено: его пишем мы по своему баллу');
 const worker = readFileSync(new URL('./worker.js', import.meta.url), 'utf8');
-assert.ok(/FREE_TEASER_SUFFIX[^\n]*РЕДКОСТЬ/.test(worker), 'тизер требует строку редкости');
+assert.ok(/FREE_TEASER_SUFFIX[^\n]*HARMONY through EARS/.test(worker), 'тизер требует все десять оценок — без них балла не будет');
 
 console.log('редкость и PSL 0-8: все проверки прошли');

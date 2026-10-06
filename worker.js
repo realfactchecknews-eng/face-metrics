@@ -399,7 +399,7 @@ async function analyze(request, env) {
   // Тизер (isTeaser, только новички без покупок): урезаем ответ ИИ до общего балла + 3 категорий,
   // без остальных 5 и без рекомендаций — экономит токены (меньше вывода) и мотивирует купить
   // полный разбор. Промпт после этого суффикса не меняем, просто просим модель не выводить лишнее.
-  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: РЕДКОСТЬ (the ЛУЧШЕ/ХУЖЕ 1 из N line, exactly as instructed above -- this line is REQUIRED, never omit it), ОБЩИЙ_БАЛЛ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
+  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: the ten rating lines (HARMONY through EARS, exactly as instructed above -- all ten are REQUIRED, never omit any of them, the score is computed from them), ОБЩИЙ_ВЕРДИКТ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal), КОЖА (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ, ГРУМИНГ_STYLE or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after КОЖА.";
   const promptText = isMeasure
     ? buildMeasurePrompt(body, await progTexts(env, tgid))
     : (isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt);
@@ -441,7 +441,7 @@ async function analyze(request, env) {
       // На старых 900 у тизера reasoning съедал весь бюджет, content приходил пустым, и юзер
       // видел «Сервис перегружен (unknown)». Тизер всё равно короткий — реально потратится меньше,
       // лимит нужен только чтобы reasoning не отъедал весь ответ.
-      max_tokens: isTeaser ? 1800 : 2200,
+      max_tokens: isTeaser ? 1800 : 2600,
       // temperature 0 вместо 0.35: одно и то же фото давало разброс в целый тир.
       temperature: 0,
       top_p: 1,
@@ -623,7 +623,7 @@ async function roastRewrite(request, env) {
   // Вход строго наш собственный отчёт, а не произвольный текст: иначе роут превращается
   // в бесплатную языковую модель для всякого, у кого есть токен сессии.
   const src = typeof body.text === 'string' ? body.text.trim() : '';
-  if (src.length < 200 || src.length > 8000 || !src.includes('\u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b:')) {
+  if (src.length < 200 || src.length > 8000 || (!src.includes('\u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b:') && !src.includes('\u041e\u0411\u0429\u0418\u0419_\u0412\u0415\u0420\u0414\u0418\u041a\u0422:'))) {
     return json({ error: 'bad', text: '\u041d\u0435\u0447\u0435\u0433\u043e \u043f\u0435\u0440\u0435\u043f\u0438\u0441\u044b\u0432\u0430\u0442\u044c.' });
   }
   const today = new Date().toISOString().slice(0, 10);
@@ -645,7 +645,7 @@ async function roastRewrite(request, env) {
 
   // Числа не обсуждаются: оценка уже посчитана нейтральным промптом, здесь только слова.
   const prompt = instr
-    + '\n\nCRITICAL, THIS IS WHAT THE REWRITE IS FOR: keep EVERY line that carries a label and a number EXACTLY as it is, character for character -- the \u0420\u0415\u0414\u041a\u041e\u0421\u0422\u042c line, \u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b and all eight category labels with their scores. Do not re-judge the face, do not move a single number, do not add or remove a category. Keep the same section order, the same labels and the same number of numbered recommendations. Rewrite ONLY the descriptive sentences under those labels and the wording of the recommendations. Reply with the full report in the same plain-text format, nothing else.'
+    + '\n\nCRITICAL, THIS IS WHAT THE REWRITE IS FOR: keep EVERY line that carries a label and a number EXACTLY as it is, character for character -- the ten rating lines (HARMONY, DIMORPHISM, ANGULARITY, SKIN, HAIR, MOUTH, EYES, SYMMETRY, NOSE, EARS), the \u0420\u0415\u0414\u041a\u041e\u0421\u0422\u042c and \u041e\u0411\u0429\u0418\u0419_\u0411\u0410\u041b\u041b lines if present, and all eight category labels with their scores. Do not re-judge the face, do not move a single number, do not add or remove a category. Keep the same section order, the same labels and the same number of numbered recommendations. Rewrite ONLY the descriptive sentences under those labels and the wording of the recommendations. Reply with the full report in the same plain-text format, nothing else.'
     + '\n\n---\n' + src;
 
   let out = '';

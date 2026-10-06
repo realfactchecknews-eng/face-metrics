@@ -42,6 +42,9 @@ for (const [name, re] of [['русский', /РОАСТ/], ['английски
 }
 for (const re of [/национальности/, /nationality/]) assert.ok(re.test(instr), 'потеряны границы по оскорблениям');
 assert.ok(/ОБЩИЙ_БАЛЛ:/.test(instr), 'вход не проверяется на наш формат — роут станет бесплатной языковой моделью');
+// Отчёт по методике идёт без ОБЩИЙ_БАЛЛ: без второго ключа роут отвечал бы
+// «нечего переписывать» на каждый новый разбор, и дерзкий режим молча бы умер.
+assert.ok(/ОБЩИЙ_ВЕРДИКТ:/.test(instr), 'новый формат отчёта роут не пропускает');
 
 // ── Страховка по числам ──
 const numSrc = worker.slice(worker.indexOf('function reportNumbers'), worker.indexOf('async function roastRewrite'));
