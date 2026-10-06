@@ -32,6 +32,14 @@ assert.ok(analyze.indexOf('const hit = await env.RATE_LIMIT.get(cacheKey)') < an
   'при попадании модель не вызывается');
 assert.match(w, /expirationTtl: 60 \* 24 \* 3600/, 'кэш живёт 60 дней');
 
+// Новый отчёт обязан записаться — иначе за каждый повтор снимка платим второй раз.
+// Чтение и запись должны идти по ОДНОЙ переменной: если их развести, кэш молча
+// перестанет попадать, а заметно это будет только по счёту от OpenRouter.
+assert.match(analyze, /await env\.RATE_LIMIT\.put\(cacheKey, data\.choices\[0\]\.message\.content/,
+  'готовый отчёт кладётся в кэш');
+assert.match(analyze, /const hit = await env\.RATE_LIMIT\.get\(cacheKey\)/, 'и читается оттуда же');
+assert.equal((analyze.match(/await photoCacheKey\(/g) || []).length, 1, 'ключ считается один раз на запрос');
+
 // С 30.09 повтор того же снимка СПИСЫВАЕТСЯ как обычный анализ: токены экономим, но
 // бесплатной перезагрузки одного и того же больше нет.
 const hitBlock = analyze.slice(analyze.indexOf('const hit = await env.RATE_LIMIT.get(cacheKey)'), analyze.indexOf('// Модель.'));
