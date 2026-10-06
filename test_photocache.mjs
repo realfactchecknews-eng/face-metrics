@@ -7,7 +7,9 @@ const w = readFileSync(new URL('./worker.js', import.meta.url), 'utf8');
 const app = readFileSync(new URL('./app.js', import.meta.url), 'utf8');
 const pick = (s, re) => { const m = s.match(re); assert.ok(m, 'не нашёл: ' + re); return m[0]; };
 
-const photoCacheKey = new Function('crypto', pick(w, /^async function photoCacheKey[\s\S]*?^\}/m) + '\nreturn photoCacheKey;')(webcrypto);
+const photoCacheKey = new Function('crypto',
+  pick(w, /^const REPORT_CACHE_VER = '[^']+';/m) + '\n'
+  + pick(w, /^async function photoCacheKey[\s\S]*?^\}/m) + '\nreturn photoCacheKey;')(webcrypto);
 
 const img = 'AAAABBBB', other = 'ZZZZ';
 const base = await photoCacheKey(111, [img], 'ru', false);
@@ -17,7 +19,11 @@ assert.notEqual(base, await photoCacheKey(111, [img], 'en', false), 'друго�
 assert.notEqual(base, await photoCacheKey(111, [img], 'ru', true), 'тизер и полный разбор не путаются');
 assert.notEqual(base, await photoCacheKey(111, [other], 'ru', false), 'другое фото — другой ключ');
 assert.notEqual(base, await photoCacheKey(111, [img, other], 'ru', false), 'добавленный профиль — другой ключ');
-assert.match(base, /^rep:111:[0-9a-f]{24}:ru:f$/, 'формат ключа: rep:tgid:хэш:язык:тизер');
+assert.match(base, /^rep:v[0-9]+:111:[0-9a-f]{24}:ru:f$/, 'формат ключа: rep:версия:tgid:хэш:язык:тизер');
+// Версия в ключе — единственный способ разом отключить старый кэш: перебрать ключи
+// нельзя, листинг KV отдаёт их неполно (44 из тысяч на боевом namespace 07.10.2026).
+// Поднимаешь версию — старые записи становятся недостижимы и уходят сами по TTL.
+assert.match(w, /const REPORT_CACHE_VER = 'v2';/, 'версия формата отчёта проставлена');
 
 // Замеры гайда и дуэль не кэшируем, и кэш проверяется ДО списания кредита.
 assert.match(w, /const cacheKey = !isMeasure && !body\.compare && imgs\.length/, 'замер и дуэль мимо кэша');

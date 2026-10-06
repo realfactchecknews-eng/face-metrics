@@ -2493,6 +2493,9 @@ function playPing() {
 
 
 /* ───────────────────  Последний результат + история  ─────────────────── */
+// Отчёт нынешнего формата узнаётся по десяти оценкам методики: по ним считается балл.
+function isCurrentReport(text) { return pillarsFromText(text) !== null; }
+
 function saveLastResult(overall, reportText, teaser) {
   try {
     // scale: 8 — результат уже по PSL 0-8. У старых записей поля нет, они были из 10.
@@ -2509,6 +2512,7 @@ function saveLastResult(overall, reportText, teaser) {
   var last;
   try { last = JSON.parse(localStorage.getItem("fm-last") || "null"); } catch (e) { return; }
   if (!last) return;
+  if (last.report && !isCurrentReport(last.report)) last.report = "";
   var banner  = document.getElementById("lastResultBanner");
   var modal   = document.getElementById("lastResultModal");
   if (!banner) return;
@@ -2535,7 +2539,7 @@ function saveLastResult(overall, reportText, teaser) {
   if (localStorage.getItem("fm-view") !== "analysis") return;
   var last;
   try { last = JSON.parse(localStorage.getItem("fm-last") || "null"); } catch (e) { return; }
-  if (!last || !last.report) return;
+  if (!last || !last.report || !isCurrentReport(last.report)) return;
   uploadSection.classList.add("hidden");
   analysisView.classList.remove("hidden");
   resultsDiv.classList.remove("hidden");
