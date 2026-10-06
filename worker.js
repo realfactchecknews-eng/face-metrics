@@ -399,7 +399,7 @@ async function analyze(request, env) {
   // Тизер (isTeaser, только новички без покупок): урезаем ответ ИИ до общего балла + 3 категорий,
   // без остальных 5 и без рекомендаций — экономит токены (меньше вывода) и мотивирует купить
   // полный разбор. Промпт после этого суффикса не меняем, просто просим модель не выводить лишнее.
-  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: the ten rating lines (HARMONY through EARS, exactly as instructed above -- all ten are REQUIRED, never omit any of them, the score is computed from them), ОБЩИЙ_ВЕРДИКТ (full, as normal), СИММЕТРИЯ (full, as normal), ГЛАЗА_CANTHAL_TILT (full, as normal). Do NOT output МИДФЕЙС_MAXILLA, ДЖОУЛАЙН_MANDIBLE, НОС_NOSE, ГУБЫ_СКУЛЫ or РЕКОМЕНДАЦИИ at all -- skip them completely, do not even write their labels. Stop right after ГЛАЗА_CANTHAL_TILT.";
+  const FREE_TEASER_SUFFIX = "\n\nFREE TEASER MODE -- IMPORTANT OVERRIDE: this is a free-tier teaser report, not the full paid report. Output ONLY these sections, in this exact order, nothing else: the ten rating lines (HARMONY through EARS, all ten are REQUIRED, never omit any of them, the score is computed from them) and then ОБЩИЙ_ВЕРДИКТ. Write the one-sentence explanation ONLY on the HARMONY and ANGULARITY lines; every other rating line is a bare number with no sentence. Do NOT output РЕКОМЕНДАЦИИ at all -- skip it completely, do not even write its label. Stop right after ОБЩИЙ_ВЕРДИКТ.";
   const promptText = isMeasure
     ? buildMeasurePrompt(body, await progTexts(env, tgid))
     : (isTeaser ? body.prompt + FREE_TEASER_SUFFIX : body.prompt);
