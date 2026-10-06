@@ -2010,6 +2010,21 @@ function scoreFromRarity(text, label) {
   return Math.round(Math.max(0, Math.min(PSL_MAX, PSL_MID + PSL_SLOPE * z)) * 10) / 10;
 }
 
+// Заменяет название тира в тексте на то, что соответствует показанному баллу.
+// Меняем ТОЛЬКО если оно противоречит: когда модель назвала тир верно, текст остаётся
+// её собственным. Границы слов обязательны, иначе «Chad» попортит «Chadlite».
+var TIER_WORDS = ["True Adam", "Adam-lite", "Adamlite", "Chadlite", "Chad", "HTN", "MTN", "LTN", "Sub-3", "Sub3", "Subhuman"];
+function fixTierWord(desc, score) {
+  if (!desc || typeof score !== "number") return desc;
+  var want = pslTier(score).label;
+  var norm = function (w) { return String(w).toLowerCase().replace(/[^a-z0-9]/g, ""); };
+  return TIER_WORDS.reduce(function (acc, w) {
+    if (norm(w) === norm(want)) return acc;
+    var re = new RegExp("(^|[^A-Za-z0-9-])" + w.replace("-", "[- ]?") + "(?![A-Za-z0-9])", "g");
+    return acc.replace(re, function (m, pre) { return pre + want; });
+  }, desc);
+}
+
 function parseAIReport(text) {
   var result = { overall: null, overallDesc: "", categories: [], recommendations: [] };
   result.overallFromRarity = scoreFromRarity(text);
@@ -2040,6 +2055,13 @@ function parseAIReport(text) {
   if (typeof result.overallFromRarity === "number") {
     result.overallSaid = result.overall;
     result.overall = result.overallFromRarity;
+    // Балл мы берём из редкости, а вердикт модель писала под СВОЙ балл — и называет в нём
+    // тир словом. Числа расходятся часто (замер 06.10 по 39 отчётам из кэша: балл
+    // расходится в 64% случаев, тир — в 13%, слово в тексте противоречит значку в 3%).
+    // Выглядит это как «4.5, MTN на значке, а в тексте HTN» — ровно та жалоба, с которой
+    // пришёл пользователь. Значок считается из нашего балла и он главный, поэтому
+    // приводим слово в тексте к нему. Сам балл и описание черт не трогаем.
+    result.overallDesc = fixTierWord(result.overallDesc, result.overall);
   }
 
   // Старый запасной путь. Замер 15.08: с выключенными рассуждениями он вышел
