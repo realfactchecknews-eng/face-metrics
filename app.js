@@ -178,6 +178,9 @@ var I18N = {
     emptyAnswer: "Empty response.",
     cashbackToast: "🎁 Cashback! +1 free analysis for every 5 credits you buy and spend.",
     gateRestricted: "Access restricted.", errPrefix: "Error: ",
+    errRetry: "Try again", errSupport: "Message support", errCode: "Error code: ",
+    errAnotherPhoto: "Upload another photo",
+    errNotCharged: "The analysis was not charged.",
     tCompare: "Who Moggs?", tCompareSub: "Face-off: compare two faces",
     cmpTitle: "Who Moggs?", cmpSub: "Upload two faces — AI decides who mogs whom. 1 credit.",
     cmpRun: "FACE-OFF", cmpLoading: "DECIDING WHO MOGS…", cmpAgain: "↻ New face-off",
@@ -303,6 +306,9 @@ var I18N = {
     emptyAnswer: "Пустой ответ.",
     cashbackToast: "🎁 Кешбэк! +1 бесплатный анализ за каждые 5 купленных и потраченных.",
     gateRestricted: "Доступ ограничен.", errPrefix: "Ошибка: ",
+    errRetry: "Попробовать ещё раз", errSupport: "Написать в поддержку", errCode: "Код ошибки: ",
+    errAnotherPhoto: "Загрузить другое фото",
+    errNotCharged: "Анализ не списан.",
     tCompare: "Who Moggs?", tCompareSub: "Дуэль: сравни два лица",
     cmpTitle: "Who Moggs?", cmpSub: "Загрузи два лица — ИИ решит, кто кого моггает. 1 кредит.",
     cmpRun: "ДУЭЛЬ", cmpLoading: "РЕШАЮ, КТО МОГГАЕТ…", cmpAgain: "↻ Новая дуэль",
@@ -1864,6 +1870,31 @@ function showGate(data) {
     var hint = document.createElement("p");
     hint.className = "gate-hint"; hint.textContent = t("gateHint");
     box.appendChild(hint);
+  } else if (data.error === "model") {
+    // Повтор имеет смысл не всегда: отклонённое фото и нечитаемый файл вторым
+    // заходом не починятся, там нужен другой снимок.
+    var RETRYABLE = ["E-RATE", "E-BAL", "E-UP", "E-LEN", "E-NET"];
+    // Повтор того же снимка чинит только то, что сломалось на нашей стороне. Если фото
+    // отклонили или не смогли открыть, нужен ДРУГОЙ кадр — туда и ведём, иначе человек
+    // жмёт «ещё раз» и получает ту же ошибку.
+    var canRetry = !!frontImg && (!data.code || RETRYABLE.indexOf(data.code) >= 0 || /^E-\d/.test(data.code));
+    var mb = document.createElement("button");
+    mb.className = "btn"; mb.type = "button";
+    mb.textContent = canRetry ? t("errRetry") : t("errAnotherPhoto");
+    mb.addEventListener("click", function(){
+      aiError.classList.add("hidden");
+      if (canRetry) runAnalysis(); else backToUploadTop();
+    });
+    box.appendChild(mb);
+    var sa = document.createElement("a");
+    sa.className = "gate-secondary"; sa.href = "https://t.me/FaceRateSupport_bot";
+    sa.target = "_blank"; sa.rel = "noopener"; sa.textContent = t("errSupport");
+    box.appendChild(sa);
+    if (data.code) {
+      var cd = document.createElement("p");
+      cd.className = "gate-hint"; cd.textContent = t("errCode") + data.code;
+      box.appendChild(cd);
+    }
   } else if (data.error === "pay") {
     // Полный выбор способа оплаты (не только Stars) и всегда свежие цены — берём прямо
     // из ответа сервера (data.packs/data.methods), а не из захардкоженных чисел.

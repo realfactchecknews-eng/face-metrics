@@ -3096,3 +3096,29 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   .pgm-bar i { animation-duration: 1s; width: 92%; }
 }
 
+
+/* Второе действие в блоке ошибки. `.btn` — это залитая золотом кнопка, поэтому две
+   подряд спорят друг с другом: основное действие перестаёт читаться как основное.
+   Метрики те же, что у `.btn`, чтобы кнопки стояли ровно. */
+.gate-secondary {
+  display: inline-block; cursor: pointer; font: inherit;
+  padding: 13px 38px; border-radius: 100px;
+  background: transparent; border: 1px solid rgba(196, 164, 107, 0.45);
+  color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .02em;
+  text-decoration: none;
+  transition: border-color .2s var(--ease), background .2s var(--ease);
+}
+.gate-secondary:hover { border-color: var(--accent); background: rgba(196, 164, 107, 0.08); }
+
+/* Второе действие в блоке ошибки. `.btn` — залитая золотом кнопка, и две подряд
+   спорят друг с другом: главное действие перестаёт читаться как главное.
+   Метрики те же, что у `.btn`, чтобы кнопки стояли ровно по одной линии. */
+.gate-secondary {
+  display: inline-block; cursor: pointer; font: inherit;
+  padding: 13px 38px; border-radius: 100px;
+  background: transparent; border: 1px solid rgba(196, 164, 107, 0.45);
+  color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .02em;
+  text-decoration: none;
+  transition: border-color .2s var(--ease), background .2s var(--ease);
+}
+.gate-secondary:hover { border-color: var(--accent); background: rgba(196, 164, 107, 0.08); }

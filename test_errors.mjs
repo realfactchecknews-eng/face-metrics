@@ -34,8 +34,31 @@ for (const [status, err, code] of cases) {
 }
 
 // Код причины обязан доезжать до экрана: по нему разбираем жалобы со скриншотов.
-assert.match(w, /text: `\$\{why\.text\} \(\$\{why\.code\}\)`/, 'код подставляется в текст ошибки');
+// В тексте его нет — сайт рисует отдельной строкой, иначе он дублировался.
+assert.match(w, /return json\(\{ error: 'model', code: why\.code, text: why\.text \}\)/, 'код едет отдельным полем');
 assert.ok(!/Сервис перегружен, попробуйте ещё раз/.test(w), 'старая заглушка убрана');
+for (const [status, err, code] of cases) {
+  assert.ok(!explainAiError(status, err, 'ru').text.includes(code), 'код не продублирован в тексте: ' + code);
+}
+
+// Сайт обязан показать код и дать выход: без кнопок человек упирается в тупик.
+const app = readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+assert.match(app, /data\.error === "model"/, 'ошибка модели разбирается отдельно');
+assert.match(app, /t\("errCode"\) \+ data\.code/, 'код причины показывается человеку');
+assert.match(app, /t\("errSupport"\)/, 'есть кнопка в поддержку');
+assert.match(app, /t\("errRetry"\)/, 'есть кнопка повтора');
+// Повторять отклонённое фото бессмысленно — нужен другой снимок.
+assert.match(app, /var RETRYABLE = \["E-RATE", "E-BAL", "E-UP", "E-LEN", "E-NET"\]/, 'повтор предлагается не всегда');
+
+// Где повтор бесполезен, человека ведём за другим фото, а не в тот же тупик.
+assert.match(app, /t\("errAnotherPhoto"\)/, 'для отклонённого фото предлагается другое');
+assert.match(app, /\/\^E-\\d\//, 'числовые коды вроде E-500 считаются повторяемыми');
+// Две залитые кнопки подряд спорят друг с другом: вторая должна быть тише.
+assert.match(app, /sa\.className = "gate-secondary"/, 'поддержка оформлена вторичной кнопкой');
+assert.match(readFileSync(new URL('./style.css', import.meta.url), 'utf8'), /\.gate-secondary \{/, 'стиль вторичной кнопки есть');
+for (const k of ['errRetry', 'errSupport', 'errCode']) {
+  assert.ok((app.match(new RegExp(k + ':', 'g')) || []).length >= 2, 'подпись есть на двух языках: ' + k);
+}
 
 // Саппорт-бот: вложения распознаются и не молчат.
 assert.equal(msgKind({ photo: [{}] }), 'фото');

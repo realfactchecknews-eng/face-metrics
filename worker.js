@@ -592,16 +592,16 @@ async function analyze(request, env) {
     console.log('AI failed', JSON.stringify({ emptyKind, lastStatus, lastErr: String(lastErr).slice(0, 200), isTeaser }));
     if (emptyKind === 'refusal') {
       return json({ error: 'model', code: 'E-REF', text: ru
-        ? 'Модель отклонила это фото — такое бывает с нечётким кадром, сильными фильтрами или когда в кадре не одно лицо. Попробуйте другое: лицо крупно и анфас, хорошее освещение, без фильтров и посторонних. (E-REF)'
-        : 'The model rejected this photo — that happens with blurry shots, heavy filters, or more than one face in frame. Try another one: the face close up and front-on, good light, no filters, nobody else. (E-REF)' });
+        ? 'Модель отклонила это фото — такое бывает с нечётким кадром, сильными фильтрами или когда в кадре не одно лицо. Попробуйте другое: лицо крупно и анфас, хорошее освещение, без фильтров и посторонних.'
+        : 'The model rejected this photo — that happens with blurry shots, heavy filters, or more than one face in frame. Try another one: the face close up and front-on, good light, no filters, nobody else.' });
     }
     if (emptyKind === 'length') {
       return json({ error: 'model', code: 'E-LEN', text: ru
-        ? 'Разбор не поместился в лимит ответа. Анализ не списан — попробуйте ещё раз. (E-LEN)'
-        : 'The report did not fit the answer limit. Nothing was charged — please try again. (E-LEN)' });
+        ? 'Разбор не поместился в лимит ответа. Анализ не списан — попробуйте ещё раз.'
+        : 'The report did not fit the answer limit. Nothing was charged — please try again.' });
     }
     const why = explainAiError(lastStatus, lastErr, body.lang);
-    return json({ error: 'model', code: why.code, text: `${why.text} (${why.code})` });
+    return json({ error: 'model', code: why.code, text: why.text });
   }
 
   // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели (одинаковый для всех); paid → минус кредит.
