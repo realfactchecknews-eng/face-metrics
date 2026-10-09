@@ -192,6 +192,51 @@ async function setupWebhook(request, env) {
 // в отчёте больше нет. Перебрать и удалить ключи нельзя: листинг KV отдаёт их неполно.
 // v2 — 07.10.2026, переход на методику дата-шита и восемь оцениваемых категорий.
 const REPORT_CACHE_VER = 'v2';
+/* Понятная причина вместо «сервис перегружен». Раньше в это сообщение сваливалось всё:
+   отклонённое фото, битый файл, кончившиеся деньги на счету у провайдера, лимит
+   запросов и настоящая недоступность. Человек видел одно и то же и писал в поддержку,
+   а по скриншоту нельзя было понять, что случилось.
+   Код в скобках оставляем: по нему видно причину прямо со скриншота. */
+function explainAiError(status, lastErr, L) {
+  const e = String(lastErr || '').toLowerCase();
+  const ru = L !== 'en';
+  const has = (...w) => w.some((x) => e.includes(x));
+  // Порядок важен: сначала то, что человек может исправить сам.
+  if (has('moderation', 'flagged', 'safety', 'policy', 'content_filter', 'prohibited')) {
+    return { code: 'E-MOD', text: ru
+      ? 'Фото отклонено фильтром модели. Чаще всего так бывает с детскими и неоднозначными кадрами. Попробуйте другое фото: взрослое лицо, анфас, без посторонних.'
+      : 'The model’s filter rejected this photo. This usually happens with pictures of minors or ambiguous shots. Try another one: an adult face, front view, nobody else in frame.' };
+  }
+  if (has('image', 'decode', 'unsupported', 'invalid_request', 'media', 'mime')) {
+    return { code: 'E-IMG', text: ru
+      ? 'Не удалось открыть это изображение. Пришлите обычный JPG или PNG — HEIC с айфона и скриншоты из некоторых приложений не читаются.'
+      : 'This image could not be opened. Send a plain JPG or PNG — iPhone HEIC files and screenshots from some apps are not readable.' };
+  }
+  if (status === 413 || has('too large', 'payload', 'request entity')) {
+    return { code: 'E-BIG', text: ru
+      ? 'Фото слишком большое. Уменьшите его или пришлите обычный снимок с камеры, а не исходник.'
+      : 'The photo is too large. Shrink it or send a normal camera shot instead of the original file.' };
+  }
+  if (status === 429 || has('rate limit', 'rate-limit', 'too many requests')) {
+    return { code: 'E-RATE', text: ru
+      ? 'Слишком много запросов подряд. Подождите минуту и попробуйте снова — анализ не списан.'
+      : 'Too many requests in a row. Wait a minute and try again — the analysis was not charged.' };
+  }
+  if (status === 402 || has('insufficient', 'credit', 'quota', 'balance', 'payment required')) {
+    return { code: 'E-BAL', text: ru
+      ? 'Анализ временно недоступен по нашей вине, мы уже чиним. Анализ не списан — попробуйте через 10-15 минут.'
+      : 'The analysis is temporarily unavailable on our side and we are already on it. Nothing was charged — try again in 10-15 minutes.' };
+  }
+  if (status >= 500 || has('timeout', 'timed out', 'unavailable', 'overloaded', 'network', 'fetch failed', 'bad gateway')) {
+    return { code: 'E-UP', text: ru
+      ? 'Сервис оценки сейчас не отвечает. Анализ не списан — попробуйте через пару минут.'
+      : 'The rating service is not responding right now. Nothing was charged — try again in a couple of minutes.' };
+  }
+  return { code: 'E-' + (status || 'NET'), text: ru
+    ? 'Что-то пошло не так, анализ не списан. Попробуйте ещё раз, а если повторится — напишите в @FaceRateSupport_bot и покажите код ниже.'
+    : 'Something went wrong and nothing was charged. Try again, and if it repeats write to @FaceRateSupport_bot with the code below.' };
+}
+
 async function photoCacheKey(tgid, imgs, lang, isTeaser) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(imgs.join('|')));
   const hex = [...new Uint8Array(buf)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -488,7 +533,7 @@ async function analyze(request, env) {
     ? rateFacesSeparately(env, MODEL_MAIN, imgs, body.ratePrompt)
     : null;
 
-  let data, lastErr = 'unknown', emptyKind = null, usedBackup = false;
+  let data, lastErr = 'unknown', lastStatus = 0, emptyKind = null, usedBackup = false;
   for (let attempt = 0; attempt < 4; attempt++) {
     let status = 0;
     try {
@@ -535,19 +580,28 @@ async function analyze(request, env) {
     // иначе 429/502 от прокси схлопывались в бесполезное 'unknown'.
     const e = data?.error;
     const eMsg = (typeof e === 'string' ? e : e?.message) || (e?.code ? `code ${e.code}` : null);
+    if (status) lastStatus = status;
     if (eMsg) lastErr = eMsg;
     else if (status && status !== 200) lastErr = `http ${status}`;
 
     if (attempt < 3) await new Promise(r => setTimeout(r, 700));
   }
   if (!data?.choices?.[0]?.message?.content) {
+    const ru = body.lang !== 'en';
+    // Что именно случилось — в лог, чтобы по коду со скриншота найти запрос.
+    console.log('AI failed', JSON.stringify({ emptyKind, lastStatus, lastErr: String(lastErr).slice(0, 200), isTeaser }));
     if (emptyKind === 'refusal') {
-      return json({ error: 'model', text: 'ИИ не смог разобрать это фото. Попробуйте другое: лицо крупно и анфас, хорошее освещение, без фильтров и посторонних людей в кадре.' });
+      return json({ error: 'model', code: 'E-REF', text: ru
+        ? 'Модель отклонила это фото — такое бывает с нечётким кадром, сильными фильтрами или когда в кадре не одно лицо. Попробуйте другое: лицо крупно и анфас, хорошее освещение, без фильтров и посторонних. (E-REF)'
+        : 'The model rejected this photo — that happens with blurry shots, heavy filters, or more than one face in frame. Try another one: the face close up and front-on, good light, no filters, nobody else. (E-REF)' });
     }
     if (emptyKind === 'length') {
-      return json({ error: 'model', text: 'Ответ ИИ не поместился в лимит. Попробуйте ещё раз — если повторится, напишите в поддержку.' });
+      return json({ error: 'model', code: 'E-LEN', text: ru
+        ? 'Разбор не поместился в лимит ответа. Анализ не списан — попробуйте ещё раз. (E-LEN)'
+        : 'The report did not fit the answer limit. Nothing was charged — please try again. (E-LEN)' });
     }
-    return json({ error: 'model', text: `Сервис перегружен, попробуйте ещё раз. (${lastErr})` });
+    const why = explainAiError(lastStatus, lastErr, body.lang);
+    return json({ error: 'model', code: why.code, text: `${why.text} (${why.code})` });
   }
 
   // Списание ПОСЛЕ успеха: безлимит не тратится; free → счётчик недели (одинаковый для всех); paid → минус кредит.
@@ -2548,6 +2602,9 @@ const SUP = {
     kbLang: '🌍 Язык: Русский', kbBack: '← Menu',
     humanOn: '✅ Passed to an operator. Write your question — a human will reply here.',
     sent: '✅ Sent to the operator. Please wait for a reply.',
+    noMedia: '📎 I cannot read attachments — I only see text. Describe the problem in words and I will answer.\n\nIf a screenshot is essential, send it to @humblemogg directly, or tap “Call an operator” below and attach it here — the operator will see it.',
+    mediaSent: '✅ Attachment passed to the operator.',
+    noMediaShort: '📎 Heads up: I cannot see the attachment, I am answering your text only.',
     noAdmin: 'Operator is temporarily unavailable, please try later.',
     langSet: '🌍 Language set: English.',
     faq: '❓ FAQ\n\n• Free analysis — subscribe to @wwwfacerateru (1/week).\n• Paid — Telegram Stars or crypto in the payments bot.\n• No access after paying? Refresh facerate.ru; if it persists — tap “Call an operator”.\n• Paid but can’t run the analysis? Refresh the page and wait a couple of minutes.\n• Paid but no full report? Refresh the page and run the analysis again.\n• Got an error? Try another photo or switch your VPN.\n• Promo codes — button in the payments bot; codes drop in channel giveaways.\n• Privacy — your photo is used only for the analysis and is not published.\n\nStill stuck? Just type your question here.',
@@ -2559,6 +2616,9 @@ const SUP = {
     kbLang: '🌍 Language: English', kbBack: '← Меню',
     humanOn: '✅ Передаю оператору. Опиши вопрос — человек ответит здесь.',
     sent: '✅ Отправлено оператору. Дождись ответа.',
+    noMedia: '📎 Вложения я не вижу — читаю только текст. Опиши проблему словами, и я отвечу.\n\nЕсли без скриншота никак, пришли его в личку @humblemogg или нажми «Позвать оператора» ниже и приложи сюда — оператор увидит.',
+    mediaSent: '✅ Вложение передано оператору.',
+    noMediaShort: '📎 Сразу скажу: вложение я не вижу, отвечаю только по тексту.',
     noAdmin: 'Оператор временно недоступен, попробуй позже.',
     langSet: '🌍 Язык переключён: русский.',
     faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в неделю).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Оплатил, но анализ не делается? Обнови страницу и подожди пару минут.\n• Оплатил, а полного разбора нет? Обнови страницу и сделай анализ заново.\n• Выскочила ошибка? Попробуй другое фото или смени VPN.\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
@@ -2823,20 +2883,44 @@ async function supportAI(env, question, L) {
   } catch { return L === 'ru' ? 'Ошибка, попробуй позже или позови оператора.' : 'Error, try later or call an operator.'; }
 }
 
+// Что человек прислал, кроме текста. Подпись к фото Telegram кладёт в caption,
+// а не в text, поэтому без разбора терялась и она.
+function msgKind(msg) {
+  if (msg.photo) return 'фото';
+  if (msg.document) return 'файл' + (msg.document.file_name ? ' «' + msg.document.file_name + '»' : '');
+  if (msg.video) return 'видео';
+  if (msg.voice) return 'голосовое';
+  if (msg.video_note) return 'кружок';
+  if (msg.audio) return 'аудио';
+  if (msg.sticker) return 'стикер';
+  if (msg.animation) return 'гиф';
+  return null;
+}
+
 async function forwardToAdmin(env, msg, L) {
   const b = SUP[L];
   const ids = adminIds(env);
   if (!ids.length) { await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.noAdmin }); return; }
   const u = msg.from;
-  await addTicket(env, u, msg.text || '[нетекстовое сообщение]');
+  const kind = msgKind(msg);
+  const summary = (msg.text || msg.caption || '').trim()
+    || (kind ? '[' + kind + ' без подписи]' : '[нетекстовое сообщение]');
+  await addTicket(env, u, summary);
   for (const admin of ids) {
     const sent = await supportApi(env, 'sendMessage', {
       chat_id: admin,
-      text: `💬 ${u.first_name || ''} @${u.username || ''} (id ${u.id}):\n\n${msg.text || '[нетекстовое сообщение]'}\n\n↩️ Ответь реплаем, или открой «📂 Открытые чаты» в /admin.`,
+      text: `💬 ${u.first_name || ''} @${u.username || ''} (id ${u.id})${kind ? ' — прислал ' + kind : ''}:\n\n${summary}\n\n↩️ Ответь реплаем, или открой «📂 Открытые чаты» в /admin.`,
     });
     if (sent.ok) await env.RATE_LIMIT.put(`supmap:${admin}:${sent.result.message_id}`, String(u.id), { expirationTtl: 60 * 60 * 24 * 3 });
+    // Сам файл — отдельным сообщением. copyMessage отдаёт картинку как есть, без
+    // пометки «переслано», и проходит даже когда у человека закрыта пересылка.
+    // Реплай на него тоже уходит человеку: кладём в ту же карту supmap.
+    if (kind) {
+      const copied = await supportApi(env, 'copyMessage', { chat_id: admin, from_chat_id: msg.chat.id, message_id: msg.message_id });
+      if (copied.ok) await env.RATE_LIMIT.put(`supmap:${admin}:${copied.result.message_id}`, String(u.id), { expirationTtl: 60 * 60 * 24 * 3 });
+    }
   }
-  await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: b.sent });
+  await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: kind ? b.mediaSent : b.sent });
 }
 
 // ─── Реферальные ссылки для медийных партнёров ───
@@ -3980,10 +4064,26 @@ async function supportWebhook(request, env) {
     return new Response('ok');
   }
 
+  // Вложение без вызванного оператора: модель саппорта читает только текст, и с пустым
+  // сообщением отвечала случайным пунктом FAQ. Говорим прямо и даём два пути.
+  // Подпись к фото Telegram кладёт в caption — если вопрос там, на него и отвечаем.
+  const kind = msgKind(msg);
+  const ask = text || (msg.caption || '').trim();
+  if (kind && !ask) {
+    await supportApi(env, 'sendMessage', {
+      chat_id: msg.chat.id, text: SUP[L].noMedia,
+      reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] },
+    });
+    return new Response('ok');
+  }
+
   // Иначе — AI-ответ по FAQ + кнопка эскалации.
-  const answer = await supportAI(env, text, L);
+  const answer = await supportAI(env, ask, L);
   await supportApi(env, 'sendMessage', {
-    chat_id: msg.chat.id, text: answer,
+    chat_id: msg.chat.id,
+    // Если пришло вложение с подписью — отвечаем по подписи, но предупреждаем, что
+    // саму картинку не видим: иначе человек думает, что ответ дан по скриншоту.
+    text: (kind ? SUP[L].noMediaShort + '\n\n' : '') + answer,
     reply_markup: { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] },
   });
   return new Response('ok');
