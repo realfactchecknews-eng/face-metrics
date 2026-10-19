@@ -929,6 +929,52 @@ async function isSubscribed(env, tgid, fresh) {
 // giveaway:current — {id, endTs, credits, winners, entries:[tgid,...]}. Один активный
 // розыгрыш одновременно. Участие — явный клик «Участвовать» + живая проверка подписки
 // на канал (fresh=true, не из кэша), иначе засчитать могли бы и неподписанных.
+/* Лестница призов. Раньше розыгрыш знал один приз на всех (gw.credits каждому из
+   gw.winners), а разные места приходилось раздавать руками. Теперь место знает свой
+   приз: `guide` — гайд с ведением, число — столько анализов.
+   Запись «1x10» значит десять мест по одному анализу.
+   Старые розыгрыши без ladder работают по-прежнему — поле просто отсутствует. */
+function parseLadder(spec) {
+  const out = [];
+  for (const part of String(spec || '').split(',')) {
+    const s = part.trim().toLowerCase();
+    if (!s) continue;
+    if (s === 'guide' || s === 'гайд') { out.push({ pack: 'guide' }); continue; }
+    const m = s.match(/^(\d+)(?:\s*[xх*]\s*(\d+))?$/);
+    if (!m) return null;
+    const credits = parseInt(m[1], 10);
+    const times = m[2] ? parseInt(m[2], 10) : 1;
+    if (!credits || !times || times > 50) return null;
+    for (let i = 0; i < times; i++) out.push({ credits });
+  }
+  return out.length && out.length <= 50 ? out : null;
+}
+
+// Строки призов для поста: подряд идущие одинаковые места собираются в диапазон,
+// иначе «4 место — 1 анализ» повторяется десять раз подряд.
+function ladderLines(ladder) {
+  // «по 1 анализ» — не по-русски, у диапазона нужен дательный падеж.
+  const each = (p) => p.pack
+    ? prizeLabel(p, 'ru')
+    : `${p.credits} ${p.credits === 1 ? 'анализу' : p.credits < 5 ? 'анализа' : 'анализов'}`;
+  const out = [];
+  for (let i = 0; i < ladder.length;) {
+    const label = prizeLabel(ladder[i], 'ru');
+    let j = i;
+    while (j + 1 < ladder.length && prizeLabel(ladder[j + 1], 'ru') === label) j++;
+    out.push(j > i ? `${i + 1}-${j + 1} место — по ${each(ladder[i])}` : `${i + 1} место — ${label}`);
+    i = j + 1;
+  }
+  return out.join('\n');
+}
+
+// Человеческое название приза — и для поста, и для письма победителю.
+function prizeLabel(p, L) {
+  const ru = L !== 'en';
+  if (p.pack === 'guide') return ru ? 'гайд + ведение на 90 дней' : 'the guide + 90-day coaching';
+  return ru ? `${p.credits} ${p.credits === 1 ? 'анализ' : 'анализов'}` : `${p.credits} analyses`;
+}
+
 async function getGiveaway(env) {
   const raw = await env.RATE_LIMIT.get('giveaway:current');
   return raw ? JSON.parse(raw) : null;
@@ -952,30 +998,52 @@ async function runGiveawayDraw(env) {
   const pool = [...gw.entries];
   const picked = [];
   let unsubSkipped = 0;
-  while (picked.length < gw.winners && pool.length) {
+  const ladder = Array.isArray(gw.ladder) && gw.ladder.length ? gw.ladder : null;
+  const places = ladder ? ladder.length : gw.winners;
+  while (picked.length < places && pool.length) {
     const idx = Math.floor(Math.random() * pool.length);
     const candidate = pool.splice(idx, 1)[0];
     const stillSubscribed = await isSubscribed(env, candidate, true);
     if (!stillSubscribed) { unsubSkipped++; continue; }
     picked.push(candidate);
   }
-  for (const winnerId of picked) {
-    const cur = parseInt(await env.RATE_LIMIT.get(`credits:${winnerId}`) || '0', 10);
-    await env.RATE_LIMIT.put(`credits:${winnerId}`, String(cur + gw.credits));
+  for (let i = 0; i < picked.length; i++) {
+    const winnerId = picked[i];
+    const prize = ladder ? ladder[i] : { credits: gw.credits };
     const wL = await userLang(env, winnerId);
-    await tgApi(env, 'sendMessage', { chat_id: winnerId, text: BL[wL].gwWinMsg(gw.credits) }).catch(() => {});
+    if (prize.pack) {
+      // Гайд выдаём ТОЙ ЖЕ функцией, что и настоящая оплата: иначе приз и покупка
+      // разъедутся (флаг, стартовые анализы, дата старта, список владельцев).
+      // В translog не пишем — это приз, а не выручка.
+      await grantPack(env, winnerId, PACKS[prize.pack], wL, null).catch(() => {});
+    } else {
+      const cur = parseInt(await env.RATE_LIMIT.get(`credits:${winnerId}`) || '0', 10);
+      await env.RATE_LIMIT.put(`credits:${winnerId}`, String(cur + prize.credits));
+    }
+    const place = i + 1;
+    const text = ladder
+      ? (wL === 'en'
+          ? `🏆 You took place ${place} in the FaceRate giveaway! Your prize: ${prizeLabel(prize, 'en')}. It is already on your account.`
+          : `🏆 Ты занял ${place}-е место в розыгрыше FaceRate! Приз: ${prizeLabel(prize, 'ru')}. Уже начислено на аккаунт.`)
+      : BL[wL].gwWinMsg(prize.credits);
+    await tgApi(env, 'sendMessage', { chat_id: winnerId, text }).catch(() => {});
   }
   // Раньше итоги жили только в сообщении админу: giveaway:current удалялся, и посмотреть,
   // кто выиграл в прошлый раз, было негде. Держим последние 10 розыгрышей.
   const past = await getList(env, 'giveaway:past');
   past.unshift({ id: gw.id, at: Date.now(), winners: picked, prizes: gw.prizes || [],
-                 credits: gw.credits, entries: gw.entries.length });
+                 ladder: gw.ladder || null, credits: gw.credits, entries: gw.entries.length });
   await putList(env, 'giveaway:past', past.slice(0, 10), 60 * 60 * 24 * 365);
   await env.RATE_LIMIT.delete('giveaway:current');
   return { ok: true, gw, picked, unsubSkipped, totalEntries: gw.entries.length };
 }
 
 function giveawayResultsPost(r) {
+  const ladder = Array.isArray(r.gw.ladder) && r.gw.ladder.length ? r.gw.ladder : null;
+  if (ladder) {
+    const lines = r.picked.map((id, i) => `${i + 1} место — id ${id} — ${prizeLabel(ladder[i], 'ru')}`).join('\n');
+    return `🏆 Итоги розыгрыша!\n\n${lines}\n\nУчастников: ${r.totalEntries}. Призы уже начислены.`;
+  }
   return `🏆 Итоги розыгрыша!\n\nПобедители (по id): ${r.picked.join(', ')}\nКаждому начислено: ${r.gw.credits} бесплатных анализов.\n\nСпасибо всем, кто участвовал — новый розыгрыш скоро!`;
 }
 
@@ -1990,22 +2058,37 @@ async function tgWebhook(request, env, ctx) {
   // с явным участием (кнопка «Участвовать» + живая проверка подписки). Отдаёт готовый
   // текст для поста в канал (с диплинком на бота), постить туда — руками, как и промокоды.
   if (text.startsWith('/newgiveaway') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
-    const m = text.match(/^\/newgiveaway\s+(\d+)\s+(\d+)\s+(\d+)/);
-    if (!m) {
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/newgiveaway ПОБЕДИТЕЛЕЙ АНАЛИЗОВ_В_ПРИЗ ДНЕЙ\nНапример: /newgiveaway 3 5 7' });
+    // Две формы. Старая: «ПОБЕДИТЕЛЕЙ АНАЛИЗОВ ДНЕЙ» — один приз на всех.
+    // Новая: «ЛЕСТНИЦА ДНЕЙ», где у каждого места свой приз, например
+    // /newgiveaway guide,10,5,1x10 7 — гайд, потом 10, потом 5, потом десять по одному.
+    const mOld = text.match(/^\/newgiveaway\s+(\d+)\s+(\d+)\s+(\d+)\s*$/);
+    const mNew = text.match(/^\/newgiveaway\s+([0-9a-zA-Zа-яёx\u0445*,\s]*[a-zA-Zа-яё,][0-9a-zA-Zа-яёx\u0445*,\s]*)\s+(\d+)\s*$/);
+    const ladder = mNew ? parseLadder(mNew[1]) : null;
+    if (!mOld && !ladder) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text:
+        'Формат:\n/newgiveaway ЛЕСТНИЦА ДНЕЙ\n\nЛестница — призы по местам через запятую:\n'
+        + '• guide — гайд с ведением\n• число — столько анализов\n• 1x10 — десять мест по одному анализу\n\n'
+        + 'Например:\n/newgiveaway guide,10,5,1x10 7\n\nСтарая форма (один приз на всех) тоже работает:\n/newgiveaway 3 5 7' });
       return new Response('ok');
     }
-    const winners = parseInt(m[1], 10), credits = parseInt(m[2], 10), days = parseInt(m[3], 10);
+    const days = parseInt(mOld ? mOld[3] : mNew[2], 10);
+    const winners = ladder ? ladder.length : parseInt(mOld[1], 10);
+    const credits = ladder ? 0 : parseInt(mOld[2], 10);
     const endTs = Date.now() + days * 24 * 60 * 60 * 1000;
-    const gw = { id: crypto.randomUUID().slice(0, 8), endTs, credits, winners, entries: [] };
+    // prizes — подписи для мини-приложения, оно показывает их списком мест.
+    const prizes = ladder ? ladder.map((p, i) => `${i + 1} место — ${prizeLabel(p, 'ru')}`) : [];
+    const gw = { id: crypto.randomUUID().slice(0, 8), endTs, credits, winners, ladder, prizes, entries: [] };
     await saveGiveaway(env, gw);
     const botUsername = env.BOT_USERNAME || 'faceratepay_bot';
     const link = `https://t.me/${botUsername}?start=giveaway`;
     const endDate = fmtDate(endTs, 'ru');
-    const post = `🎉 РОЗЫГРЫШ!\n\nРазыгрываем ${credits} бесплатных анализов лица среди ${winners} победител${winners === 1 ? 'я' : 'ей'}.\n\nУсловия:\n1. Быть подписанным на этот канал\n2. Нажать «Участвовать» в боте\n\nИтоги подведём ${endDate}, победителей объявим здесь же.\n\n👉 ${link}`;
+    const prizeLines = ladder ? ladderLines(ladder) : '';
+    const post = ladder
+      ? `🎉 РОЗЫГРЫШ!\n\nПризы:\n${prizeLines}\n\nУсловия:\n1. Быть подписанным на этот канал\n2. Нажать «Участвовать» в боте\n\nИтоги подведём ${fmtDate(endTs, 'ru')}, победителей объявим здесь же.\n\n👉 https://t.me/${env.BOT_USERNAME || 'faceratepay_bot'}?start=giveaway`
+      : `🎉 РОЗЫГРЫШ!\n\nРазыгрываем ${credits} бесплатных анализов лица среди ${winners} победител${winners === 1 ? 'я' : 'ей'}.\n\nУсловия:\n1. Быть подписанным на этот канал\n2. Нажать «Участвовать» в боте\n\nИтоги подведём ${endDate}, победителей объявим здесь же.\n\n👉 ${link}`;
     await tgApi(env, 'sendMessage', {
       chat_id: chat,
-      text: `✅ Розыгрыш запущен: id ${gw.id}, ${winners} победител${winners === 1 ? 'я' : 'ей'} по ${credits} анализов, итоги ${endDate}.\n\nГотовый пост для канала (добавь кнопку-ссылку на ${link} через редактор поста):\n\n---\n${post}\n---\n\nПо истечении срока розыгрыш подведётся сам (проверка раз в час) — я пришлю тебе готовый пост с победителями. Если нужно разыграть раньше срока вручную — команда /drawgiveaway.`,
+      text: `✅ Розыгрыш запущен: id ${gw.id}, ${winners} ${ladder ? 'мест' : `победител${winners === 1 ? 'я' : 'ей'} по ${credits} анализов`}, итоги ${endDate}.\n\nГотовый пост для канала (добавь кнопку-ссылку на ${link} через редактор поста):\n\n---\n${post}\n---\n\nПо истечении срока розыгрыш подведётся сам (проверка раз в час) — я пришлю тебе готовый пост с победителями. Если нужно разыграть раньше срока вручную — команда /drawgiveaway.`,
     });
     return new Response('ok');
   }

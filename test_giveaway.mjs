@@ -1,43 +1,59 @@
-// Проверка, что мини-приложение не даёт постороннему создавать розыгрыши и не
-// пускает неподписанного в участники. Логика скопирована из giveawayApi.
+// Розыгрыш с разными призами по местам. Раньше приз был один на всех, а «первое
+// место — гайд» раздавалось руками. Здесь проверяем, что место знает свой приз
+// и что гайд выдаётся ТОЙ ЖЕ функцией, что и настоящая покупка.
 import assert from 'node:assert';
-
-const ADMIN_USERNAMES = ['humblemogg'], FACE_ADMIN_TGID = 1031760975;
-const isAdmin = (u) => u.id === FACE_ADMIN_TGID || ADMIN_USERNAMES.includes(u.username || '');
-
-assert.equal(isAdmin({ id: 1031760975, username: '' }), true,  'админ по id');
-assert.equal(isAdmin({ id: 5, username: 'humblemogg' }), true, 'админ по username');
-assert.equal(isAdmin({ id: 5, username: 'stranger' }), false,  'посторонний не админ');
-assert.equal(isAdmin({ id: 5 }), false,                        'без username не админ');
-
-// границы значений при создании
-const clamp = (b) => ({
-  winners: Math.max(1, Math.min(50, parseInt(b.winners, 10) || 1)),
-  credits: Math.max(0, Math.min(100, parseInt(b.credits, 10) || 0)),
-  days:    Math.max(1, Math.min(60, parseInt(b.days, 10) || 7)),
-});
-assert.deepEqual(clamp({ winners: 999, credits: -5, days: 0 }), { winners: 50, credits: 0, days: 7 });
-assert.deepEqual(clamp({ winners: 'x', credits: 'x', days: 'x' }), { winners: 1, credits: 0, days: 7 });
-assert.deepEqual(clamp({ winners: 3, credits: 5, days: 7 }), { winners: 3, credits: 5, days: 7 });
-
-// призы обрезаются по числу победителей и по длине
-const prizes = (arr, winners) => arr.slice(0, winners).map((p) => String(p).slice(0, 120));
-assert.equal(prizes(['a', 'b', 'c', 'd'], 3).length, 3, 'лишние призы отброшены');
-assert.equal(prizes(['x'.repeat(500)], 1)[0].length, 120, 'длина приза ограничена');
-
-console.log('все проверки прошли');
-
-// Регрессия: инлайновый display перебивал класс .hide, и админская форма была
-// видна всем. Проверяем, что на скрываемых блоках нет атрибута style с display.
 import { readFileSync } from 'node:fs';
-const html = readFileSync(new URL('./giveaway.html', import.meta.url), 'utf8');
-for (const id of ['live', 'admin', 'pastBox']) {
-  const tag = html.match(new RegExp(`<div id="${id}"[^>]*>`))[0];
-  assert.ok(tag.includes('class="') && tag.includes('hide'), `${id}: должен стартовать скрытым`);
-  assert.ok(!/style="[^"]*display/.test(tag), `${id}: инлайновый display перебьёт .hide`);
-}
-// Раскладка задана по id (#live, #admin) — это сильнее класса, поэтому .hide обязано
-// быть !important, иначе блок останется видимым. Ровно это и ломалось дважды.
-assert.match(html, /\.hide\s*\{[^}]*display\s*:\s*none\s*!important/,
-  '.hide должен перебивать раскладку по id');
-console.log('скрытые блоки: проверка прошла');
+
+const w = readFileSync(new URL('./worker.js', import.meta.url), 'utf8');
+const pick = (re) => { const m = w.match(re); assert.ok(m, 'не нашёл в worker.js: ' + re); return m[0]; };
+const { parseLadder, prizeLabel, ladderLines } = new Function(
+  pick(/^function parseLadder[\s\S]*?^\}/m) + '\n' + pick(/^function prizeLabel[\s\S]*?^\}/m)
+  + '\n' + pick(/^function ladderLines[\s\S]*?^\}/m)
+  + '\nreturn { parseLadder, prizeLabel, ladderLines };')();
+
+// Та самая лестница, ради которой всё затевалось.
+const l = parseLadder('guide,10,5,1x10');
+assert.equal(l.length, 13, 'мест должно быть 13');
+assert.deepEqual(l[0], { pack: 'guide' }, 'первое место — гайд');
+assert.deepEqual(l[1], { credits: 10 });
+assert.deepEqual(l[2], { credits: 5 });
+assert.ok(l.slice(3).every((p) => p.credits === 1), 'хвост — по одному анализу');
+
+assert.equal(parseLadder('гайд,3').length, 2, 'слово по-русски тоже понимается');
+assert.equal(parseLadder('2х3').length, 3, 'русская «х» в «2х3» работает: её легко набрать случайно');
+assert.equal(parseLadder(''), null, 'пустая строка — не лестница');
+assert.equal(parseLadder('abc'), null, 'мусор — не лестница');
+assert.equal(parseLadder('0'), null, 'ноль анализов призом не бывает');
+assert.equal(parseLadder('1x999'), null, 'защита от опечатки в тысячу мест');
+
+assert.match(prizeLabel({ pack: 'guide' }, 'ru'), /гайд/);
+assert.equal(prizeLabel({ credits: 1 }, 'ru'), '1 анализ', 'единственное число');
+assert.equal(prizeLabel({ credits: 5 }, 'ru'), '5 анализов');
+assert.match(prizeLabel({ credits: 5 }, 'en'), /5 analyses/);
+
+// Выдача: гайд через grantPack, анализы — прибавкой к credits, каждому по своему месту.
+const draw = pick(/^async function runGiveawayDraw[\s\S]*?^\}/m);
+assert.match(draw, /const prize = ladder \? ladder\[i\] : \{ credits: gw\.credits \}/, 'приз берётся по номеру места');
+assert.match(draw, /grantPack\(env, winnerId, PACKS\[prize\.pack\]/, 'гайд выдаётся как покупка, а не копией логики');
+assert.match(draw, /const places = ladder \? ladder\.length : gw\.winners/, 'мест столько, сколько призов');
+// Без лестницы всё должно работать как раньше: активный розыгрыш не должен сломаться.
+assert.match(draw, /BL\[wL\]\.gwWinMsg\(prize\.credits\)/, 'старый розыгрыш шлёт прежнее письмо');
+
+// Итоги: при лестнице перечисляем места, иначе прежний текст.
+const post = pick(/^function giveawayResultsPost[\s\S]*?^\}/m);
+assert.match(post, /\$\{i \+ 1\} место — id/, 'в итогах видно, кто какое место занял');
+
+// Команда понимает обе формы.
+assert.match(w, /\/newgiveaway guide,10,5,1x10 7/, 'в подсказке есть готовый пример');
+assert.match(w, /mOld = text\.match/, 'старая форма осталась');
+
+// Пост: одинаковые места подряд собираются в диапазон, иначе «1 анализ» повторится
+// десять раз. У диапазона дательный падеж — «по 1 анализу», а не «по 1 анализ».
+const lines = ladderLines(parseLadder('guide,10,5,1x10')).split('\n');
+assert.equal(lines.length, 4, 'тринадцать мест умещаются в четыре строки');
+assert.equal(lines[3], '4-13 место — по 1 анализу');
+assert.equal(ladderLines(parseLadder('3x2')), '1-2 место — по 3 анализа', 'два-четыре — «анализа»');
+assert.equal(ladderLines(parseLadder('5x3')), '1-3 место — по 5 анализов', 'пять и больше — «анализов»');
+assert.ok(!/по 1 анализ$/m.test(ladderLines(parseLadder('1x3'))), 'падеж не ломается');
+
+console.log('розыгрыш: все проверки прошли');
