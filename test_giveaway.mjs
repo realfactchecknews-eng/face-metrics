@@ -56,4 +56,18 @@ assert.equal(ladderLines(parseLadder('3x2')), '1-2 место — по 3 ана�
 assert.equal(ladderLines(parseLadder('5x3')), '1-3 место — по 5 анализов', 'пять и больше — «анализов»');
 assert.ok(!/по 1 анализ$/m.test(ladderLines(parseLadder('1x3'))), 'падеж не ломается');
 
+// Анонс и итоги публикует бот: кнопку под постом Telegram даёт поставить только ему,
+// а обещание «объявим здесь же» не должно зависеть от того, дошли ли руки скопировать.
+const cmd = w.slice(w.indexOf("startsWith('/newgiveaway')"), w.indexOf("startsWith('/drawgiveaway')"));
+assert.match(cmd, /chat_id: CHANNEL, text: post/, 'анонс уходит в канал сам');
+assert.match(cmd, /inline_keyboard: \[\[\{ text: '🙋 Участвовать', url: link \}\]\]/, 'с кнопкой на бота');
+assert.match(cmd, /gw\.postId = announced\.result\.message_id/, 'id анонса сохраняется');
+assert.match(cmd, /В канал не ушло/, 'если не ушло — владельцу отдаётся текст, а не тишина');
+const drawFn = pick(/^async function runGiveawayDraw[\s\S]*?^\}/m);
+assert.match(drawFn, /chat_id: CHANNEL, text: giveawayResultsPost\(r\)/, 'итоги уходят в канал');
+assert.match(drawFn, /reply_to_message_id: gw\.postId/, 'итоги отвечают на анонс');
+// Участнику нельзя показывать «приз каждому: 0 анализов» — при лестнице приз у места свой.
+const land = pick(/^function gwActiveText[\s\S]*?^\}/m);
+assert.match(land, /if \(!ladder\) return b\.gwActive/, 'без лестницы текст прежний');
+assert.ok(!/b\.gwActive\(gw\.winners, gw\.credits/.test(w.replace(land, '')), 'старый текст больше нигде не зовётся напрямую');
 console.log('розыгрыш: все проверки прошли');
