@@ -4671,7 +4671,7 @@ function loadShot(input, slot){
 async function pgLoad(){
   const acc = getAccount();               // app.js:2047
   const tok = acc && acc.token;
-  if (!tok) return pgShowLocked();
+  if (!tok) return pgShowProblem('auth');
 
   let d;
   try {
@@ -4680,10 +4680,11 @@ async function pgLoad(){
       body: JSON.stringify({ token: tok }),
     });
     d = await r.json();
-  } catch { return pgShowLocked(); }
+  } catch { return pgShowProblem('net'); }
 
   // tracking — платил, но гайд не брал: график и замер раз в 30 дней есть, плана и гайда нет.
-  if (d.error || (!d.guide && !d.tracking)) return pgShowLocked(d.pack);
+  if (d.error) return pgShowProblem(d.error === 'auth' ? 'auth' : 'net');
+  if (!d.guide && !d.tracking) return pgShowLocked(d.pack);
 
   PG = d;
   CURRENT_WEEK = d.week || 1;
@@ -4708,6 +4709,30 @@ async function pgLoad(){
   });
 
   pgShowUnlocked(!d.guide);
+}
+
+// Экран «купить план» показываем ТОЛЬКО когда сервер прямо сказал, что покупки нет.
+// Раньше сюда же сваливались протухшая сессия, упавшая сеть и любая ошибка воркера —
+// человек выходил из аккаунта, заходил обратно и видел предложение купить заново то,
+// что у него уже куплено. Жалоба 19.10.2026.
+function pgShowProblem(kind) {
+  document.getElementById('pgLocked').hidden = false;
+  document.getElementById('pgUnlocked').hidden = true;
+  const box = document.getElementById('pgSoon');
+  if (!box) return;
+  box.className = 'pg-buy';
+  box.innerHTML = '';
+  const p = document.createElement('p');
+  p.className = 'pg-buy-hint';
+  p.textContent = kind === 'auth'
+    ? 'Войди через Telegram вверху страницы — ведение привязано к аккаунту, покупка никуда не делась.'
+    : 'Не удалось загрузить ведение. Покупка на месте — это связь с сервером.';
+  box.appendChild(p);
+  const b = document.createElement('button');
+  b.className = 'btn'; b.type = 'button';
+  b.textContent = kind === 'auth' ? 'Обновить' : 'Попробовать ещё раз';
+  b.addEventListener('click', function(){ pgLoad(); });
+  box.appendChild(b);
 }
 
 function pgShowLocked(pack){
