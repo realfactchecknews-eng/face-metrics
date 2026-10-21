@@ -2211,13 +2211,14 @@ async function tgWebhook(request, env, ctx) {
       await tgApi(env, 'sendMessage', { chat_id: chat, text:
         'Начислить анализы по никам:\n\n/grantuser КОЛИЧЕСТВО @ник @ник ... | текст сообщения\n\n'
         + 'Например:\n/grantuser 1 @vasya @petya | Твой рейт совпал с нашим — держи анализ.\n\n'
+        + 'Вместо ника можно указать Telegram id — он работает всегда:\n/grantuser 5 8557802390 | Спасибо за покупку!\n\n'
         + 'Текст необязателен. Ник ищется в нашем указателе: он заполняется, когда человек\n'
         + 'пишет любому нашему боту или входит на сайте. Telegram id по @нику не отдаёт.' });
       return new Response('ok');
     }
     const ok = [], fail = [];
     for (const name of names.slice(0, 50)) {
-      const uid = await resolveUsername(env, name);
+      const uid = /^\d{5,}$/.test(name) ? name : await resolveUsername(env, name);
       if (!uid) { fail.push(name); continue; }
       const cur = parseInt(await env.RATE_LIMIT.get(`credits:${uid}`) || '0', 10);
       await env.RATE_LIMIT.put(`credits:${uid}`, String(cur + n));

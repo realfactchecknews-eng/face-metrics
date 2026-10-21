@@ -79,4 +79,10 @@ assert.ok(/if \(!ctx\) await job/.test(seedCmd), 'без ctx работа пот
 // Падение фоновой задачи должно быть ВИДНО: иначе это выглядит как «команда молчит».
 assert.ok(/catch \(e\)/.test(seedCmd) && /упал/.test(seedCmd), 'ошибка сбора ников не доходит до админа');
 
+// Telegram не отдаёт id по нику, а указатель знает только тех, кто писал боту.
+// Когда id уже известен — из журнала платежей, из жалобы — ник искать незачем.
+const grant = w.slice(w.indexOf("startsWith('/grantuser')"), w.indexOf("startsWith('/grantpastbuyers')"));
+assert.match(grant, /\/\^\\d\{5,\}\$\/\.test\(name\) \? name : await resolveUsername/, 'числовой id принимается как есть');
+assert.match(grant, /Вместо ника можно указать Telegram id/, 'в подсказке это написано');
+
 console.log('/grantuser: все проверки прошли');
