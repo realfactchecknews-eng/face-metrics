@@ -1,6 +1,7 @@
 # face-metrics — Project Context for Claude
 
-> **Актуально на 15.09.2026 — читать первым, ниже много устаревшего.**
+> **Актуально на 22.10.2026. Тело файла переписано под нынешний код 22.10 —
+> устаревших разделов про qwen, старый формат отчёта и удалённые файлы больше нет.**
 > - Прод: **https://facerate.ru**, рабочая ветка **`master`** (не `claude/face-geometry-tool-*`).
 > - Воркер: **`https://api.facerate.online`** (`WORKER_URL` в `app.js`), модель анализа —
 >   `google/gemini-3.7-flash` (`MODEL_MAIN` в `worker.js`), запасная — `x-ai/grok-4.3`.
@@ -46,113 +47,112 @@
 
 
 ## What this is
-Static web app deployed on GitHub Pages (`gh-pages` branch).
-URL: `https://realfactchecknews-eng.github.io/face-metrics/`
-Deploy: push to `master` → GitHub Actions (`peaceiris/actions-gh-pages@v4`) → `gh-pages`.
+Статика (HTML/CSS/JS, без сборки) на GitHub Pages + один Cloudflare Worker.
+Прод — **https://facerate.ru**, рабочая ветка **`master`**.
+Деплой автоматический: push в `master` → два workflow, Pages и воркер, оба сами.
+Pages идёт официальным пайплайном (`upload-pages-artifact` + `deploy-pages`),
+ветки `gh-pages` больше нет.
+
+⚠️ `.github/workflows/deploy.yml` копирует **белый список файлов** и глушит ошибки
+(`2>/dev/null || true`). Новую HTML-страницу надо дописать туда руками, иначе сборка
+останется зелёной, а на проде будет 404.
 
 ## SECURITY CONSTRAINT (hard rule)
 **DO NOT touch `realfactchecknews-eng/burmalda_tycoon` repo. Ever.**
 
 ## Architecture
-- **Frontend**: pure HTML/CSS/JS, no build step, no framework
-- **Face detection**: MediaPipe Tasks `FaceLandmarker`, `runningMode: "IMAGE"`,
-  loaded via dynamic `import()` of `@mediapipe/tasks-vision` (CDN). On-device,
-  468/478 landmarks. (Replaced the old video-oriented `@mediapipe/face_mesh`.)
-- **AI**: Cloudflare Worker proxy → OpenRouter API (vision). Model id is in
-  `worker.js` (`model:` field). Currently `qwen/qwen2.5-vl-72b-instruct`
-  (chosen because Gemini/GPT-4o tend to refuse looksmaxxing/appearance rating).
-  - Worker URL: `https://face-metrics-ai.realfactchecknews.workers.dev` (also `WORKER_URL` in `app.js`)
-  - `OPENROUTER_API_KEY` is a Cloudflare Worker secret — **never put it in frontend**
-  - Worker deploys SEPARATELY from Pages. Auto-deploy via
-    `.github/workflows/deploy-worker.yml` on push to master (needs the
-    `CLOUDFLARE_API_TOKEN` GitHub secret — see README "Автодеплой воркера").
-    If the secret isn't set, fall back to manual `wrangler deploy`.
-- **Privacy note**: landmarks are on-device, but the PHOTO itself is sent (base64)
-  to the Worker → OpenRouter for the AI report. The image does leave the device.
-- **Fonts**: Google Fonts — Cormorant Garamond 300/400
-- **Gold accent**: `#c4a46b` (`--accent` CSS variable)
+- **Фронт**: чистый HTML/CSS/JS, без сборки и фреймворка — это намеренно, не недоделка.
+- **Геометрия лица**: MediaPipe Tasks `FaceLandmarker`, `runningMode: "IMAGE"`,
+  динамический `import()` с CDN. Считается на устройстве, 468/478 точек.
+- **ИИ**: Cloudflare Worker (`https://api.facerate.online`, он же `WORKER_URL` в `app.js`)
+  проксирует в OpenRouter. Модель — `google/gemini-3.7-flash` (`MODEL_MAIN` в `worker.js`),
+  запасная — `x-ai/grok-4.3`. Провайдер **пинится** (`google-ai-studio`), температура 0,
+  seed фиксирован: без пина одно и то же фото давало разные тиры.
+  - `OPENROUTER_API_KEY` — секрет воркера, **никогда не класть во фронт**.
+  - Воркер деплоится отдельным workflow (`deploy-worker.yml`, нужен секрет
+    `CLOUDFLARE_API_TOKEN`). Без него — ручной `wrangler deploy`.
+  - `wrangler kv` без `--remote` читает локальное хранилище, а `kv key list` отдаёт
+    список неполно — перебирать ключи нельзя, это уже стоило одной попытки чистки кэша.
+- **Приватность**: точки считаются на устройстве, но САМО ФОТО уходит (base64) в воркер
+  и дальше в OpenRouter. Фото нигде не хранится, замеры хранят только дату, баллы и текст.
+- **Шрифты**: Google Fonts, Cormorant Garamond 300/400. **Акцент**: `#c4a46b` (`--accent`).
 
 ## Key files
-| File | Purpose |
-|------|---------|
-| `index.html` | Full app markup |
-| `style.css` | All styles |
-| `app.js` | All JS logic |
-| `worker.js` + `wrangler.toml` | Cloudflare Worker (AI proxy); deploy with `wrangler deploy` |
-| `metrics.js`, `recommendations.js` | DEAD CODE — not loaded in index.html, logic lives in app.js |
+| Файл | Назначение |
+|------|------------|
+| `index.html` | Вся разметка приложения; пинит `app.js?v=NN`, `style.css?v=NN`, `sharevideo.js?v=NN` |
+| `app.js` | Вся логика фронта (~5200 строк): анализ, дуэль, «Ведение», пейволл, промпты |
+| `style.css` | Все стили |
+| `worker.js` | Воркер (~6200 строк): API сайта, бот оплаты, бот поддержки, бот медиапартнёров, кроны, розыгрыши, TON/FACE |
+| `wrangler.toml` | Конфиг воркера; KV-биндинг `RATE_LIMIT` |
+| `test_*.mjs` | 31 тест, запускать `node test_X.mjs`; фреймворка нет |
+| `*.html` кроме index | SEO-страницы и лендинги (`psl-tiers`, `glossary`, `faq`, …) |
+| `_*.html` | Черновики и стенды, в деплой НЕ входят |
 
-See `README.md` for the full, up-to-date project overview.
+Полный и актуальный обзор — `README.md`, раздел «Известные ограничения / TODO» — открытые задачи.
 
-## Current features (as of last session)
-1. **Intro overlay** (2.8s) → **Landing page** (facts, stats counters, typewriter quote) → **Analysis section**
-2. **Two-column upload grid**: front photo (required) + side/profile photo (optional)
-3. **MediaPipe scan animation**: gold scan line, mesh overlay, measurement labels (fWHR, BIZYGOMATIC, SYM%)
-4. **AI HUD loading animation**: corner brackets, pulsing dot, cycling phases, asymptotic progress bar, data stream log
-5. **Jaw scoring caveat**: if no side photo → AI told to judge jaw fairly from the front and add "оценка по анфас" note (the old hard 6.0/10 cap was REMOVED)
-6. **Composite image for AI**: when both photos provided, front+side combined side-by-side with gold divider
-7. **Score cards**: overall score (animated count-up), category bars with text, recommendations list
+## Формат ответа ИИ (критично для парсинга)
+Промпт живёт **на клиенте** (`app.js`) и целиком передаётся воркеру в `body.prompt` —
+поэтому старый закэшированный `app.js` присылает промпт прошлого формата, и в коде есть
+слой совместимости (`OLD_CATS`, `scoreFromRarity`). Из-за этого `?v=` особенно важен.
 
-## Key DOM IDs
-- Upload: `frontArea`, `sideArea`, `fileInput`, `sideInput`, `chooseFileBtn`, `chooseSideBtn`
-- Thumbnails: `frontThumb`, `frontThumbImg`, `frontPlaceholder`, `frontRemove` (same pattern for `side*`)
-- `analyzeBtn` — hidden until front photo loaded
-- Analysis: `uploadSection`, `analysisView`, `canvas`, `loading`, `results`, `errorBox`, `errorText`
-- AI HUD: `aiLoading` (`.ai-hud-card`), `hudPhase`, `hudBarFill`, `hudBarPct`, `hudStream`, `hudSideLabel`
-- Results: `aiReport`, `overallScoreNum`, `overallDesc`, `categoryScores`, `aiRecs`, `recsList`, `aiError`, `aiErrorText`
-- Reset: `resetBtn`
-
-## Key JS functions
-- `computeFaceMetrics(lm)` → `{ cheekboneWidth, jawWidth, foreheadWidth, faceHeight, widthHeightRatio, symmetryScore }`
-- `classifyFaceShape(metrics)` → `{ shape }` (oval/square/heart/diamond/oblong/round)
-- `loadFrontFile(file)` / `loadSideFile(file)` — load image, show thumbnail, reveal analyzeBtn
-- `initFaceLandmarker()` — lazy dynamic import + create FaceLandmarker (IMAGE mode)
-- `processImage(img, sideImage)` — `faceLandmarker.detect()` (sync), `computeFaceMetrics` + `classifyFaceShape`, animation, then `callAI`
-- `clearReport()` — resets the results block (called on analyze/reset) so stale scores don't linger
-- `startAIHUD(hasSide)` / `stopAIHUD()` — HUD animation
-- `canvasToBase64()` — uses `compositeToBase64()` if side photo exists
-- `callAI(metrics, shapeInfo)` — builds prompt with jaw instruction, sends to Worker, renders report
-- `renderAIReport(text)` / `parseAIReport(text)` — parse AI plain-text format, render score bars
-
-## AI report format (plain text, no markdown)
+Модель пишет ПЕРВЫМИ десять оценок по шкале методики (5 — обычный человек), балл по ним
+считаем мы, своего балла модель не пишет и тир словом называть не имеет права:
 ```
-ОБЩИЙ_БАЛЛ: X/10
-[text]
-
-СИММЕТРИЯ: X/10
-ГЛАЗА_CANTHAL_TILT: X/10
-МИДФЕЙС_MAXILLA: X/10
-ДЖОУЛАЙН_MANDIBLE: X/10
-НОС_NOSE: X/10
-ГУБЫ_СКУЛЫ: X/10
-КОЖА: X/10
-ГРУМИНГ_STYLE: X/10
-
-РЕКОМЕНДАЦИИ:
-1. ...
+HARMONY: 0.0
+DIMORPHISM: 0.0
+ANGULARITY: 0.0
+SKIN: 0.0
+HAIR: 0.0
+MOUTH: 0.0
+EYES: 0.0
+SYMMETRY: 0.0
+NOSE: 0.0
+EARS: 0.0
 ```
+Дальше — вердикт и восемь категорий отчёта (`SCORED_CATS` в `app.js`): ГАРМОНИЯ,
+УГЛОВАТОСТЬ, ДИМОРФИЗМ, СИММЕТРИЯ, ГЛАЗА, РОТ, НОС, УШИ — по 0-10, описание той же
+строкой, что и оценка. «Кожа» и «Груминг» из отчёта убраны: в PSL они не входят
+(он только геометрия), но участвуют в appeal и живут в блоке потенциала.
+В «Ведении» свой набор категорий (`PROG_CATS` в `worker.js`, старые метки) — мост между
+наборами делает `normalizeMeasureText`.
 
-## Jaw instruction logic (in `callAI`)
-```js
-const jawInstruction = hasSide
-  ? "A side profile photo is included on the RIGHT side..."
-  : "Only a frontal view... judge what IS visible fairly... do NOT artificially cap or lowball.";
-```
-Scoring is calibrated in the prompt (baseline 5/10, no inflation, per-category
-variety). СИММЕТРИЯ score is anchored to the measured symmetry % via a table.
-Prompt forbids generic boilerplate. Recommendations: 8-9 numbered lines.
+## Счёт балла (копия в двух местах — это намеренно)
+`METHOD_*`, `FEATURE_WEIGHTS`, `PILLAR_WEIGHTS`, `scoreFromPillars` лежат и в `app.js`,
+и в `worker.js` **слово в слово**. Совпадение держит `test_measurepsl.mjs` — он считает
+балл обоими кодами на одних данных и падает, если копии разъехались. Не «чинить»
+выносом на сервер: это добавит запрос на критический путь и сломает старые клиенты.
 
-## MediaPipe landmark indices used
-- `10` top forehead, `152` chin, `234` left cheekbone, `454` right cheekbone
-- `58` left jaw, `288` right jaw, `21` left temple, `251` right temple
-- `9` glabella (between brows), `13` upper lip — used for fWHR height
+## Деньги: три пути оплаты, одинаковый хвост
+`handlePayment` (Stars), `lavaWebhook` (карта/СБП), `cryptoWebhook` — после `grantPack`
+каждый повторяет одно и то же: гасит промо-скидку, пишет заказ, считает рефералку,
+выдаёт бонус первой покупки, отвечает человеку. **Правка в одном месте почти всегда
+нужна во всех трёх** — так уже дважды расходилось. Инварианты держит `test_payguards.mjs`:
+скидка гасится только ПОСЛЕ оплаты, тариф проверяется до пометки платежа обработанным.
+Настоящего теста с фейковым KV на эти пути пока нет — это следующий большой шаг.
 
-## CSS layout notes
-- `.upload-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px }` (single column on mobile ≤600px)
-- `.upload-area { position:relative; min-height:230px }` — thumbnail is `position:absolute; inset:0`
-- `.ai-hud-card` has `::before` scanline pseudo-element, `.hud-corners` with 4 `<span>` corner brackets
+## Что ломается тише всего
+- **`?v=` в `index.html`** правится руками при любой правке `app.js` / `style.css` /
+  `sharevideo.js`. Забыл — правка не доехала, а выглядит как выкаченная.
+- **Пейволл нарисован дважды**: `showPaywall()` в `app.js` (сайт) и `packsKb()` в
+  `worker.js` (бот). Цены — только в `PACKS` воркера, сайт берёт их из `/status`.
+  Любая правка цен и подписей нужна в обоих местах.
+- **Таблица тиров PSL** живёт в пяти местах (`PSL_TIERS`, две полосы в промптах,
+  `RARITY_LADDER` в двух файлах, плюс `psl-tiers.html` и `glossary.html`).
+  README в одном месте обещает «сменить — одна таблица»; это неправда.
+- **Правку промпта оценки проверять замером** на 52 размеченных лицах
+  (`~/Downloads/facerate/calibration/sheet-faces`), иначе улучшение не отличить
+  от случайного сдвига. Любая правка промпта двигает баллы пограничных лиц на 0.5-0.7.
+- **Админ-команды бота** (`/grantuser`, `/broadcast`, `/addpromo`) гейтятся по @нику
+  (`ADMIN_USERNAMES`), а не по id: ник в Telegram освобождается и переходит к другому.
 
-## Recent fixes (commit history)
-- `cc16ea93` — Added missing `computeFaceMetrics` + `classifyFaceShape` (were called but never defined)
-- `346debb1` — Fixed `]]]` syntax error in `FACE_OVAL` array (was causing full script parse failure)
-- `fb28d256` — Removed stray labeled blocks from app.js
-- `56c35543` — Added profile photo upload, jaw caveat, HUD animation (main feature push)
+## Тесты
+31 файл `test_*.mjs`, без фреймворка: читают исходник как текст, вырезают куски функций
+через `indexOf`/регулярки и исполняют их в `new Function`. Что это даёт и чего не даёт:
+- **ловит** чистую логику — счёт балла, цены, сортировку тарифов, тексты клавиатур;
+- **не ловит** ничего, где есть KV, сеть и порядок операций — то есть начисление,
+  идемпотентность и выдачу купленного;
+- **ломается** при переносе функций и переименованиях: именно поэтому `worker.js`
+  не дробят на модули — это переписало бы весь набор.
+Часть проверок намеренно грепает текст исходника: это защита от повторения конкретной
+прошлой ошибки, а не проверка поведения. Запуск: `for f in test_*.mjs; do node $f; done`.

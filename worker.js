@@ -587,6 +587,9 @@ async function analyze(request, env) {
     if (attempt < 3) await new Promise(r => setTimeout(r, 700));
   }
   if (!data?.choices?.[0]?.message?.content) {
+    // Кредит за досрочный замер списан ДО запроса (чтобы его не потратили параллельно),
+    // а ниже во всех ветках человеку написано «анализ не списан». Возвращаем, иначе текст врёт.
+    if (earlyPaid) await env.RATE_LIMIT.put(`credits:${tgid}`, String(credits));
     const ru = body.lang !== 'en';
     // Что именно случилось — в лог, чтобы по коду со скриншота найти запрос.
     console.log('AI failed', JSON.stringify({ emptyKind, lastStatus, lastErr: String(lastErr).slice(0, 200), isTeaser }));
@@ -1121,7 +1124,9 @@ async function buy(request, env) {
   const method = body.method || 'stars';
 
   const discPct = await buyerDiscountPct(env, sess.id, body.pack);
-  await env.RATE_LIMIT.delete(`pendingDiscount:${sess.id}`); // промо-скидка одноразовая
+  // Скидку НЕ гасим здесь: счёт ещё не оплачен. Её гасят вебхуки после реальной оплаты
+  // (handlePayment / lavaWebhook / cryptoWebhook) — правку довезли до трёх ботовых путей
+  // и забыли в сайтовом. Человек, который открыл счёт и ушёл думать, терял скидку молча.
 
   if (method === 'crypto') {
     const d = await createCryptoInvoice(env, sess.id, body.pack, L, discPct);
@@ -1403,6 +1408,17 @@ async function cryptoWebhook(request, env) {
     // Идемпотентность: один invoice начисляем один раз.
     const seenKey = `cryptopaid:${upd.payload.invoice_id}`;
     if (await env.RATE_LIMIT.get(seenKey)) return new Response('ok');
+    // Тариф мог исчезнуть из PACKS между выставлением счёта и оплатой (так было с launch
+    // и gpdf). Раньше отсюда уходил grantPack(undefined): деньги взяты, не начислено ничего,
+    // а человеку приходило «Оплата получена». Как в Lava: не помечаем обработанным и зовём
+    // админа — платёж остаётся с шансом на ретрай и дозачисление.
+    if (!pack) {
+      console.log('crypto unresolved', JSON.stringify({ invoice: upd.payload.invoice_id, tgid, pack: payload.pack, amount: upd.payload.amount }));
+      for (const admin of adminIds(env)) {
+        await tgApi(env, 'sendMessage', { chat_id: admin, text: `\u26a0\ufe0f Оплата криптой не начислена\n\nid ${tgid}\nтариф: ${payload.pack || '—'}\nсумма: ${upd.payload.amount} ${upd.payload.asset || upd.payload.fiat || ''}\ninvoice: ${upd.payload.invoice_id}\n\nТарифа нет в PACKS` });
+      }
+      return new Response('ok');
+    }
     await env.RATE_LIMIT.put(seenKey, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     const L = await userLang(env, tgid);
     const note = await grantPack(env, tgid, pack, L);
@@ -2594,7 +2610,7 @@ async function redeemPromo(env, chat, tgid, code, L, u) {
   if (promo.discount) {
     // Скидка не начисляется сразу — применяется к следующей оплате в течение 24ч.
     await env.RATE_LIMIT.put(`pendingDiscount:${tgid}`, String(promo.discount), { expirationTtl: 60 * 60 * 24 });
-    // Отдельно от pendingDiscount (которая гасится сразу при создании счёта) — доживает до
+    // Отдельно от pendingDiscount (которая гасится после оплаты, в вебхуке) — доживает до
     // самой оплаты, чтобы в истории покупок было видно, каким именно промокодом воспользовались.
     await env.RATE_LIMIT.put(`pendingPromoCodeForOrder:${tgid}`, code, { expirationTtl: 60 * 60 * 24 });
     grant = b.promoOkDiscount(promo.discount);
@@ -3717,7 +3733,9 @@ async function mediaWebhook(request, env) {
     for (const adminId of adminIds(env)) {
       await mediaApi(env, 'sendMessage', {
         chat_id: adminId,
-        text: `💳 Новая заявка на вывод\n\n<b>${req.id}</b> — ${amount}₽ — id ${tgid}\nРеквизиты: ${req.requisites}`,
+        // Реквизиты — свободный текст партнёра: символ < ломает HTML-разбор, и заявка
+        // на выплату просто не доходит до админа.
+        text: `💳 Новая заявка на вывод\n\n<b>${req.id}</b> — ${amount}₽ — id ${tgid}\nРеквизиты: ${escHtml(req.requisites)}`,
         parse_mode: 'HTML',
         reply_markup: { inline_keyboard: [[{ text: '✅ Одобрить', callback_data: `payoutapprove:${req.id}` }, { text: '❌ Отклонить', callback_data: `payoutreject:${req.id}` }]] },
       });
