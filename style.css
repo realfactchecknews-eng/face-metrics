@@ -2866,6 +2866,26 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 /* Своё число человека на экране продажи гайда — продолжение блока потенциала. */
 .pg-buy-personal{ font-size:14px; line-height:1.5; max-width:46ch; text-align:center; opacity:.9; }
 .pg-buy-personal b{ color:var(--accent-hi, var(--accent)); font-weight:600; }
+/* Сравнение двух дверей гайда: PDF слева, ведение справа. */
+.pg-cmp{ width:100%; max-width:460px; border-collapse:collapse; font-size:13px; margin:2px 0 4px; }
+.pg-cmp th,.pg-cmp td{ padding:7px 8px; text-align:center; border-bottom:1px solid var(--border,#2a2a2a); }
+.pg-cmp th{ font-weight:600; font-size:12.5px; letter-spacing:.02em; }
+.pg-cmp th i{ display:block; font-style:normal; font-size:11.5px; opacity:.6; margin-top:2px; }
+.pg-cmp td:first-child,.pg-cmp th:first-child{ text-align:left; opacity:.85; }
+.pg-cmp tbody tr:last-child td{ border-bottom:none; }
+.pg-cmp-hi{ color:var(--accent-hi,var(--accent)); background:rgba(196,164,107,.06); }
+.pg-cmp-y{ color:var(--accent-hi,var(--accent)); }
+.pg-cmp-n{ opacity:.35; }
+.pg-buy-stars{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:12.5px; opacity:.8; }
+.pg-star-btn{
+  background:none; border:1px solid var(--border,#2a2a2a); color:inherit; font:inherit;
+  border-radius:100px; padding:5px 12px; cursor:pointer;
+}
+.pg-star-btn:hover{ border-color:var(--accent); color:var(--accent-hi,var(--accent)); }
+@media (max-width:600px){
+  .pg-cmp{ font-size:12px; }
+  .pg-cmp th,.pg-cmp td{ padding:6px 5px; }
+}
 @media (max-width:600px){ .pg-buy-btn{ min-width:0; width:100%; } }
 
 /* ─── «скоро» вместо кнопок покупки, пока раздел не открыт ─── */

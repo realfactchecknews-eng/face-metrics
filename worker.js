@@ -5786,9 +5786,20 @@ async function progressGet(request, env) {
   // раз в 30 дней, без плана на 90 дней и без текста гайда. Это повод вернуться через
   // месяц, а не бесплатная версия гайда.
   const tracking = !hasGuide && await isBuyer(env, tgid);
-  // Цена персональная (guidePackFor): экран обязан показывать ровно то, что придёт
+  // Экран сравнения двух дверей (PDF за 399 и ведение за 999) считает цены по этим полям.
+  // Цена ведения персональная (guidePackFor): экран обязан показывать ровно то, что придёт
   // в счёте. С PACKS.guide напрямую владелец PDF видел 999 вместо своих 599.
-  if (!hasGuide && !tracking) return json({ guide: false, pack: await guidePackFor(env, tgid) });
+  // upgradeRub — во сколько встанет ведение ПОСЛЕ покупки PDF; считается теми же
+  // функциями, что и счёт, иначе на экране и в чеке будут разные числа.
+  const gpdfOwned = !!(await env.RATE_LIMIT.get(`gpdf:${tgid}`));
+  const guideDoors = {
+    gpdf: PACKS.gpdf,
+    gpdfOwned,
+    upgradeRub: applyDiscount(PACKS.guide.lavaRub, guideUpgradePct()),
+  };
+  if (!hasGuide && !tracking) {
+    return json({ guide: false, pack: await guidePackFor(env, tgid), ...guideDoors });
+  }
 
   const list = await progList(env, tgid);
   const texts = await progTexts(env, tgid);
@@ -5812,7 +5823,7 @@ async function progressGet(request, env) {
     left: Math.max(0, PROG_MAX - list.length),
     // Цену гайда отдаём уже персональную: у владельца PDF она ниже на разницу, и экран
     // «Ведение» должен показывать ровно то, что придёт в счёте.
-    ...(tracking ? { pack: await guidePackFor(env, tgid) } : {}),
+    ...(tracking ? { pack: await guidePackFor(env, tgid), ...guideDoors } : {}),
   });
 }
 

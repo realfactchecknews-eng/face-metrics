@@ -4800,22 +4800,78 @@ function pgShowLocked(pack){
   const tag = (cur, old, unit) =>
     (old && old > cur ? '<s>' + old + unit + '</s> ' : '') + cur + unit;
 
-  if (p.launch) {
-    const note = document.createElement('div');
-    note.className = 'pg-buy-note';
-    note.textContent = 'Цена запуска';
-    box.appendChild(note);
-  }
-
-  const mk = (cls, label, method) => {
+  const mk = (cls, label, method, packId) => {
     const b = document.createElement('button');
     b.className = cls;
     b.innerHTML = label;
-    b.addEventListener('click', () => buyPack('guide', b, method));
+    b.addEventListener('click', () => buyPack(packId || 'guide', b, method));
     box.appendChild(b);
   };
-  mk('pg-buy-btn', 'Купить картой - ' + tag(rub, p.oldRub, '₽'), 'rub');
-  mk('pg-buy-btn ghost', 'Telegram Stars - ' + tag(stars, p.oldStars, '⭐'), 'stars');
+
+  // Две двери: PDF-гайд за 399 и гайд с ведением за 999. Без таблицы человек не видит,
+  // за что доплачивает, и выбирает по цене — то есть всегда дешёвое. Цена PDF и цена
+  // ведения ПОСЛЕ покупки PDF приходят из воркера (progressGet), а не считаются здесь:
+  // иначе экран и счёт разойдутся на округлении скидки.
+  const pdf = (PG && PG.gpdf) || (_lastAccountStatus && _lastAccountStatus.packs && _lastAccountStatus.packs.gpdf);
+  const pdfRub = pdf && (pdf.lavaRub || pdf.rub);
+  const ownsPdf = !!(PG && PG.gpdfOwned);
+  const upRub = PG && PG.upgradeRub;
+  if (pdfRub) {
+    const cmp = document.createElement('table');
+    cmp.className = 'pg-cmp';
+    const yes = '<span class="pg-cmp-y">есть</span>', no = '<span class="pg-cmp-n">нет</span>';
+    const rows = [
+      ['Гайд, 25 страниц — PDF в боте', yes, yes],
+      ['Полный разбор с восемью цифрами', '1 разбор', '5 анализов'],
+      ['Замер и график динамики', 'раз в 30 дней', 'раз в 10 дней'],
+      ['Веб-версия гайда здесь, на сайте', no, yes],
+      ['План на 13 недель и задание недели от бота', no, yes],
+      ['Разбор каждого параметра: что с ним делать', no, yes],
+    ];
+    cmp.innerHTML =
+      '<thead><tr><th></th><th>PDF<i>' + (ownsPdf ? 'уже у тебя' : pdfRub + ' ₽') + '</i></th>' +
+      '<th class="pg-cmp-hi">Ведение<i>' + rub + ' ₽</i></th></tr></thead><tbody>' +
+      rows.map((r) => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td class="pg-cmp-hi">' + r[2] + '</td></tr>').join('') +
+      '</tbody>';
+    box.appendChild(cmp);
+    // Статичный список над таблицей теперь дублирует её и путает: он перечисляет
+    // содержимое ведения как «что входит», хотя дверей две.
+    const stale = document.querySelector('#pgLocked .lock-list');
+    if (stale) stale.hidden = true;
+
+    const note = document.createElement('p');
+    note.className = 'pg-buy-hint';
+    // «Вместо» берём из oldRub того же пака: полная цена живёт в PACKS, а не здесь.
+    note.textContent = ownsPdf
+      ? 'PDF у тебя уже есть — за гайд второй раз не берём, поэтому ведение стоит ' + rub +
+        ' ₽' + (p.oldRub && p.oldRub > rub ? ' вместо ' + p.oldRub : '') + '.'
+      : (upRub ? 'Начать можно с PDF: ведение потом докупается за ' + upRub + ' ₽ вместо ' + rub + ' — разницу, а не полную цену.'
+               : 'Начать можно с PDF, ведение докупается позже с зачётом уплаченного.');
+    box.appendChild(note);
+  }
+
+  if (p.launch) {
+    const launch = document.createElement('div');
+    launch.className = 'pg-buy-note';
+    launch.textContent = 'Цена запуска';
+    box.appendChild(launch);
+  }
+
+  mk('pg-buy-btn', 'Ведение картой - ' + tag(rub, p.oldRub, '₽'), 'rub');
+  if (pdfRub && !ownsPdf) mk('pg-buy-btn ghost', 'Только PDF картой - ' + pdfRub + '₽', 'rub', 'gpdf');
+  const starRow = document.createElement('div');
+  starRow.className = 'pg-buy-stars';
+  starRow.appendChild(Object.assign(document.createElement('span'), { textContent: 'Или звёздами:' }));
+  box.appendChild(starRow);
+  const mkStar = (label, packId) => {
+    const b = document.createElement('button');
+    b.className = 'pg-star-btn';
+    b.innerHTML = label;
+    b.addEventListener('click', () => buyPack(packId, b, 'stars'));
+    starRow.appendChild(b);
+  };
+  mkStar('Ведение ' + tag(stars, p.oldStars, '⭐'), 'guide');
+  if (pdf && pdf.stars && !ownsPdf) mkStar('PDF ' + pdf.stars + '⭐', 'gpdf');
 }
 
 function pgShowUnlocked(trackingOnly){

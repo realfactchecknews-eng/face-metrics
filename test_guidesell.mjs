@@ -23,7 +23,8 @@ assert.ok(!/\b(299|199)\b/.test(lockedCode),
   'в экране продажи гайда снова зашита цена — она разойдётся со счётом');
 // Нет цены — ничего не выставляем: догадка хуже отказа.
 assert.ok(/if \(!rub \|\| !stars\)/.test(locked), 'без цены экран обязан честно сказать, а не угадывать');
-assert.ok(/buyPack\('guide'/.test(locked), 'кнопки должны вести на покупку гайда');
+assert.ok(/buyPack\(packId/.test(locked) && /mkStar\('Ведение /.test(locked),
+  'кнопки должны вести на покупку гайда');
 
 // 2. Персональный разрыв из блока потенциала доезжает до экрана продажи.
 assert.ok(/window\._fmPotential = pot/.test(fn(app, 'renderPotential')),
@@ -39,5 +40,21 @@ assert.equal(packLines.length, 2, 'ожидались два места, где 
 for (const l of packLines) {
   assert.ok(/guidePackFor\(env, tgid\)/.test(l), 'цена гайда отдана без персональной скидки: ' + l.trim());
 }
+
+// 4. Две двери: PDF за 399 и ведение за 999 — с таблицей, что именно добавляет вторая.
+//    Без неё человек выбирает по цене, то есть всегда дешёвое.
+assert.ok(/pg-cmp/.test(locked), 'нет таблицы сравнения PDF и ведения');
+assert.ok(/buyPack\(packId \|\| 'guide'/.test(locked) && /'gpdf'/.test(locked),
+  'с экрана нельзя купить PDF — вторая дверь не работает');
+assert.ok(/ownsPdf/.test(locked), 'владельцу PDF всё ещё предлагается купить PDF');
+// Цена PDF и цена апгрейда — только с сервера: округление скидки считается там же, где счёт.
+assert.ok(/PG\.gpdf/.test(locked) && /packs\.gpdf/.test(locked), 'цена PDF берётся не от сервера');
+assert.ok(/PG\.upgradeRub/.test(locked), 'цена доплаты за ведение считается на клиенте');
+assert.ok(!/\b(399|999|599)\b/.test(lockedCode), 'в экране зашита цена гайда — разойдётся со счётом');
+
+// Воркер обязан эту цену присылать, и считать теми же функциями, что и счёт.
+assert.ok(/upgradeRub: applyDiscount\(PACKS\.guide\.lavaRub, guideUpgradePct\(\)\)/.test(w),
+  'воркер не отдаёт цену доплаты или считает её отдельной формулой');
+assert.ok(/gpdfOwned/.test(prog) && /gpdf: PACKS\.gpdf/.test(prog), 'воркер не отдаёт вторую дверь');
 
 console.log('экран продажи гайда: все проверки прошли');
