@@ -5786,7 +5786,9 @@ async function progressGet(request, env) {
   // раз в 30 дней, без плана на 90 дней и без текста гайда. Это повод вернуться через
   // месяц, а не бесплатная версия гайда.
   const tracking = !hasGuide && await isBuyer(env, tgid);
-  if (!hasGuide && !tracking) return json({ guide: false, pack: PACKS.guide });
+  // Цена персональная (guidePackFor): экран обязан показывать ровно то, что придёт
+  // в счёте. С PACKS.guide напрямую владелец PDF видел 999 вместо своих 599.
+  if (!hasGuide && !tracking) return json({ guide: false, pack: await guidePackFor(env, tgid) });
 
   const list = await progList(env, tgid);
   const texts = await progTexts(env, tgid);

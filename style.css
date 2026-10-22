@@ -2863,6 +2863,9 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   font-size:12.5px; color:var(--accent-hi); opacity:.8; letter-spacing:.04em; text-transform:uppercase;
 }
 .pg-buy-hint{ font-size:13.5px; opacity:.7; }
+/* Своё число человека на экране продажи гайда — продолжение блока потенциала. */
+.pg-buy-personal{ font-size:14px; line-height:1.5; max-width:46ch; text-align:center; opacity:.9; }
+.pg-buy-personal b{ color:var(--accent-hi, var(--accent)); font-weight:600; }
 @media (max-width:600px){ .pg-buy-btn{ min-width:0; width:100%; } }
 
 /* ─── «скоро» вместо кнопок покупки, пока раздел не открыт ─── */

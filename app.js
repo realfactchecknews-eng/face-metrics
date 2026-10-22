@@ -2313,6 +2313,9 @@ function renderPotential(parsed) {
   if (pot === null) { box.classList.add("hidden"); box.innerHTML = ""; return; }
   var recs = shortRecs(parsed.recommendations || []);
   var owned = !!(_lastAccountStatus && _lastAccountStatus.guide);
+  // Числа нужны экрану продажи гайда: человек кликает «забрать план», увидев своё
+  // «5.2 → 6.8», а на следующем экране ему продавали абстрактный раздел.
+  window._fmPotential = pot;
   box.innerHTML =
     '<span class="eyebrow">' + t("potEyebrow") + '</span>' +
     '<div class="pot-row">' +
@@ -4757,6 +4760,19 @@ function pgShowLocked(pack){
   box.className = 'pg-buy';
   box.innerHTML = '';
 
+  // Человек пришёл сюда из блока потенциала, где видел свой разрыв между «сейчас» и
+  // «достижимо». Повторяем его числа: иначе экран продаёт раздел сайта, а не то,
+  // за чем кликнули. Без разбора в этой сессии строки просто нет.
+  const pot = window._fmPotential;
+  if (pot && typeof pot.now === 'number' && typeof pot.max === 'number') {
+    const line = document.createElement('p');
+    line.className = 'pg-buy-personal';
+    line.innerHTML = 'По твоему разбору: внешний вид <b>' + pot.now.toFixed(1) +
+      '</b> из 8, достижимо <b>' + pot.max.toFixed(1) + '</b> — это <b>+' +
+      (pot.max - pot.now).toFixed(1) + '</b> без врача. План на 90 дней — про то, как их забрать.';
+    box.appendChild(line);
+  }
+
   // Счёт выставляется на Telegram-профиль, поэтому без входа покупать некуда.
   if (!getAccount()) {
     const hint = document.createElement('p');
@@ -4766,9 +4782,21 @@ function pgShowLocked(pack){
     return;
   }
 
-  // Цены приходят из воркера (PACKS.guide), чтобы не разъезжались с ботом.
-  const p = pack || {};
-  const rub = p.rub || 299, stars = p.stars || 199;
+  // Цены приходят из воркера (PACKS.guide, уже с персональной скидкой владельца PDF),
+  // чтобы не разъезжались с ботом и со счётом. Кнопку «Посмотреть гайд» в апселле
+  // зовут без аргумента — тогда берём цену из последнего ответа /progress или /status.
+  // Прежний литерал 299₽/199⭐ в этом случае показывал цену, которой давно нет:
+  // человек видел 299, а в счёт приходило 999.
+  const p = pack || (PG && PG.pack) ||
+    (_lastAccountStatus && _lastAccountStatus.packs && _lastAccountStatus.packs.guide) || {};
+  const rub = p.lavaRub || p.rub, stars = p.stars;
+  if (!rub || !stars) {
+    const hint = document.createElement('p');
+    hint.className = 'pg-buy-hint';
+    hint.textContent = 'Цена не загрузилась. Обнови страницу — выставлять счёт наугад мы не будем.';
+    box.appendChild(hint);
+    return;
+  }
   const tag = (cur, old, unit) =>
     (old && old > cur ? '<s>' + old + unit + '</s> ' : '') + cur + unit;
 
