@@ -1798,8 +1798,21 @@ function packsKb(method, L, discPct, guidePct = discPct) {
     { id: 'guide', emoji: '📕 ', note: ' НОВОЕ', cb: 'guide' },
   ];
   items.sort((a, b) => curPrice(a.id) - curPrice(b.id));
+  // Цена за анализ у обоих пакетов кредитов + насколько пятёрка выгоднее одиночного.
+  // Считается от ПОКАЗАННОЙ цены (curPrice), чтобы со скидкой подпись не врала.
+  const perUnit = (id) => {
+    const p = PACKS[id];
+    if (p.type !== 'credits' || !(p.credits > 1)) return '';
+    const one = curPrice(id) / p.credits;
+    const u = unit(PACKS[id]);
+    let txt = ` · ${Math.round(one * 10) / 10}${u}${L === 'ru' ? '/анализ' : ' ea'}`;
+    if (id === 'p5' && curPrice('p1') >= one * 1.5) {
+      txt += ` ×${Math.round(curPrice('p1') / one * 10) / 10} ${L === 'ru' ? 'выгоднее' : 'cheaper'}`;
+    }
+    return txt;
+  };
   const rows = items.map((x) => [{
-    text: `${x.emoji}${packLabel(PACKS[x.id], L)} — ${price(x.id)}${x.note || ''}`,
+    text: `${x.emoji}${packLabel(PACKS[x.id], L)} — ${price(x.id)}${perUnit(x.id)}${x.note || ''}`,
     callback_data: x.cb || `pay:${x.id}:${method}`,
   }]);
   const cd = saleActive() ? saleCountdown(L) : null;

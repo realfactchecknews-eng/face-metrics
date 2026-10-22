@@ -10,7 +10,9 @@ const build = (sale) => new Function('PACKS', 'LAVA_MIN_RUB', 'saleActive', 'sal
 // Строки тарифов (без шапок и кнопки «Меню»).
 const lines = (kb) => kb.inline_keyboard
   .filter((r) => /^pay:|^guide$/.test(r[0].callback_data || ''))
-  .map((r) => ({ text: r[0].text, num: parseInt((r[0].text.match(/(\d+)[₽⭐](?!~)/g) || []).pop(), 10) }));
+  // Цену берём до « · »: после него идёт цена за анализ (якорь на пятёрку), и её
+  // число не должно подменять цену тарифа при проверке порядка.
+  .map((r) => ({ text: r[0].text, num: parseInt((r[0].text.split(' · ')[0].match(/(\d+)[₽⭐](?!~)/g) || []).pop(), 10) }));
 
 for (const [name, kb] of [
   ['карта без скидок', build(true)('rub', 'ru', 0, 0)],

@@ -3680,7 +3680,9 @@ function showPaywall(state, st) {
     title.textContent = t("pwPayTitle");
     sub.textContent = saleCountdownText() || t("pwPaySub");
     var methods = (st && st.methods) || ["stars"];
-    var PACK_UNITS = { p1: 1, p5: 5 };
+    // Сколько анализов в пакете — для подписи «цена за анализ». У одиночного она
+    // совпадает с ценой, поэтому подписывается только пятёрка (как и в боте).
+    var PACK_UNITS = { p5: 5 };
     var packNames = { p1: t("packP1"), p5: t("packP5"), h1: "⏱ " + t("packH1"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1"), gpdf: "📄 " + t("packGpdf") };
     var methodNames = { stars: t("payStars"), rub: t("payCard"), sbp: t("paySbp"), crypto: t("payCrypto") };
     // Шаг 2: тарифы под выбранный способ (цена в его валюте).
