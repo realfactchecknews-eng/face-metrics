@@ -1011,7 +1011,13 @@ async function runGiveawayDraw(env) {
     await env.RATE_LIMIT.delete('giveaway:current');
     return { ok: false, reason: 'empty' };
   }
-  const pool = [...gw.entries];
+  // Админов в пуле быть не должно. 26.10.2026 владелец нажал «Участвовать», проверяя
+  // механику, и выиграл первое место — в публичных итогах это читается как подкрутка,
+  // а id админа лежит в коде открыто, то есть сопоставить может кто угодно.
+  // Тестировать участие по-прежнему можно: заявка принимается, просто не разыгрывается.
+  const admins = new Set([String(FACE_ADMIN_TGID), ...adminIds(env)].map(String));
+  const pool = gw.entries.filter((id) => !admins.has(String(id)));
+  const adminSkipped = gw.entries.length - pool.length;
   const picked = [];
   let unsubSkipped = 0;
   const ladder = Array.isArray(gw.ladder) && gw.ladder.length ? gw.ladder : null;
@@ -1051,7 +1057,12 @@ async function runGiveawayDraw(env) {
                  ladder: gw.ladder || null, credits: gw.credits, entries: gw.entries.length });
   await putList(env, 'giveaway:past', past.slice(0, 10), 60 * 60 * 24 * 365);
   await env.RATE_LIMIT.delete('giveaway:current');
-  const r = { ok: true, gw, picked, unsubSkipped, totalEntries: gw.entries.length };
+  // Имя для итогов: @ник, если бот его видит, иначе имя, иначе id. Голый id в посте
+  // ничего не говорит читателю и проверить его нельзя — ник узнают хотя бы знакомые.
+  const names = [];
+  for (const id of picked) names.push(await userName(env, id).catch(() => null));
+  const r = { ok: true, gw, picked, names, unsubSkipped, adminSkipped,
+              totalEntries: gw.entries.length - adminSkipped };
   // Ответом на анонс, если он сохранился: так итоги видно прямо под тем постом,
   // на который люди подписывались. Без postId — обычным сообщением.
   const posted = await tgApi(env, 'sendMessage', {
@@ -1065,11 +1076,21 @@ async function runGiveawayDraw(env) {
 
 function giveawayResultsPost(r) {
   const ladder = Array.isArray(r.gw.ladder) && r.gw.ladder.length ? r.gw.ladder : null;
+  // Победитель подписывается ником, а id остаётся рядом: по нику его узнают, по id
+  // он узнаёт себя сам. Без ника (бот заблокирован, ника нет) остаётся только id.
+  const who = (id, i) => {
+    const n = r.names && r.names[i];
+    return n ? `${n} (id ${id})` : `id ${id}`;
+  };
+  // Сколько заявок отсеяла проверка подписки — видно, что она не для галочки.
+  const skipped = r.unsubSkipped
+    ? `\nОтсеяно за отписку до итогов: ${r.unsubSkipped}.`
+    : '';
   if (ladder) {
-    const lines = r.picked.map((id, i) => `${i + 1} место — id ${id} — ${prizeLabel(ladder[i], 'ru')}`).join('\n');
-    return `🏆 Итоги розыгрыша!\n\n${lines}\n\nУчастников: ${r.totalEntries}. Призы уже начислены.`;
+    const lines = r.picked.map((id, i) => `${i + 1} место — ${who(id, i)} — ${prizeLabel(ladder[i], 'ru')}`).join('\n');
+    return `🏆 Итоги розыгрыша!\n\n${lines}\n\nУчастников: ${r.totalEntries}.${skipped}\nПобедителей выбрал бот случайно, подписку проверял в момент розыгрыша. Призы уже начислены.`;
   }
-  return `🏆 Итоги розыгрыша!\n\nПобедители (по id): ${r.picked.join(', ')}\nКаждому начислено: ${r.gw.credits} бесплатных анализов.\n\nСпасибо всем, кто участвовал — новый розыгрыш скоро!`;
+  return `🏆 Итоги розыгрыша!\n\nПобедители: ${r.picked.map(who).join(', ')}\nКаждому начислено: ${r.gw.credits} бесплатных анализов.\n\nУчастников: ${r.totalEntries}.${skipped}\n\nСпасибо всем, кто участвовал — новый розыгрыш скоро!`;
 }
 
 // Раз в час проверяет баланс OpenRouter (аккаунт, не дневной лимит ключа) и шлёт админам
@@ -1106,7 +1127,7 @@ async function checkGiveawayDraw(env) {
   if (!gw || gw.endTs > Date.now()) return;
   const r = await runGiveawayDraw(env);
   if (!r.ok) return;
-  const notice = `⏰ Розыгрыш ${r.gw.id} завершён автоматически.\nУчастников: ${r.totalEntries}, победителей: ${r.picked.length}.${r.unsubSkipped ? ` (пропущено ${r.unsubSkipped} — отписались до розыгрыша)` : ''}\n\n`
+  const notice = `⏰ Розыгрыш ${r.gw.id} завершён автоматически.\nУчастников: ${r.totalEntries}, победителей: ${r.picked.length}.${r.unsubSkipped ? ` (пропущено ${r.unsubSkipped} — отписались до розыгрыша)` : ''}${r.adminSkipped ? ` (не разыгрывались админские заявки: ${r.adminSkipped})` : ''}\n\n`
     + (r.posted ? `📣 Итоги опубликованы в ${CHANNEL}.` : `⚠️ В канал не ушло: ${r.postErr}. Текст для ручной публикации:\n\n---\n${giveawayResultsPost(r)}\n---`);
   for (const adminId of adminIds(env)) {
     await tgApi(env, 'sendMessage', { chat_id: adminId, text: notice }).catch(() => {});

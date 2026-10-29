@@ -33,6 +33,7 @@ assert.match(prizeLabel({ credits: 5 }, 'en'), /5 analyses/);
 
 // Выдача: гайд через grantPack, анализы — прибавкой к credits, каждому по своему месту.
 const draw = pick(/^async function runGiveawayDraw[\s\S]*?^\}/m);
+const drawFn = draw;
 assert.match(draw, /const prize = ladder \? ladder\[i\] : \{ credits: gw\.credits \}/, 'приз берётся по номеру места');
 assert.match(draw, /grantPack\(env, winnerId, PACKS\[prize\.pack\]/, 'гайд выдаётся как покупка, а не копией логики');
 assert.match(draw, /const places = ladder \? ladder\.length : gw\.winners/, 'мест столько, сколько призов');
@@ -41,7 +42,24 @@ assert.match(draw, /BL\[wL\]\.gwWinMsg\(prize\.credits\)/, 'старый роз�
 
 // Итоги: при лестнице перечисляем места, иначе прежний текст.
 const post = pick(/^function giveawayResultsPost[\s\S]*?^\}/m);
-assert.match(post, /\$\{i \+ 1\} место — id/, 'в итогах видно, кто какое место занял');
+assert.match(post, /\$\{i \+ 1\} место — \$\{who\(id, i\)\}/, 'в итогах видно, кто какое место занял');
+
+// Доверие к розыгрышу: три вещи, которых не хватало после первого же публичного итога.
+// 1. Победитель подписан ником, а не голым id — голый id читателю ничего не говорит.
+assert.match(post, /const who = \(id, i\)/, 'победитель должен подписываться именем');
+assert.match(post, /r\.names && r\.names\[i\]/, 'имя берётся из подготовленного списка');
+assert.match(post, /\(id \$\{id\}\)/, 'id остаётся рядом с ником — по нему человек узнаёт себя');
+assert.match(drawFn, /await userName\(env, id\)/, 'имена победителей резолвятся до публикации');
+// 2. Сколько заявок отсеяла проверка подписки — видно читателю, а не только админу.
+assert.match(post, /r\.unsubSkipped/, 'в итогах не видно, что подписка проверялась');
+// 3. Админы не участвуют: 26.10.2026 владелец нажал «Участвовать» для проверки механики
+//    и выиграл первое место — со стороны это выглядит как подкрутка.
+assert.match(drawFn, /const admins = new Set\(\[String\(FACE_ADMIN_TGID\), \.\.\.adminIds\(env\)\]/,
+  'админские id не исключаются из пула');
+assert.match(drawFn, /gw\.entries\.filter\(\(id\) => !admins\.has\(String\(id\)\)\)/,
+  'пул должен строиться без админов');
+assert.match(drawFn, /totalEntries: gw\.entries\.length - adminSkipped/,
+  'админские заявки не должны попадать в число участников');
 
 // Команда понимает обе формы.
 assert.match(w, /\/newgiveaway guide,10,5,1x10 7/, 'в подсказке есть готовый пример');
@@ -63,7 +81,6 @@ assert.match(cmd, /chat_id: CHANNEL, text: post/, 'анонс уходит в к
 assert.match(cmd, /inline_keyboard: \[\[\{ text: '🙋 Участвовать', url: link \}\]\]/, 'с кнопкой на бота');
 assert.match(cmd, /gw\.postId = announced\.result\.message_id/, 'id анонса сохраняется');
 assert.match(cmd, /В канал не ушло/, 'если не ушло — владельцу отдаётся текст, а не тишина');
-const drawFn = pick(/^async function runGiveawayDraw[\s\S]*?^\}/m);
 assert.match(drawFn, /chat_id: CHANNEL, text: giveawayResultsPost\(r\)/, 'итоги уходят в канал');
 assert.match(drawFn, /reply_to_message_id: gw\.postId/, 'итоги отвечают на анонс');
 // Участнику нельзя показывать «приз каждому: 0 анализов» — при лестнице приз у места свой.
