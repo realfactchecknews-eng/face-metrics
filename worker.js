@@ -967,8 +967,8 @@ function gwActiveText(gw, b, L) {
     ? ladder.map((p, i) => `${i + 1}. ${prizeLabel(p, 'en')}`).join('\n')
     : ladderLines(ladder);
   return L === 'en'
-    ? `🎉 Giveaway is on!\n\n🏆 Prizes:\n${lines}\n⏳ Draw: ${fmtDate(gw.endTs, L)}\n\nTo enter: subscribe to ${CHANNEL} and tap the button below.`
-    : `🎉 Идёт розыгрыш!\n\n🏆 Призы:\n${lines}\n⏳ Итоги: ${fmtDate(gw.endTs, L)}\n\nЧтобы участвовать: подпишись на ${CHANNEL} и нажми кнопку ниже.`;
+    ? `🎉 Giveaway is on!\n\n🏆 Prizes:\n${lines}\n⏳ Draw: ${fmtDate(gw.endTs, L)}\n\nTo enter: subscribe to ${CHANNEL}${gw.partner ? ` and ${gw.partner}` : ''} and tap the button below.`
+    : `🎉 Идёт розыгрыш!\n\n🏆 Призы:\n${lines}\n⏳ Итоги: ${fmtDate(gw.endTs, L)}\n\nЧтобы участвовать: подпишись на ${CHANNEL}${gw.partner ? ` и на ${gw.partner}` : ''} и нажми кнопку ниже.`;
 }
 
 function ladderLines(ladder) {
@@ -993,6 +993,32 @@ function prizeLabel(p, L) {
   if (p.pack === 'guide') return ru ? 'гайд + ведение на 90 дней' : 'the guide + 90-day coaching';
   if (p.pack === 'gpdf') return ru ? 'PDF-гайд' : 'the guide (PDF)';
   return ru ? `${p.credits} ${p.credits === 1 ? 'анализ' : 'анализов'}` : `${p.credits} analyses`;
+}
+
+// Подписка на канал ПАРТНЁРА (коллаб). Канал чужой: партнёр может снять с бота
+// админку в любой момент, и тогда getChatMember начнёт отвечать ошибкой. В этом случае
+// людей НЕ блокируем — иначе один чужой клик ломает розыгрыш, а объясняться перед
+// подписчиками придётся нам. Проверку молча отключаем и один раз зовём админов.
+async function partnerSubscribed(env, gw, tgid) {
+  if (!gw || !gw.partner) return true;
+  const r = await tgApi(env, 'getChatMember', { chat_id: gw.partner, user_id: tgid }).catch(() => null);
+  if (!r?.ok) {
+    await partnerAccessLost(env, gw, r?.description || 'нет ответа');
+    return true;
+  }
+  return ['creator', 'administrator', 'member'].includes(r.result?.status);
+}
+
+async function partnerAccessLost(env, gw, why) {
+  const key = `gwPartnerAlert:${gw.id}`;
+  if (await env.RATE_LIMIT.get(key)) return;          // одно письмо на розыгрыш, не на каждого участника
+  await env.RATE_LIMIT.put(key, '1', { expirationTtl: 60 * 60 * 24 });
+  for (const admin of adminIds(env)) {
+    await tgApi(env, 'sendMessage', { chat_id: admin, text:
+      `⚠️ Не могу проверить подписку на ${gw.partner}: ${why}\n\n`
+      + 'Участников не блокирую, проверка этого канала выключена. Похоже, бота сняли с админов — '
+      + 'напиши партнёру и проверь командой /checkchannel ' + gw.partner }).catch(() => {});
+  }
 }
 
 async function getGiveaway(env) {
@@ -1029,7 +1055,8 @@ async function runGiveawayDraw(env) {
   while (picked.length < places && pool.length) {
     const idx = Math.floor(Math.random() * pool.length);
     const candidate = pool.splice(idx, 1)[0];
-    const stillSubscribed = await isSubscribed(env, candidate, true);
+    const stillSubscribed = await isSubscribed(env, candidate, true)
+      && await partnerSubscribed(env, gw, candidate);
     if (!stillSubscribed) { unsubSkipped++; continue; }
     picked.push(candidate);
   }
@@ -2138,34 +2165,63 @@ async function tgWebhook(request, env, ctx) {
     // Две формы. Старая: «ПОБЕДИТЕЛЕЙ АНАЛИЗОВ ДНЕЙ» — один приз на всех.
     // Новая: «ЛЕСТНИЦА ДНЕЙ», где у каждого места свой приз, например
     // /newgiveaway guide,10,5,1x10 7 — гайд, потом 10, потом 5, потом десять по одному.
-    const mOld = text.match(/^\/newgiveaway\s+(\d+)\s+(\d+)\s+(\d+)\s*$/);
-    const mNew = text.match(/^\/newgiveaway\s+([0-9a-zA-Zа-яёx\u0445*,\s]*[a-zA-Zа-яё,][0-9a-zA-Zа-яёx\u0445*,\s]*)\s+(\d+)\s*$/);
+    // Хвостовые аргументы отрезаем ДО разбора лестницы: @канал партнёра (коллаб) и
+    // nopost — «не публиковать мой текст, хозяин постит сам». Второе нужно, когда пост
+    // свёрстан руками с премиум-эмодзи: бот такие эмодзи отправить не может.
+    let spec = text;
+    let partner = null, noPost = false;
+    const mNo = spec.match(/\s+(nopost|безпоста)\s*$/i);
+    if (mNo) { noPost = true; spec = spec.slice(0, mNo.index); }
+    const mPartner = spec.match(/\s+@([A-Za-z][A-Za-z0-9_]{3,31})\s*$/);
+    if (mPartner) { partner = '@' + mPartner[1]; spec = spec.slice(0, mPartner.index); }
+    spec = spec.trim();
+    const mOld = spec.match(/^\/newgiveaway\s+(\d+)\s+(\d+)\s+(\d+)\s*$/);
+    const mNew = spec.match(/^\/newgiveaway\s+([0-9a-zA-Zа-яёx\u0445*,\s]*[a-zA-Zа-яё,][0-9a-zA-Zа-яёx\u0445*,\s]*)\s+(\d+)\s*$/);
     const ladder = mNew ? parseLadder(mNew[1]) : null;
     if (!mOld && !ladder) {
       await tgApi(env, 'sendMessage', { chat_id: chat, text:
         'Формат:\n/newgiveaway ЛЕСТНИЦА ДНЕЙ\n\nЛестница — призы по местам через запятую:\n'
         + '• guide — гайд с ведением\n• gpdf — PDF-гайд без ведения\n• число — столько анализов\n• 1x10 — десять мест по одному анализу\n\n'
-        + 'Например:\n/newgiveaway guide,gpdf,1x23 7\n\nСтарая форма (один приз на всех) тоже работает:\n/newgiveaway 3 5 7' });
+        + 'Например:\n/newgiveaway guide,gpdf,1x23 7\n\n'
+        + 'Хвостом можно добавить:\n• @канал — подписка на канал партнёра вторым условием\n'
+        + '• nopost — не публиковать пост, ты постишь свой текст сам\n\n'
+        + 'Коллаб целиком:\n/newgiveaway guide,gpdf,1x23 7 @konkuriruem nopost\n\n'
+        + 'Старая форма (один приз на всех) тоже работает:\n/newgiveaway 3 5 7' });
       return new Response('ok');
     }
     const days = parseInt(mOld ? mOld[3] : mNew[2], 10);
     const winners = ladder ? ladder.length : parseInt(mOld[1], 10);
     const credits = ladder ? 0 : parseInt(mOld[2], 10);
+    // Доступ к каналу партнёра проверяем ДО создания: если бот там не админ, подписку
+    // проверить нельзя, и выяснять это после публикации поста — худший момент.
+    if (partner) {
+      const probe = await tgApi(env, 'getChatMember', { chat_id: partner, user_id: msg.from.id }).catch(() => null);
+      if (!probe?.ok) {
+        await tgApi(env, 'sendMessage', { chat_id: chat, text:
+          `❌ Не могу проверять подписку на ${partner}: ${probe?.description || 'нет ответа'}\n\n`
+          + 'Партнёр должен добавить бота в админы канала (права можно не давать). '
+          + `Проверить — /checkchannel ${partner}. Розыгрыш не создан.` });
+        return new Response('ok');
+      }
+    }
     const endTs = Date.now() + days * 24 * 60 * 60 * 1000;
     // prizes — подписи для мини-приложения, оно показывает их списком мест.
     const prizes = ladder ? ladder.map((p, i) => `${i + 1} место — ${prizeLabel(p, 'ru')}`) : [];
-    const gw = { id: crypto.randomUUID().slice(0, 8), endTs, credits, winners, ladder, prizes, entries: [] };
+    const gw = { id: crypto.randomUUID().slice(0, 8), endTs, credits, winners, ladder, prizes, entries: [], partner };
     await saveGiveaway(env, gw);
     const botUsername = env.BOT_USERNAME || 'faceratepay_bot';
     const link = `https://t.me/${botUsername}?start=giveaway`;
     const endDate = fmtDate(endTs, 'ru');
     const prizeLines = ladder ? ladderLines(ladder) : '';
+    const subLine = partner
+      ? `1. Быть подписанным на этот канал и на ${partner}`
+      : '1. Быть подписанным на этот канал';
     const post = ladder
-      ? `🎉 РОЗЫГРЫШ!\n\nПризы:\n${prizeLines}\n\nУсловия:\n1. Быть подписанным на этот канал\n2. Нажать «Участвовать» в боте\n\nИтоги подведём ${fmtDate(endTs, 'ru')}, победителей объявим здесь же.\n\n👉 https://t.me/${env.BOT_USERNAME || 'faceratepay_bot'}?start=giveaway`
-      : `🎉 РОЗЫГРЫШ!\n\nРазыгрываем ${credits} бесплатных анализов лица среди ${winners} победител${winners === 1 ? 'я' : 'ей'}.\n\nУсловия:\n1. Быть подписанным на этот канал\n2. Нажать «Участвовать» в боте\n\nИтоги подведём ${endDate}, победителей объявим здесь же.\n\n👉 ${link}`;
+      ? `🎉 РОЗЫГРЫШ!\n\nПризы:\n${prizeLines}\n\nУсловия:\n${subLine}\n2. Нажать «Участвовать» в боте\n\nИтоги подведём ${endDate}, победителей объявим здесь же.\n\n👉 ${link}`
+      : `🎉 РОЗЫГРЫШ!\n\nРазыгрываем ${credits} бесплатных анализов лица среди ${winners} победител${winners === 1 ? 'я' : 'ей'}.\n\nУсловия:\n${subLine}\n2. Нажать «Участвовать» в боте\n\nИтоги подведём ${endDate}, победителей объявим здесь же.\n\n👉 ${link}`;
     // Кнопку под постом может поставить только бот — у клиента Telegram такой
     // возможности нет. Поэтому постим сами, а не отдаём текст на копипасту.
-    const announced = await tgApi(env, 'sendMessage', {
+    const announced = noPost ? null : await tgApi(env, 'sendMessage', {
       chat_id: CHANNEL, text: post,
       reply_markup: { inline_keyboard: [[{ text: '🙋 Участвовать', url: link }]] },
     });
@@ -2175,8 +2231,11 @@ async function tgWebhook(request, env, ctx) {
     }
     await tgApi(env, 'sendMessage', {
       chat_id: chat,
-      text: `✅ Розыгрыш запущен: id ${gw.id}, ${winners} ${ladder ? 'мест' : `победител${winners === 1 ? 'я' : 'ей'} по ${credits} анализов`}, итоги ${endDate}.\n\n`
-        + (announced?.ok
+      text: `✅ Розыгрыш запущен: id ${gw.id}, ${winners} ${ladder ? 'мест' : `победител${winners === 1 ? 'я' : 'ей'} по ${credits} анализов`}, итоги ${endDate}.`
+        + (partner ? `\n🤝 Вторым условием — подписка на ${partner} (проверка живая, доступ есть).` : '') + '\n\n'
+        + (noPost
+            ? `✍️ Пост НЕ публиковал — постишь сам.\nСсылка для кнопки или строки «Участвовать»:\n${link}`
+            : announced?.ok
             ? `📣 Пост с кнопкой «Участвовать» опубликован в ${CHANNEL}.`
             : `⚠️ В канал не ушло: ${announced?.description || 'неизвестная ошибка'}. Вот текст, опубликуй руками и повесь кнопку на ${link} через /post:\n\n---\n${post}\n---`)
         + `\n\nПо истечении срока розыгрыш подведётся сам (проверка раз в час) и итоги с победителями тоже уйдут в канал. Разыграть раньше — /drawgiveaway.`,
@@ -2607,6 +2666,17 @@ async function handleCallback(env, cq) {
     const subscribed = await isSubscribed(env, tgid, true);
     if (!subscribed) {
       await reply(b.gwNeedSub, { inline_keyboard: [[{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }], [{ text: b.kbGwJoin, callback_data: 'gw:join' }], [{ text: b.kbBack, callback_data: 'menu' }]] });
+      return;
+    }
+    // Коллаб: второе условие — канал партнёра. Говорим ИМЕННО какого не хватает и
+    // даём кнопку прямо на него, иначе человек жмёт «Участвовать» по кругу.
+    if (!(await partnerSubscribed(env, gw, tgid))) {
+      const url = 'https://t.me/' + String(gw.partner).replace(/^@/, '');
+      await reply(
+        L === 'en'
+          ? `❌ This giveaway also needs a subscription to ${gw.partner}. Subscribe and tap the button again.`
+          : `❌ В этом розыгрыше нужна ещё подписка на ${gw.partner}. Подпишись и нажми кнопку ещё раз.`,
+        { inline_keyboard: [[{ text: (L === 'en' ? 'Open ' : 'Открыть ') + gw.partner, url }], [{ text: b.kbGwJoin, callback_data: 'gw:join' }], [{ text: b.kbBack, callback_data: 'menu' }]] });
       return;
     }
     gw.entries.push(tgid);
@@ -4884,6 +4954,9 @@ async function giveawayApi(request, env) {
     if (!gw.entries.includes(tgid)) {
       if (!(await isSubscribed(env, tgid, true))) {
         return json({ error: 'sub', text: 'Сначала подпишись на канал.', channel: CHANNEL });
+      }
+      if (!(await partnerSubscribed(env, gw, tgid))) {
+        return json({ error: 'sub', text: `Нужна ещё подписка на ${gw.partner}.`, channel: gw.partner });
       }
       gw.entries.push(tgid);
       await saveGiveaway(env, gw);
