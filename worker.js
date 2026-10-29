@@ -2086,8 +2086,21 @@ async function tgWebhook(request, env, ctx) {
   // ── Админ: /addpromo КОД использований credits=N | hours=H | discount=N ──
   if (text.startsWith('/addpromo') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
     const m = text.match(/^\/addpromo\s+(\S+)\s+(\d+)\s+(credits|hours|discount)=(\d+)/i);
-    if (!m) {
-      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ credits=3\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ hours=24\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ discount=20' });
+    // pack=guide — промокод отдаёт целый тариф. Заведено под коллаб: партнёр дарит
+    // гайд с ведением за покупку у себя, и выдавать его на каждого покупателя руками
+    // значит однажды забыть. Число активаций тут же держит раздачу в рамках.
+    const mPack = text.match(/^\/addpromo\s+(\S+)\s+(\d+)\s+pack=(\w+)/i);
+    if (!m && !mPack) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат:\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ credits=3\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ hours=24\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ discount=20\n/addpromo КОД КОЛ-ВО_АКТИВАЦИЙ pack=guide\n\nПаки: ' + Object.keys(PACKS).join(', ') });
+    } else if (mPack) {
+      const packId = mPack[3].toLowerCase();
+      if (!PACKS[packId]) {
+        await tgApi(env, 'sendMessage', { chat_id: chat, text: `Нет такого пака: ${packId}.\nЕсть: ` + Object.keys(PACKS).join(', ') });
+        return new Response('ok');
+      }
+      const promo = { uses: parseInt(mPack[2], 10), max: parseInt(mPack[2], 10), pack: packId };
+      await env.RATE_LIMIT.put(`promo:${mPack[1].toUpperCase()}`, JSON.stringify(promo), { expirationTtl: 60 * 60 * 24 * 90 });
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: `✅ Промокод ${mPack[1].toUpperCase()} создан: ${mPack[2]} активаций, выдаёт «${packLabel(PACKS[packId], 'ru')}».\n\n⚠️ Это РАЗДАЧА товара, не скидка: каждая активация отдаёт пак бесплатно.` });
     } else {
       const promo = { uses: parseInt(m[2], 10), max: parseInt(m[2], 10) };
       promo[m[3].toLowerCase()] = parseInt(m[4], 10);
@@ -2731,6 +2744,20 @@ async function redeemPromo(env, chat, tgid, code, L, u) {
     return;
   }
   let grant;
+  if (promo.pack) {
+    // Тем же grantPack, что и оплата: у гайда пять шагов выдачи (флаг, анализы, дата
+    // старта, список рассылки, файл), и копия логики половину из них забудет.
+    const pack = PACKS[promo.pack];
+    if (!pack) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: b.promoNo, reply_markup: menuKb(L) });
+      return;
+    }
+    // grantPack возвращает текст о выданном (а файл гайда шлёт сам) — показываем его
+    // человеку тем же сообщением, что и у остальных промокодов.
+    grant = await grantPack(env, tgid, pack, L, null) || packLabel(pack, L);
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: b.promoOk(grant), reply_markup: menuKb(L) });
+    return;
+  }
   if (promo.discount) {
     // Скидка не начисляется сразу — применяется к следующей оплате в течение 24ч.
     await env.RATE_LIMIT.put(`pendingDiscount:${tgid}`, String(promo.discount), { expirationTtl: 60 * 60 * 24 });
