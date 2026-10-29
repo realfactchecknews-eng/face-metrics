@@ -943,6 +943,9 @@ function parseLadder(spec) {
     const s = part.trim().toLowerCase();
     if (!s) continue;
     if (s === 'guide' || s === 'гайд') { out.push({ pack: 'guide' }); continue; }
+    // PDF-гайд без ведения — второй по ценности приз. Раньше его приходилось выдавать
+    // руками через /testgrant, а это ровно то место, где про победителя забывают.
+    if (s === 'gpdf' || s === 'pdf' || s === 'пдф') { out.push({ pack: 'gpdf' }); continue; }
     const m = s.match(/^(\d+)(?:\s*[xх*]\s*(\d+))?$/);
     if (!m) return null;
     const credits = parseInt(m[1], 10);
@@ -988,6 +991,7 @@ function ladderLines(ladder) {
 function prizeLabel(p, L) {
   const ru = L !== 'en';
   if (p.pack === 'guide') return ru ? 'гайд + ведение на 90 дней' : 'the guide + 90-day coaching';
+  if (p.pack === 'gpdf') return ru ? 'PDF-гайд' : 'the guide (PDF)';
   return ru ? `${p.credits} ${p.credits === 1 ? 'анализ' : 'анализов'}` : `${p.credits} analyses`;
 }
 
@@ -2140,8 +2144,8 @@ async function tgWebhook(request, env, ctx) {
     if (!mOld && !ladder) {
       await tgApi(env, 'sendMessage', { chat_id: chat, text:
         'Формат:\n/newgiveaway ЛЕСТНИЦА ДНЕЙ\n\nЛестница — призы по местам через запятую:\n'
-        + '• guide — гайд с ведением\n• число — столько анализов\n• 1x10 — десять мест по одному анализу\n\n'
-        + 'Например:\n/newgiveaway guide,10,5,1x10 7\n\nСтарая форма (один приз на всех) тоже работает:\n/newgiveaway 3 5 7' });
+        + '• guide — гайд с ведением\n• gpdf — PDF-гайд без ведения\n• число — столько анализов\n• 1x10 — десять мест по одному анализу\n\n'
+        + 'Например:\n/newgiveaway guide,gpdf,1x23 7\n\nСтарая форма (один приз на всех) тоже работает:\n/newgiveaway 3 5 7' });
       return new Response('ok');
     }
     const days = parseInt(mOld ? mOld[3] : mNew[2], 10);

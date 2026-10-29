@@ -20,6 +20,18 @@ assert.deepEqual(l[2], { credits: 5 });
 assert.ok(l.slice(3).every((p) => p.credits === 1), 'хвост — по одному анализу');
 
 assert.equal(parseLadder('гайд,3').length, 2, 'слово по-русски тоже понимается');
+
+// PDF-гайд призом: второе место коллаба с парфюмерией. До 29.10 его выдавали руками.
+const coll = parseLadder('guide,gpdf,1x23');
+assert.equal(coll.length, 25, 'лестница коллаба — 25 мест');
+assert.deepEqual(coll[1], { pack: 'gpdf' }, 'второе место — PDF-гайд');
+assert.deepEqual(parseLadder('pdf')[0], { pack: 'gpdf' }, 'латиницей тоже');
+assert.deepEqual(parseLadder('пдф')[0], { pack: 'gpdf' }, 'и кириллицей');
+assert.equal(prizeLabel({ pack: 'gpdf' }, 'ru'), 'PDF-гайд');
+assert.match(prizeLabel({ pack: 'gpdf' }, 'en'), /guide \(PDF\)/);
+// Приз должен ехать через grantPack: PACKS.gpdf шлёт файл и кладёт анализ на счёт.
+assert.ok(/gpdf: \{ type: 'guidepdf'/.test(w), 'пак gpdf пропал из PACKS — приз станет пустым');
+assert.equal(ladderLines(coll).split('\n')[1], '2 место — PDF-гайд', 'в посте приз назван понятно');
 assert.equal(parseLadder('2х3').length, 3, 'русская «х» в «2х3» работает: её легко набрать случайно');
 assert.equal(parseLadder(''), null, 'пустая строка — не лестница');
 assert.equal(parseLadder('abc'), null, 'мусор — не лестница');
