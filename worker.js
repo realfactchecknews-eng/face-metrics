@@ -963,9 +963,13 @@ function parseLadder(spec) {
 function gwActiveText(gw, b, L) {
   const ladder = Array.isArray(gw.ladder) && gw.ladder.length ? gw.ladder : null;
   if (!ladder) return b.gwActive(gw.winners, gw.credits, fmtDate(gw.endTs, L));
-  const lines = L === 'en'
+  // Приз от партнёра бот не выдаёт и знать о нём не может — поэтому его описание
+  // хранится строкой в самом розыгрыше (/gwnote). Без неё экран показывал только
+  // наши цифровые призы, и флакон, ради которого человек пришёл, пропадал.
+  const note = gw.note ? `\n${gw.note}\n` : '';
+  const lines = (L === 'en'
     ? ladder.map((p, i) => `${i + 1}. ${prizeLabel(p, 'en')}`).join('\n')
-    : ladderLines(ladder);
+    : ladderLines(ladder)) + note;
   return L === 'en'
     ? `🎉 Giveaway is on!\n\n🏆 Prizes:\n${lines}\n⏳ Draw: ${fmtDate(gw.endTs, L)}\n\nTo enter: subscribe to ${CHANNEL}${gw.partner ? ` and ${gw.partner}` : ''} and tap the button below.`
     : `🎉 Идёт розыгрыш!\n\n🏆 Призы:\n${lines}\n⏳ Итоги: ${fmtDate(gw.endTs, L)}\n\nЧтобы участвовать: подпишись на ${CHANNEL}${gw.partner ? ` и на ${gw.partner}` : ''} и нажми кнопку ниже.`;
@@ -2253,6 +2257,28 @@ async function tgWebhook(request, env, ctx) {
             : `⚠️ В канал не ушло: ${announced?.description || 'неизвестная ошибка'}. Вот текст, опубликуй руками и повесь кнопку на ${link} через /post:\n\n---\n${post}\n---`)
         + `\n\nПо истечении срока розыгрыш подведётся сам (проверка раз в час) и итоги с победителями тоже уйдут в канал. Разыграть раньше — /drawgiveaway.`,
     });
+    return new Response('ok');
+  }
+
+  // ── Админ: /gwnote ТЕКСТ — дописать к экрану розыгрыша призы, которые выдаёт не бот
+  // (флакон партнёра, скидка в его магазине). Отдельной командой, а не аргументом
+  // /newgiveaway: там текст с пробелами и эмодзи не разобрать регуляркой.
+  if (text.startsWith('/gwnote') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const note = text.slice('/gwnote'.length).trim().slice(0, 300);
+    const gw = await getGiveaway(env);
+    if (!gw) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Активного розыгрыша нет — сначала /newgiveaway.' });
+      return new Response('ok');
+    }
+    if (!note) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text:
+        'Формат: /gwnote ТЕКСТ\n\nПример:\n/gwnote 🎁 От @konkuriruem: 1 место — флакон Bois Impérial (10 000 ₽), 2 место — скидка 50%\n\nЧтобы убрать: /gwnote -' });
+      return new Response('ok');
+    }
+    gw.note = note === '-' ? '' : note;
+    await saveGiveaway(env, gw);
+    await tgApi(env, 'sendMessage', { chat_id: chat,
+      text: 'Готово, вот что теперь видит человек:\n\n---\n' + gwActiveText(gw, BL.ru, 'ru') + '\n---' });
     return new Response('ok');
   }
 

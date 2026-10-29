@@ -46,4 +46,14 @@ assert.ok(/partnerSubscribed\(env, gw, tgid\)/.test(cut("action === 'join'", "ac
 assert.match(w, /Быть подписанным на этот канал и на \$\{partner\}/, 'в посте не сказано про второй канал');
 assert.match(w, /gw\.partner \? ` и на \$\{gw\.partner\}` : ''/, 'экран розыгрыша молчит про второй канал');
 
+// ── Призы, которые выдаёт не бот (флакон, скидка в магазине партнёра).
+const note = cut("startsWith('/gwnote')", "startsWith('/drawgiveaway')");
+assert.match(note, /ADMIN_USERNAMES\.includes/, 'команда должна быть админской');
+assert.match(note, /slice\(0, 300\)/, 'текст от владельца должен обрезаться');
+assert.match(note, /Активного розыгрыша нет/, 'без розыгрыша команда обязана сказать об этом');
+assert.match(note, /note === '-' \? '' : note/, 'нет способа убрать строку');
+assert.match(note, /gwActiveText\(gw, BL\.ru, 'ru'\)/, 'владельцу надо показать итоговый экран');
+const act = cut('function gwActiveText', 'function giveawayResultsPost');
+assert.match(act, /gw\.note \? /, 'экран розыгрыша не показывает призы партнёра');
+
 console.log('канал партнёра в розыгрыше: все проверки прошли');
