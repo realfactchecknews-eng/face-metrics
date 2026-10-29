@@ -2300,6 +2300,35 @@ async function tgWebhook(request, env, ctx) {
 
   // ── Админ: /lavaproducts — список офферов Lava.top (id + название + динамическая цена?)
   // и текущий LAVA_OFFER_IDS, чтобы найти offerId под новый тариф без похода в их API руками.
+  // Проверка чужого канала перед коллабом: видит ли наш бот, кто на него подписан.
+  // Telegram гарантирует ответ getChatMember про ДРУГОГО пользователя только админу чата,
+  // поэтому партнёр обязан выдать боту админку (права можно не давать никакие).
+  // Узнать это надо ДО публикации поста, а не когда участники начнут жаловаться.
+  if (text.startsWith('/checkchannel') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const target = text.split(/\s+/)[1];
+    if (!target) {
+      await tgApi(env, 'sendMessage', { chat_id: chat, text: 'Формат: /checkchannel @канал' });
+      return new Response('ok');
+    }
+    const botId = String(env.TG_BOT_TOKEN || '').split(':')[0];
+    const info = await tgApi(env, 'getChat', { chat_id: target });
+    const me = botId ? await tgApi(env, 'getChatMember', { chat_id: target, user_id: botId }) : null;
+    // Пробная проверка подписки живого человека — ровно то, что бот будет делать в розыгрыше.
+    const probe = await tgApi(env, 'getChatMember', { chat_id: target, user_id: msg.from.id });
+    const title = info?.ok ? (info.result.title || target) : target;
+    const myStatus = me?.ok ? me.result.status : `нет доступа (${me?.description || '—'})`;
+    const canSee = probe?.ok;
+    let t = `🔎 <b>${escHtml(String(title))}</b>\n\n`
+      + `Канал виден боту: ${info?.ok ? 'да' : 'нет — ' + escHtml(String(info?.description || '?'))}\n`
+      + `Бот в канале: ${escHtml(String(myStatus))}\n`
+      + `Подписку людей видно: ${canSee ? 'да' : 'нет — ' + escHtml(String(probe?.description || '?'))}\n\n`;
+    t += canSee
+      ? '✅ Можно ставить подписку на этот канал условием розыгрыша.'
+      : '❌ Пока нельзя. Партнёр должен добавить бота в админы канала (галочки прав можно не ставить).';
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: t, parse_mode: 'HTML' });
+    return new Response('ok');
+  }
+
   if (text.startsWith('/lavaproducts') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
     if (!env.LAVA_API_KEY) {
       await tgApi(env, 'sendMessage', { chat_id: chat, text: 'LAVA_API_KEY не настроен.' });
