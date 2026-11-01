@@ -127,6 +127,7 @@ var I18N = {
     // dynamic
     pwReady: "Your report is ready",
     pwLoginSub: "Log in with Telegram to unlock the result. One tap — no phone number, no password.",
+    pwGeoNote: "This is geometry, measured on your device. Your PSL score and the full breakdown open next.",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
     pwSubTitle: "Unlock your result for free",
     pwSubSub: "Subscribing to our channel gives you 1 free analysis every week.",
@@ -255,6 +256,7 @@ var I18N = {
     footLegal: "<a href='terms.html' style='color:#888;text-decoration:none'>Пользовательское соглашение</a>&nbsp;·&nbsp;<a href='privacy.html' style='color:#888;text-decoration:none'>Политика конфиденциальности</a>",
     pwReady: "Твой отчёт готов",
     pwLoginSub: "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.",
+    pwGeoNote: "Это геометрия, посчитана на твоём устройстве. Балл PSL и полный разбор — дальше.",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
     pwSubTitle: "Открой результат бесплатно",
     pwSubSub: "Подписка на наш канал даёт 1 бесплатный анализ каждую неделю.",
@@ -3632,7 +3634,40 @@ function startAI() {
   callAI(p.metrics, p.shapeInfo);
 }
 
+// Что показать до гейта: сильная сторона, норма, слабое место. «Мешает ракурс» не берём:
+// это не результат. Порядок исходных строк сохраняется внутри каждого уровня.
+function gateGeoRows(rows) {
+  var pick = [];
+  ["plus", "norm", "minus"].forEach(function (lv) {
+    var r = rows.filter(function (x) { return x.level === lv; })[0];
+    if (r) pick.push(r);
+  });
+  rows.forEach(function (r) {
+    if (pick.length < 3 && r.level !== "plain" && pick.indexOf(r) < 0) pick.push(r);
+  });
+  return pick.slice(0, 3);
+}
+
+// Гейт стоит после скана, и раньше человек видел там только «?.?». Геометрия считается
+// на устройстве и токенов не стоит, поэтому часть результата отдаём до входа.
+function renderGateGeo() {
+  var host = document.getElementById("pwGeo");
+  var box = document.querySelector("#paywall .pw-box");
+  if (!host || !box) return;
+  // Пейволл открывается и из кабинета, и из дуэли: там этого скана могло не быть.
+  var show = _afterGate === startAI && _pendingAnalysis && window._fmLandmarks;
+  var rows = show ? gateGeoRows(computeProportions(window._fmLandmarks, window._fmMetrics && window._fmMetrics.pose)) : [];
+  box.classList.toggle("has-geo", rows.length > 0);
+  host.innerHTML = rows.length ? rows.map(function (r) {
+    return '<div class="prop-row"><span class="prop-name">' + r.label + '</span>' +
+           '<span class="prop-val">' + r.value.toFixed(2) + '</span>' +
+           '<span class="prop-tag ' + r.level + '">' + r.verdict + '</span></div>';
+  }).join("") + '<p class="prop-note">' + t("pwGeoNote") + '</p>' : "";
+}
+
 function showPaywall(state, st) {
+  // Сбой украшения не должен закрывать путь к входу и оплате.
+  try { renderGateGeo(); } catch (e) { console.error(e); }
   var pw = document.getElementById("paywall");
   var title = document.getElementById("pwTitle");
   var sub = document.getElementById("pwSub");

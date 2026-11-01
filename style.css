@@ -2040,6 +2040,12 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 }
 .pw-mock-bars i:nth-child(2) { width: 78%; } .pw-mock-bars i:nth-child(3) { width: 62%; }
 .pw-mock-bars i:nth-child(4) { width: 85%; } .pw-mock-bars i:nth-child(5) { width: 48%; }
+/* С числами окно выше: на низком экране его надо уметь прокрутить. */
+.paywall { overflow-y: auto; }
+.pw-box { margin: auto; }
+.pw-box.has-geo .pw-mock-bars { display: none; }
+.pw-box:not(.has-geo) .pw-geo { display: none; }
+.pw-geo { text-align: left; margin: 12px 0 18px; }
 .pw-title { font-size: 1.7rem; font-weight: 400; color: var(--text-bright); margin: 4px 0 8px; }
 .pw-sub { font-size: 0.95rem; color: var(--text-dim); line-height: 1.6; margin-bottom: 22px; }
 .pw-actions { display: flex; flex-direction: column; gap: 11px; }
