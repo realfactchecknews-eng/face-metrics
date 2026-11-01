@@ -143,6 +143,7 @@ export default {
       if (path === '/buy')        return await buy(request, env);
       if (path === '/sendcard')   return await sendCard(request, env);
       if (path === '/feedback')   return await submitFeedback(request, env);
+      if (path === '/funnel')     return await funnelHit(request, env);
       if (path === '/partner-data')  return await partnerData(request, env);
       if (path === '/partner-admin') return await partnerAdmin(request, env);
       if (path === '/bulk-discount-once') return await bulkDiscountStart(request, env, ctx);
@@ -2424,6 +2425,12 @@ async function tgWebhook(request, env, ctx) {
       ? '✅ Можно ставить подписку на этот канал условием розыгрыша.'
       : '❌ Пока нельзя. Партнёр должен добавить бота в админы канала (галочки прав можно не ставить).';
     await tgApi(env, 'sendMessage', { chat_id: chat, text: t, parse_mode: 'HTML' });
+    return new Response('ok');
+  }
+
+  if (text.startsWith('/funnel') && ADMIN_USERNAMES.includes(msg.from.username || '')) {
+    const days = Math.min(Math.max(parseInt(text.split(/\s+/)[1], 10) || 7, 1), 90);
+    await tgApi(env, 'sendMessage', { chat_id: chat, text: await funnelText(env, days) });
     return new Response('ok');
   }
 
@@ -5961,6 +5968,39 @@ async function pickTip(env, tgid, week) {
   // про гардероб под подписью «лично тебе», и это читалось как случайный текст.
   // Лучше промолчать: задание недели самодостаточно.
   return null;
+}
+
+// Счётчик воронки сайта: сколько сессий дошло до каждого шага. Без него не видно, где уходят
+// люди: 65% «визит без анализа» смешивали не загрузивших фото и ушедших с гейта.
+// ponytail: чтение-запись в KV, параллельные запросы теряют единицы, и эндпоинт открыт, так что
+// цифры ориентировочные. Для денег считать по translog, для точности нужен Analytics Engine.
+const FUNNEL_STEPS = [
+  ['visit', 'Открыли сайт'], ['upload', 'Загрузили фото'], ['scan_start', 'Запустили скан'],
+  ['scan_done', 'Скан завершён'], ['gate_auth', 'Гейт: вход'], ['gate_sub', 'Гейт: подписка'],
+  ['gate_pay', 'Гейт: оплата'], ['ai_start', 'Пошли в модель'], ['result', 'Увидели результат'],
+  ['ai_fail', 'Ошибка модели'],
+];
+
+async function funnelHit(request, env) {
+  let step = null;
+  try { step = (await request.json()).step; } catch { /* мусор не считаем */ }
+  if (FUNNEL_STEPS.some((s) => s[0] === step)) {
+    const key = `fn:${new Date().toISOString().slice(0, 10)}:${step}`;
+    const n = parseInt(await env.RATE_LIMIT.get(key) || '0', 10);
+    await env.RATE_LIMIT.put(key, String(n + 1), { expirationTtl: 60 * 60 * 24 * 90 });
+  }
+  return cors(null, 204);
+}
+
+async function funnelText(env, days) {
+  const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() - i * 864e5).toISOString().slice(0, 10));
+  const lines = await Promise.all(FUNNEL_STEPS.map(async ([id, label]) => {
+    const vals = await Promise.all(dates.map((d) => env.RATE_LIMIT.get(`fn:${d}:${id}`)));
+    return { label, n: vals.reduce((sum, v) => sum + (parseInt(v || '0', 10)), 0) };
+  }));
+  const visits = lines[0].n;
+  return `📊 Воронка сайта, дней: ${days} (UTC, сессии, цифры ориентировочные)\n\n`
+    + lines.map((l) => `${l.label}: ${l.n}${visits ? ` (${Math.round(l.n / visits * 100)}%)` : ''}`).join('\n');
 }
 
 // Человекочитаемые названия категорий - для подписи совета.

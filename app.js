@@ -127,7 +127,8 @@ var I18N = {
     // dynamic
     pwReady: "Your report is ready",
     pwLoginSub: "Log in with Telegram to unlock the result. One tap — no phone number, no password.",
-    pwGeoNote: "This is geometry, measured on your device. Your PSL score and the full breakdown open next.",
+    pwGeoNote: "These are proportions measured on your device, not a rating. Your PSL score and the full breakdown open next.",
+    pwGeoAbove: "above average", pwGeoNear: "near average", pwGeoBelow: "below average",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
     pwSubTitle: "Unlock your result for free",
     pwSubSub: "Subscribing to our channel gives you 1 free analysis every week.",
@@ -256,7 +257,8 @@ var I18N = {
     footLegal: "<a href='terms.html' style='color:#888;text-decoration:none'>Пользовательское соглашение</a>&nbsp;·&nbsp;<a href='privacy.html' style='color:#888;text-decoration:none'>Политика конфиденциальности</a>",
     pwReady: "Твой отчёт готов",
     pwLoginSub: "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.",
-    pwGeoNote: "Это геометрия, посчитана на твоём устройстве. Балл PSL и полный разбор — дальше.",
+    pwGeoNote: "Это пропорции, замеренные на твоём устройстве, а не оценка. Балл PSL и полный разбор — дальше.",
+    pwGeoAbove: "выше среднего", pwGeoNear: "около среднего", pwGeoBelow: "ниже среднего",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
     pwSubTitle: "Открой результат бесплатно",
     pwSubSub: "Подписка на наш канал даёт 1 бесплатный анализ каждую неделю.",
@@ -564,6 +566,7 @@ function runIntro() {
 }
 
 window.addEventListener("DOMContentLoaded", function() {
+  fmStep("visit");
   var gate = document.getElementById("langGate");
   if (gate) {
     if (localStorage.getItem("fm-lang-picked") === "1") {
@@ -639,12 +642,25 @@ document.getElementById("frontRemove").addEventListener("click", function(e) {
   fileInput.value = "";
 });
 
+// Счётчик воронки: каждый шаг считается один раз за сессию вкладки, то есть это люди, а
+// не повторные анализы. Beacon не держит страницу и не ломает её, если воркер не ответил.
+function fmStep(step) {
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") return;
+  try {
+    var key = "fm-step-" + step;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+  } catch (e) { /* без хранилища шаг может посчитаться повторно */ }
+  try { navigator.sendBeacon(WORKER_URL + "/funnel", new Blob([JSON.stringify({ step: step })], { type: "text/plain" })); } catch (e) {}
+}
+
 function loadFrontFile(file) {
   if (!file.type.startsWith("image/")) return;
   var reader = new FileReader();
   reader.onload = function(ev) {
     var img = new Image();
     img.onload = function() {
+      fmStep("upload");
       frontImg = img;
       document.getElementById("frontThumbImg").src = ev.target.result;
       document.getElementById("frontPlaceholder").classList.add("hidden");
@@ -699,6 +715,7 @@ analyzeBtn.addEventListener("click", function() {
 
 function runAnalysis() {
   if (!frontImg) return;
+  fmStep("scan_start");
   clearReport();
   errorBox.classList.add("hidden");
   resultsDiv.classList.add("hidden");
@@ -1821,7 +1838,7 @@ async function callAI(metrics, shapeInfo) {
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
-    if (data.error) { stopAIHUD(); showGate(data); return; }
+    if (data.error) { fmStep(data.error === "pay" ? "gate_pay" : "ai_fail"); stopAIHUD(); showGate(data); return; }
     var reportText = data.text || t("emptyAnswer");
     // Дерзкий режим — второй запрос поверх готового отчёта (балл считает нейтральный
     // промпт, см. personaPrompt). Ждём его ДО показа: иначе человек видит вежливый разбор,
@@ -1835,6 +1852,7 @@ async function callAI(metrics, shapeInfo) {
     stopAIHUD();
     renderAIReport(reportText, false, !!data.teaser);
     aiReport.classList.remove("hidden");
+    fmStep("result");
     // Подписи про сохранённый отчёт здесь намеренно нет. Повтор того же снимка ничем не
     // отличается от первого разбора: конвейер детерминированный (замер 30.09 - 20 повторов
     // из 20 совпали до десятой), значит модель вернула бы ровно этот же текст, и анализ
@@ -1844,6 +1862,7 @@ async function callAI(metrics, shapeInfo) {
     if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
     if (data.cashback) showCashbackToast();
   } catch (err) {
+    fmStep("ai_fail");
     stopAIHUD();
     aiErrorText.textContent = t("errPrefix") + err.message;
     aiError.classList.remove("hidden");
@@ -3614,15 +3633,16 @@ function fetchStatus(fresh) {
 
 // Скан завершён → проверяем доступ; есть — генерим, нет — красивый пейволл.
 function gateThenAI(metrics, shapeInfo) {
+  fmStep("scan_done");
   _pendingAnalysis = { metrics: metrics, shapeInfo: shapeInfo };
   _afterGate = startAI;
   fetchStatus(false).then(function(st) {
-    if (st.error === "auth") { showPaywall("auth"); return; }
-    if (st.error) { showPaywall("auth"); return; }
+    if (st.error === "auth") { fmStep("gate_auth"); showPaywall("auth"); return; }
+    if (st.error) { fmStep("gate_auth"); showPaywall("auth"); return; }
     renderAccount(st);
     if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); runAfterGate(); }
-    else if (!st.subscribed) showPaywall("sub");
-    else showPaywall("pay", st);
+    else if (!st.subscribed) { fmStep("gate_sub"); showPaywall("sub"); }
+    else { fmStep("gate_pay"); showPaywall("pay", st); }
   }).catch(function(){ runAfterGate(); }); // сеть легла — пусть решает воркер
 }
 
@@ -3630,11 +3650,12 @@ function runAfterGate() { var f = _afterGate; _afterGate = null; (f || startAI)(
 
 function startAI() {
   if (!_pendingAnalysis) return;
+  fmStep("ai_start");
   var p = _pendingAnalysis; _pendingAnalysis = null;
   callAI(p.metrics, p.shapeInfo);
 }
 
-// Что показать до гейта: сильная сторона, норма, слабое место. «Мешает ракурс» не берём:
+// Какие три строки показать до гейта: по одной с каждого уровня. «Мешает ракурс» не берём:
 // это не результат. Порядок исходных строк сохраняется внутри каждого уровня.
 function gateGeoRows(rows) {
   var pick = [];
@@ -3646,6 +3667,14 @@ function gateGeoRows(rows) {
     if (pick.length < 3 && r.level !== "plain" && pick.indexOf(r) < 0) pick.push(r);
   });
   return pick.slice(0, 3);
+}
+
+// Замер 01.11 на 52 лицах: эти пропорции почти не связаны с PSL. Поэтому на гейте только
+// положение относительно среднего, без «сильной стороны» и «слабого места». Порог 10% тот же,
+// что в computeProportions: ниже него разницу не отличить от шума съёмки.
+function gateGeoWord(r) {
+  var rel = r.avg ? (r.value - r.avg) / r.avg : 0;
+  return Math.abs(rel) < 0.10 ? "pwGeoNear" : rel > 0 ? "pwGeoAbove" : "pwGeoBelow";
 }
 
 // Гейт стоит после скана, и раньше человек видел там только «?.?». Геометрия считается
@@ -3661,7 +3690,7 @@ function renderGateGeo() {
   host.innerHTML = rows.length ? rows.map(function (r) {
     return '<div class="prop-row"><span class="prop-name">' + r.label + '</span>' +
            '<span class="prop-val">' + r.value.toFixed(2) + '</span>' +
-           '<span class="prop-tag ' + r.level + '">' + r.verdict + '</span></div>';
+           '<span class="prop-tag norm">' + t(gateGeoWord(r)) + '</span></div>';
   }).join("") + '<p class="prop-note">' + t("pwGeoNote") + '</p>' : "";
 }
 
