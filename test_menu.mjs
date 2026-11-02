@@ -14,17 +14,19 @@ const { menuKb, BL } = new Function(`
   return { menuKb, BL };
 `)();
 
+// С меткой Telegram: без неё Метрика пишет эти визиты в прямые заходы.
+const SITE = 'https://facerate.ru/?utm_source=telegram&utm_medium=bot';
 for (const L of ['ru', 'en']) {
   const short = menuKb(L, true).inline_keyboard;
   const full  = menuKb(L, false).inline_keyboard;
 
   assert.ok(short.length <= 4, `${L}: новичку — не больше четырёх кнопок`);
-  assert.equal(short[0][0].url, 'https://facerate.ru', `${L}: первая кнопка ведёт на анализ`);
-  assert.equal(full[0][0].url, 'https://facerate.ru', `${L}: и в полном меню анализ первый`);
+  assert.equal(short[0][0].url, SITE, `${L}: первая кнопка ведёт на анализ`);
+  assert.equal(full[0][0].url, SITE, `${L}: и в полном меню анализ первый`);
   assert.ok(full.length > short.length, `${L}: полное меню шире короткого`);
 
   // ссылка на сайт не должна дублироваться двумя кнопками
-  const site = full.flat().filter((b) => b.url === 'https://facerate.ru');
+  const site = full.flat().filter((b) => b.url === SITE);
   assert.equal(site.length, 1, `${L}: кнопка сайта одна`);
 
   // приветствие обязано объяснять действие, а не только называть сервис

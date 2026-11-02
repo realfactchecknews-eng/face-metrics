@@ -1738,18 +1738,21 @@ function fmtDate(ms, L) {
 // short=true — экран для того, кто пришёл впервые. Одиннадцать кнопок в первую секунду
 // читаются как панель приборов: из них десять про то, чего у новичка ещё нет (заказы,
 // промокод, рефералка, розыгрыши). Показываем дверь, остальное — по кнопке «Всё меню».
+// Ссылки ботов на сайт помечены utm_source=telegram: встроенный браузер Telegram часто не
+// передаёт, откуда человек пришёл, и Метрика писала эти визиты в «прямые заходы»
+// (переходов из мессенджеров за три месяца было 178 при канале на 16 тыс.).
 function menuKb(L, short) {
   const b = BL[L];
   if (short) {
     return { inline_keyboard: [
-      [{ text: b.kbAnalyze, url: 'https://facerate.ru' }],
+      [{ text: b.kbAnalyze, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=bot' }],
       [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }],
       [{ text: b.kbStatus, callback_data: 'status' }],
       [{ text: b.kbAllMenu, callback_data: 'menu' }],
     ]};
   }
   return { inline_keyboard: [
-    [{ text: b.kbAnalyze, url: 'https://facerate.ru' }],
+    [{ text: b.kbAnalyze, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=bot' }],
     [{ text: b.kbStatus, callback_data: 'status' }],
     [{ text: b.kbShop, callback_data: 'shop' }],
     [{ text: b.kbOrders, callback_data: 'orders' }],
@@ -2964,7 +2967,7 @@ function supMenuKb(L, isAdmin) {
   const rows = [
     [{ text: b.kbFaq, callback_data: 'faq' }],
     [{ text: b.human, callback_data: 'human' }],
-    [{ text: b.kbSite, url: 'https://facerate.ru' }, { text: b.kbBuy, url: 'https://t.me/faceratepay_bot' }],
+    [{ text: b.kbSite, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=support' }, { text: b.kbBuy, url: 'https://t.me/faceratepay_bot' }],
     [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
   ];
   if (isAdmin) rows.push([{ text: '⚙️ Admin', callback_data: 'admin' }]);
@@ -6196,7 +6199,7 @@ async function trackCron(env) {
 
     const r = await tgApi(env, 'sendMessage', {
       chat_id: tgid, parse_mode: 'HTML', text,
-      reply_markup: { inline_keyboard: [[{ text: b.remindBtn, url: 'https://facerate.ru/#progress' }]] },
+      reply_markup: { inline_keyboard: [[{ text: b.remindBtn, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=reminder#progress' }]] },
     }).catch(() => ({ ok: false }));
 
     // Бот заблокирован или чат удалён — больше не пытаемся.
@@ -6296,7 +6299,7 @@ async function winbackCron(env) {
     let text, kb;
     if (first) {
       text = b.wbFirst(priceLine(L));
-      kb = [[{ text: b.wbFirstBtn, url: 'https://facerate.ru/#analyze' }]];
+      kb = [[{ text: b.wbFirstBtn, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=winback#analyze' }]];
     } else {
       // Скидку ставим только если своей нет или она меньше: перебивать более щедрую
       // (рефералка, промокод) нельзя.
@@ -6306,7 +6309,7 @@ async function winbackCron(env) {
         await env.RATE_LIMIT.put(`pendingDiscount:${tgid}`, String(WB_DISCOUNT_PCT), { expirationTtl: 3 * 24 * 3600 });
       }
       text = b.wbSecond(pct);
-      kb = [[{ text: b.wbSecondBtn, url: 'https://facerate.ru/#compare' }]];
+      kb = [[{ text: b.wbSecondBtn, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=winback#compare' }]];
     }
     kb.push([{ text: b.wbStop, callback_data: 'nomail' }]);
 
