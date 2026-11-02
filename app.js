@@ -550,19 +550,23 @@ function jumpToAnalysis() {
 
 function runIntro() {
   var overlay = document.getElementById("introOverlay");
-  var skipToAnalysis = location.hash === "#analyze";
+  // Сохранённое фото после входа через Telegram — тоже сразу на экран анализа.
+  var skipToAnalysis = location.hash === "#analyze" || !!readResumePhotos();
   var delay = skipToAnalysis ? 0 : (FM_FAST_LOAD ? 500 : 2800);
   if (overlay) {
     setTimeout(function() {
       overlay.classList.add("intro-exit");
       overlay.addEventListener("transitionend", function() {
         overlay.remove();
-        if (skipToAnalysis) jumpToAnalysis(); else startLanding();
+        if (skipToAnalysis) afterJump(); else startLanding();
       }, { once: true });
     }, delay);
   } else {
-    if (skipToAnalysis) jumpToAnalysis(); else startLanding();
+    if (skipToAnalysis) afterJump(); else startLanding();
   }
+  // Вход мог завершиться, пока вкладка была выгружена: аккаунт уже сохранён, фото ждёт.
+  // Иначе фото поднимет onLoginSuccess, когда допишется опрос входа.
+  function afterJump() { jumpToAnalysis(); if (getAccount()) resumeSavedAnalysis(); }
 }
 
 window.addEventListener("DOMContentLoaded", function() {
@@ -3469,6 +3473,10 @@ var TG_LOGIN_PENDING_MAX_MS = 5 * 60 * 1000; // 5 минут — окно на �
 function startTgLogin(btn) {
   var code = crypto.randomUUID();
   localStorage.setItem(TG_LOGIN_PENDING_KEY, JSON.stringify({ code: code, ts: Date.now() }));
+  // Вход начат с гейта анализа: фото пока только в памяти вкладки. Встроенный браузер
+  // Telegram уходит со страницы, айфон выгружает вкладку, пока человек в Telegram, —
+  // и раньше после входа приходилось загружать фото заново.
+  if (_afterGate === startAI && _pendingAnalysis) saveResumePhotos();
   if (isTgInAppBrowser()) {
     location.href = "https://t.me/" + TG_BOT_USERNAME + "?start=" + code;
   } else {
@@ -3505,8 +3513,9 @@ function pollTgLogin(code, btn) {
         localStorage.removeItem(TG_LOGIN_PENDING_KEY);
         saveAccount(st);
         renderAccount(st);
+        // Без перезагрузки: она стирала фото и замеры из памяти, а onLoginSuccess к этому
+        // моменту уже продолжал анализ. Состояние аккаунта обновляется на месте.
         onLoginSuccess(st);
-        window.location.reload();
       }
     }).catch(function(){});
   }
@@ -3535,10 +3544,88 @@ document.addEventListener("visibilitychange", function() {
   if (document.visibilityState === "visible") resumeTgLoginIfPending();
 });
 
-// Если логин случился, пока открыт пейволл — сразу перепроверяем доступ.
+// Логин прошёл. Три случая: анализ ждёт за гейтом на этой же странице — продолжаем его;
+// страницу перезагрузило, пока человек был в Telegram, — поднимаем сохранённое фото;
+// вход был не из анализа — просто освежаем то, что зависит от аккаунта.
 function onLoginSuccess(st) {
+  refreshAccount();
   var pw = document.getElementById("paywall");
-  if (pw && !pw.classList.contains("hidden")) pwRecheck();
+  if (pw && !pw.classList.contains("hidden")) {
+    // Страница жива и анализ ждёт за гейтом — сохранённая копия фото больше не нужна.
+    if (_afterGate === startAI && _pendingAnalysis) clearResumePhotos();
+    pwRecheck();
+    return;
+  }
+  if (resumeSavedAnalysis()) return;
+  var lock = document.getElementById("pgLocked");
+  if (lock && !lock.hidden && typeof pgLoad === "function") pgLoad();
+}
+
+/* ═══════════ Продолжение анализа после входа через Telegram ═══════════
+   Фото лежит только в этом браузере, на сервер не уходит и стирается сразу после
+   запуска анализа, при закрытии гейта или через 30 минут. */
+var RESUME_KEY = "fm-resume-photos";
+var RESUME_MAX_MS = 30 * 60 * 1000;
+
+function photoDataUrl(img, maxSide, quality) {
+  var w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, maxSide / Math.max(w, h));
+  var c = document.createElement("canvas");
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", quality);
+}
+
+function saveResumePhotos() {
+  if (!frontImg) return;
+  // 1280 хватает и скану, и модели (ей уходит 672). Не влезло — пробуем меньше,
+  // а если и так нет места, вход работает как раньше, просто без продолжения.
+  [[1280, 0.9], [900, 0.85]].some(function (q) {
+    try {
+      localStorage.setItem(RESUME_KEY, JSON.stringify({
+        ts: Date.now(), front: photoDataUrl(frontImg, q[0], q[1]),
+        side: sideImg ? photoDataUrl(sideImg, q[0], q[1]) : null,
+      }));
+      return true;
+    } catch (e) { return false; }
+  });
+}
+
+function clearResumePhotos() { try { localStorage.removeItem(RESUME_KEY); } catch (e) {} }
+
+function readResumePhotos() {
+  var d = null;
+  try { d = JSON.parse(localStorage.getItem(RESUME_KEY) || "null"); } catch (e) {}
+  if (!d || !d.front || Date.now() - (d.ts || 0) > RESUME_MAX_MS) { clearResumePhotos(); return null; }
+  return d;
+}
+
+// Возвращает true, если продолжение запущено. Работает только для вошедшего: без
+// аккаунта анализ всё равно упрётся в тот же гейт.
+function resumeSavedAnalysis() {
+  if (!getAccount()) return false;
+  var d = readResumePhotos();
+  if (!d) return false;
+  clearResumePhotos();
+  jumpToAnalysis();
+  function load(src, cb) { var im = new Image(); im.onload = function(){ cb(im); }; im.onerror = function(){ cb(null); }; im.src = src; }
+  load(d.front, function (front) {
+    if (!front) return;
+    load(d.side || "", function (side) {
+      frontImg = front;
+      sideImg = d.side ? side : null;
+      document.getElementById("frontThumbImg").src = d.front;
+      document.getElementById("frontPlaceholder").classList.add("hidden");
+      document.getElementById("frontThumb").classList.remove("hidden");
+      if (sideImg) {
+        document.getElementById("sideThumbImg").src = d.side;
+        document.getElementById("sidePlaceholder").classList.add("hidden");
+        document.getElementById("sideThumb").classList.remove("hidden");
+      }
+      // Соглашение и памятка уже пройдены до скана; если их сбросили — покажутся снова.
+      if (runWithGates(runAnalysis)) runAnalysis();
+    });
+  });
+  return true;
 }
 
 function refreshAccount() {
@@ -3828,6 +3915,7 @@ function pwRecheck(silent) {
   if (x) x.addEventListener("click", function(){
     hidePaywall();
     _pendingAnalysis = null;
+    clearResumePhotos();
     backToUploadTop();
   });
 })();
