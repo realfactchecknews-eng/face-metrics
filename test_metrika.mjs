@@ -6,9 +6,10 @@ const pages = readdirSync('.').filter((f) => f.endsWith('.html') && !/^(_|yandex
 for (const p of pages) {
   const s = readFileSync(p, 'utf8');
   assert.equal((s.match(/ym\(110520471, 'init'/g) || []).length, 1, p + ': счётчика нет или он дважды');
+  // Вебвизор и карта кликов выключены везде 02.11.2026: их не смотрят, а вебвизор нагружает телефон.
+  assert.ok(!/webvisor|clickmap/.test(s), p + ': вебвизор или карта кликов снова включены');
   if (p !== 'index.html') {
     assert.match(s, /if \(window\.top === window\)/, p + ': в iframe приложения счётчик не должен срабатывать');
-    assert.ok(!/webvisor/.test(s), p + ': вебвизор только на главной');
   }
 }
 for (const f of readdirSync('.').filter((f) => /^(yandex_|google).*\.html$/.test(f))) {
