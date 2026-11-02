@@ -772,15 +772,17 @@ function showConsent() {
 var TIPS_KEY = "fm-tips-v1";
 var _afterGates = null;
 
+// v3 с 02.11.2026: новые редакции оферты и политики (Метрика, хранение результатов,
+// розыгрыши, рассылки) — согласие запрашивается у всех заново.
 function gatesPassed() {
-  return localStorage.getItem("fm-consent-v2") === "1" &&
+  return localStorage.getItem("fm-consent-v3") === "1" &&
          localStorage.getItem(TIPS_KEY) === "1";
 }
 
 // Вызывать вместо прямого запуска. Возвращает true, если можно идти дальше.
 function runWithGates(next) {
   _afterGates = next;
-  if (localStorage.getItem("fm-consent-v2") !== "1") { showConsent(); return false; }
+  if (localStorage.getItem("fm-consent-v3") !== "1") { showConsent(); return false; }
   if (localStorage.getItem(TIPS_KEY) !== "1")        { showTips();    return false; }
   return true;
 }
@@ -834,7 +836,7 @@ window.fmShowTips = function () {
   }
   accept.addEventListener("click", function() {
     if (check && !check.checked) return;
-    localStorage.setItem("fm-consent-v2", "1");
+    localStorage.setItem("fm-consent-v3", "1");
     localStorage.setItem("fm-consent-date", new Date().toISOString());
     modal.classList.add("hidden");
     // Дальше по очереди: памятка по съёмке, потом то, что ждало (анализ или дуэль).
