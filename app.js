@@ -128,6 +128,8 @@ var I18N = {
     pwReady: "Your report is ready",
     pwLoginSub: "Log in with Telegram to unlock the result. One tap — no phone number, no password.",
     pwGeoNote: "These are proportions measured on your device, not a rating. Your PSL score and the full breakdown open next.",
+    meshTitle: "Face mesh · 478 points",
+    meshNote: "Drag to turn, pinch to zoom. Computed on your device, the photo goes nowhere.",
     pwGeoAbove: "above average", pwGeoNear: "near average", pwGeoBelow: "below average",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
     pwSubTitle: "Unlock your result for free",
@@ -258,6 +260,8 @@ var I18N = {
     pwReady: "Твой отчёт готов",
     pwLoginSub: "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.",
     pwGeoNote: "Это пропорции, замеренные на твоём устройстве, а не оценка. Балл PSL и полный разбор — дальше.",
+    meshTitle: "Сетка лица · 478 точек",
+    meshNote: "Крути пальцем, щипком приближай. Посчитано на твоём устройстве, фото никуда не уходит.",
     pwGeoAbove: "выше среднего", pwGeoNear: "около среднего", pwGeoBelow: "ниже среднего",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
     pwSubTitle: "Открой результат бесплатно",
@@ -991,6 +995,7 @@ async function initFaceLandmarker() {
   const fileset = await vision.FilesetResolver.forVisionTasks(
     "./vendor/mediapipe/wasm"
   );
+  MESH3D_EDGES = vision.FaceLandmarker.FACE_LANDMARKS_TESSELATION.map(function (e) { return [e.start, e.end]; });
   faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
     baseOptions: {
       modelAssetPath: "./vendor/mediapipe/face_landmarker.task",
@@ -1388,6 +1393,348 @@ function renderProportions(lm, pose) {
   host.classList.remove('hidden');
 }
 
+/* ═══════════ 3D-сетка лица ═══════════
+   Своя сетка человека из 478 точек MediaPipe, выпрямленная по матрице положения головы,
+   и замеры прямо на ней. Считается на устройстве и токенов не стоит. На гейте сетка
+   появляется поверх фото и разбирает лицо по шагам, в отчёте замеры идут по кругу:
+   в бесплатном пять, в платном десять. Стенд со всеми замерами калибровки — _mesh3d.html.
+   Числа те же, что в отчёте (computeFaceMetrics, computeProportions), кроме симметрии:
+   symmetryScore уходит модели и гримасу не видит, поэтому на сетке своя — по отражению
+   половин лица. Её калибровка описана на стенде. */
+var MESH3D_EDGES = null; // рёбра триангуляции, приходят из MediaPipe вместе с моделью
+var MESH3D_SYM_PAIRS = [[33,263],[133,362],[159,386],[145,374],[70,300],[105,334],[107,336],[98,327],[50,280],
+  [61,291],[37,267],[84,314],[40,270],[91,321],[172,397],[136,365],[176,400],[234,454],[127,356],[58,288]];
+var MESH3D_MID = [10,151,9,168,6,197,195,5,4,1,2,164,0,17,18,200,199,175,152];
+var MESH3D_CONTOURS = [].concat(FACE_OVAL, LEFT_EYE, RIGHT_EYE, LEFT_BROW, RIGHT_BROW, LIPS, NOSE);
+
+// Точки в пикселях кадра -> сетка вокруг центра головы. P0 — как на фото, P — выпрямлена
+// в анфас: снимаем поворот, который MediaPipe нашёл для головы. Матрица по столбцам,
+// у камеры Y вверх и Z к зрителю, у точек наоборот.
+function mesh3dPoints(lm, matrix) {
+  var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, zc = 0;
+  lm.forEach(function (p) {
+    x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); zc += p.z;
+  });
+  var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  zc /= lm.length;
+  var P0 = lm.map(function (p) { return { X: p.x - cx, Y: p.y - cy, Z: p.z - zc }; });
+  var P = P0, yaw = 0;
+  if (matrix && matrix.length >= 16) {
+    var col = [0, 1, 2].map(function (j) {
+      var c = [matrix[4 * j], matrix[4 * j + 1], matrix[4 * j + 2]], n = Math.hypot(c[0], c[1], c[2]) || 1;
+      return [c[0] / n, c[1] / n, c[2] / n];
+    });
+    var dot = function (v, c) { return v[0] * c[0] + v[1] * c[1] + v[2] * c[2]; };
+    P = P0.map(function (p) {
+      var c = [p.X, -p.Y, -p.Z];
+      return { X: dot(col[0], c), Y: -dot(col[1], c), Z: -dot(col[2], c) };
+    });
+    yaw = Math.abs(Math.atan2(matrix[8], matrix[10]) * 180 / Math.PI);
+  }
+  return { P0: P0, P: P, cx: cx, cy: cy, yaw: yaw, span: Math.max(x1 - x0, (y1 - y0) * 0.8), top: y0 - cy, bottom: y1 - cy };
+}
+
+// Левая половина выпрямленной сетки, отражённая на правую: насколько разошлись 20 пар точек,
+// в долях расстояния между глазами, среднеквадратично (гримаса задевает 5-6 пар из 20 и
+// в простом среднем растворяется). Калибровка 42 лица в анфас: медиана 91%, худшее 63%;
+// те же лица с поднятым уголком рта 44-59%. С поворота больше 12° скрытую половину лица
+// MediaPipe дорисовывает сам и врёт по горизонтали, тогда считаем только вертикаль.
+function mesh3dSymmetry(P, yaw) {
+  var mx = 0, sxy = 0, sy = 0;
+  MESH3D_MID.forEach(function (i) { mx += P[i].X; });
+  mx /= MESH3D_MID.length;
+  var ipd = Math.hypot(P[33].X - P[263].X, P[33].Y - P[263].Y) || 1;
+  MESH3D_SYM_PAIRS.forEach(function (pr) {
+    var L = P[pr[0]], R = P[pr[1]], dx = (2 * mx - L.X - R.X) / ipd, dy = (L.Y - R.Y) / ipd;
+    sxy += dx * dx + dy * dy; sy += dy * dy;
+  });
+  var n = MESH3D_SYM_PAIRS.length, rough = yaw > 12;
+  var v = rough ? 100 - Math.sqrt(sy / n) * 450 : 100 - Math.sqrt(sxy / n) * 550;
+  return { value: Math.max(0, Math.min(100, v)), rough: rough };
+}
+
+// Замеры для сетки: подпись, число, точка для плашки и линии. Кривой ракурс помечаем «≈».
+function mesh3dMeasures(lm, metrics, P, yaw, full) {
+  var ru = lang() === "ru", out = [], row = {};
+  var rows = computeProportions(lm, metrics.pose);
+  PROP_DEFS.forEach(function (d, i) { row[d[0]] = rows[i]; });
+  var ANGLE = ru ? " · ракурс" : " · angle";
+  var CHEEKS = [LM_CHEEK_L, LM_CHEEK_R];
+  // Короткие подписи для плашек на сетке: полные на телефоне закрывают пол-лица.
+  var SHORT = ru
+    ? { thirds: "Трети", cheekJaw: "Челюсть / скулы", lenWidth: "Длина / ширина", noseFace: "Нос / лицо", eyeGap: "Между глаз", lipsFace: "Губы / лицо", foreCheek: "Лоб / скулы" }
+    : { thirds: "Thirds", cheekJaw: "Jaw / cheeks", lenWidth: "Length / width", noseFace: "Nose / face", eyeGap: "Eye gap", lipsFace: "Mouth / face", foreCheek: "Forehead / cheeks" };
+  function prop(key, at, lines, ticks) {
+    var r = row[key];
+    if (!r || !r.value) return;
+    var rough = r.level === "plain";
+    out.push({ s: r.label + (rough ? ANGLE : ""), c: SHORT[key], v: r.value, at: at, lines: lines, ticks: ticks,
+      fmt: function (x) { return (rough ? "≈" : "") + x.toFixed(2); } });
+  }
+  if (typeof metrics.canthalTilt === "number") {
+    var tr = !!(metrics.pose && Math.abs(metrics.pose.pitch) > TILT_PITCH_LIMIT);
+    out.push({ s: (ru ? "Наклон глаз" : "Canthal tilt") + (tr ? ANGLE : ""), v: metrics.canthalTilt, at: 263,
+      lines: [[133, 33], [362, 263]],
+      fmt: function (x) { return (tr ? "≈" : "") + (x >= 0 ? "+" : "") + x.toFixed(1) + "°"; } });
+  }
+  out.push({ s: "FWHR", v: metrics.widthHeightRatio, at: LM_CHEEK_L, lines: [CHEEKS, [168, 13]],
+    fmt: function (x) { return x.toFixed(2); } });
+  prop("thirds", 152, [[9, 2], [2, 152]], [9, 2, 152]);
+  prop("cheekJaw", 58, [[58, 288], CHEEKS]);
+  var sym = mesh3dSymmetry(P, yaw);
+  out.push({ s: (ru ? "Симметрия" : "Symmetry") + (sym.rough ? (ru ? " · фото не ровное" : " · photo not straight") : ""),
+    v: sym.value, at: 10, above: true, faint: true, lines: [[10, 152]].concat(MESH3D_SYM_PAIRS),
+    fmt: function (x) { return (sym.rough ? "≈" : "") + Math.round(x) + "%"; } });
+  if (full) {
+    prop("lenWidth", 10, [[10, 152], CHEEKS]);
+    prop("noseFace", 2, [[168, 2], [10, 152]]);
+    prop("eyeGap", 362, [[133, 362], [33, 133], [362, 263]]);
+    prop("lipsFace", 291, [[61, 291], CHEEKS]);
+    prop("foreCheek", 251, [[21, 251], CHEEKS]);
+  }
+  out.forEach(function (m) { if (m.at === 10 && !m.faint) m.above = true; });
+  return out;
+}
+
+// Рисует сетку в host и возвращает { stop }. o.photo — холст с фото: тогда сетка сначала
+// ложится на снимок и замеры идут по шагам с остающимися плашками (гейт). Без фото сетка
+// сразу в 3D и замеры по кругу по одному, o.chips — кнопки выбора замера (отчёт).
+function mesh3dMount(host, o) {
+  var M = mesh3dPoints(o.lm, o.matrix), P = M.P, P0 = M.P0, ms = o.measures;
+  var edges = (MESH3D_EDGES || []).slice().sort(function (a, b) {
+    return Math.min(P[a[0]].Y, P[a[1]].Y) - Math.min(P[b[0]].Y, P[b[1]].Y);
+  });
+  var order = P.map(function (p, i) { return i; }).sort(function (a, b) { return P[a].Y - P[b].Y; });
+  var ru = lang() === "ru";
+  host.innerHTML = '<canvas></canvas><div class="mesh3d-zoom">' +
+    '<button type="button" data-z="1.25" aria-label="' + (ru ? "Приблизить" : "Zoom in") + '">+</button>' +
+    '<button type="button" data-z="0.8" aria-label="' + (ru ? "Отдалить" : "Zoom out") + '">&minus;</button></div>' +
+    (o.photo ? '<div class="mesh3d-status"><span></span><b></b></div>' : '');
+  var cv = host.querySelector("canvas"), g = cv.getContext("2d");
+  var stA = host.querySelector(".mesh3d-status span"), stB = host.querySelector(".mesh3d-status b");
+  var seq = !!o.photo;
+  var T_P = seq ? 1000 : 600, T_E = seq ? 1100 : 800, T_F = seq ? 1000 : 0, T_M = seq ? 1200 : 2600;
+  var GOLD = "196,164,107", GOLD_HI = "232,212,160";
+  var t0 = performance.now(), raf = 0, alive = true, visible = true, io = null;
+  var yaw = 0, pitch = 0, zoom = 1, userTurned = 0, lastFade = 0, drag = null, pinch = null, pointers = {}, pick = -1, pickT = 0;
+
+  if (o.chips) {
+    o.chips.innerHTML = ms.map(function (m, i) {
+      return '<button type="button" class="mesh3d-chip" data-i="' + i + '"><span>' + m.s + '</span><b>' + m.fmt(m.v) + '</b></button>';
+    }).join("") + (o.locked ? '<span class="mesh3d-chip locked">&#128274; ' + (ru ? "ещё " + o.locked + " замеров в полном отчёте" : o.locked + " more in the full report") + '</span>' : "");
+    o.chips.onclick = function (e) {
+      var b = e.target.closest && e.target.closest("button[data-i]");
+      if (!b) return;
+      pick = +b.getAttribute("data-i"); pickT = performance.now();
+    };
+  }
+  if ("IntersectionObserver" in window) {
+    io = new IntersectionObserver(function (en) { visible = en[0].isIntersecting; });
+    io.observe(host);
+  }
+
+  var ease = function (x) { return x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3); };
+  var autoYaw = function (t) { return Math.sin((t - T_P - T_E) / 2600) * 0.55; };
+  function seg(A, B) { g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(B.x, B.y); g.stroke(); }
+
+  function pill(x, y, caption, value, alpha, live, d) {
+    var W = g.canvas.width, H = g.canvas.height;
+    d *= Math.max(0.8, Math.min(1, W / d / 420)); // на узком экране плашки чуть меньше
+    g.font = "500 " + (8.5 * d) + "px system-ui, sans-serif";
+    var cw = g.measureText(caption.toUpperCase()).width + caption.length * 1.2 * d;
+    g.font = "400 " + (20 * d) + "px 'Cormorant Garamond', Georgia, serif";
+    var w = Math.max(cw, g.measureText(value).width) + 18 * d, h = 40 * d;
+    x = Math.max(6 * d, Math.min(W - w - 6 * d, x - w / 2));
+    y = Math.max(6 * d, Math.min(H - h - (seq ? 34 : 6) * d, y - h / 2));
+    g.globalAlpha = alpha;
+    g.fillStyle = "rgba(14,12,9,.82)";
+    g.strokeStyle = "rgba(" + (live ? GOLD_HI : GOLD) + "," + (live ? 0.9 : 0.35) + ")";
+    g.lineWidth = d;
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x, y, w, h, 8 * d); else g.rect(x, y, w, h); // roundRect нет в старых Safari
+    g.fill(); g.stroke();
+    g.fillStyle = "rgb(138,138,138)";
+    g.font = "500 " + (8.5 * d) + "px system-ui, sans-serif";
+    if ("letterSpacing" in g) g.letterSpacing = (1.2 * d) + "px";
+    g.fillText(caption.toUpperCase(), x + 9 * d, y + 14 * d);
+    if ("letterSpacing" in g) g.letterSpacing = "0px";
+    g.fillStyle = "rgb(" + GOLD_HI + ")";
+    g.font = "400 " + (20 * d) + "px 'Cormorant Garamond', Georgia, serif";
+    g.fillText(value, x + 9 * d, y + 33 * d);
+    g.globalAlpha = 1;
+  }
+
+  function frame(now) {
+    if (!alive) return;
+    raf = requestAnimationFrame(frame);
+    if (!visible || !host.isConnected) return;
+    var d = window.devicePixelRatio || 1, W = Math.round(cv.clientWidth * d), H = Math.round(cv.clientHeight * d);
+    if (!W || !H) return;
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    var t = now - t0, tRot = T_P + T_E, tM = tRot + T_F;
+    var s = (W * (W / d < 420 ? 0.56 : 0.5) * zoom) / M.span, CX = W / 2, CY = H * (seq ? 0.46 : 0.5);
+    var fade = seq ? ease((t - tRot) / T_F) : 1;      // 0 — фото, 1 — чистая сетка в 3D
+    lastFade = fade;
+    if (!drag && !pinch && t > tRot) yaw = autoYaw(t) * fade + userTurned;
+    var cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), f = M.span * 2.6;
+    var proj = P.map(function (q, i) {
+      // Пока видно фото, сетка лежит на нём как есть; с угасанием фото выпрямляется в анфас.
+      var p = P0[i], X = p.X + (q.X - p.X) * fade, Y = p.Y + (q.Y - p.Y) * fade, Z = p.Z + (q.Z - p.Z) * fade;
+      var x = X * cy + Z * sy, z = -X * sy + Z * cy, y = Y * cp - z * sp;
+      z = Y * sp + z * cp;
+      var k = 1 / (1 + fade * z / f);                 // на фото проекция плоская, иначе сетка съедет с лица
+      return { x: CX + x * s * k, y: CY + y * s * k, z: z };
+    });
+
+    g.clearRect(0, 0, W, H);
+    if (o.photo && fade < 1) {
+      g.globalAlpha = 0.85 * (1 - fade);
+      g.drawImage(o.photo, CX - M.cx * s, CY - M.cy * s, o.photo.width * s, o.photo.height * s);
+      g.globalAlpha = 1;
+    }
+    var zMin = -M.span * 0.3, zMax = M.span * 0.25;
+    var depth = function (z) { return 1 - Math.min(1, Math.max(0, (z - zMin) / (zMax - zMin))); }; // ближе — ярче
+
+    var nE = Math.floor(edges.length * ease((t - T_P) / T_E)), i, A, B;
+    g.lineWidth = 0.55 * d;
+    for (i = 0; i < nE; i++) {
+      A = proj[edges[i][0]]; B = proj[edges[i][1]];
+      g.strokeStyle = "rgba(" + GOLD + "," + (0.06 + 0.34 * depth((A.z + B.z) / 2)) + ")";
+      seg(A, B);
+    }
+    // Контуры глаз, бровей, губ, носа и овала ярче и со свечением — так маска читается как лицо.
+    var cProg = ease((t - T_P - T_E * 0.6) / (T_E * 0.6));
+    if (cProg > 0) {
+      [[3.2, 0.10], [1.1, 0.75]].forEach(function (lw) {
+        g.lineWidth = lw[0] * d;
+        MESH3D_CONTOURS.forEach(function (c) {
+          var A = proj[c[0]], B = proj[c[1]];
+          g.strokeStyle = "rgba(" + GOLD_HI + "," + (lw[1] * cProg * (0.35 + 0.65 * depth((A.z + B.z) / 2))) + ")";
+          seg(A, B);
+        });
+      });
+    }
+    var nP = Math.floor(order.length * ease(t / T_P)), dotA = 1 - 0.75 * fade * (seq ? 1 : ease((t - tRot) / 600));
+    for (i = 0; i < nP; i++) {
+      var p = proj[order[i]];
+      g.fillStyle = "rgba(" + GOLD_HI + "," + ((0.25 + 0.65 * depth(p.z)) * dotA) + ")";
+      g.beginPath(); g.arc(p.x, p.y, d * 0.95, 0, 7); g.fill();
+    }
+    if (t < tRot) { // луч сканирования сверху вниз
+      var yy = CY + (M.top + (M.bottom - M.top) * Math.min(1, (t % T_P) / T_P)) * s;
+      var gr = g.createLinearGradient(0, yy - 26 * d, 0, yy + 2 * d);
+      gr.addColorStop(0, "rgba(" + GOLD + ",0)"); gr.addColorStop(1, "rgba(" + GOLD_HI + ",.35)");
+      g.fillStyle = gr; g.fillRect(CX - M.span * s * 0.6, yy - 26 * d, M.span * s * 1.2, 28 * d);
+    }
+
+    // Какие замеры видны: на гейте по шагам и остаются, в отчёте один по кругу или выбранный.
+    var shown = [], cur = -1;
+    if (t >= tM && ms.length) {
+      if (seq) {
+        cur = Math.floor((t - tM) / T_M);
+        for (i = 0; i <= Math.min(cur, ms.length - 1); i++) shown.push({ i: i, prog: (t - tM - i * T_M) / (T_M * 0.6), live: i === cur });
+      } else {
+        cur = pick >= 0 ? pick : Math.floor((t - tM) / T_M) % ms.length;
+        var since = pick >= 0 ? now - pickT : (t - tM) % T_M;
+        shown.push({ i: cur, prog: since / (T_M * 0.35), live: true });
+      }
+    }
+    shown.forEach(function (sh) {
+      var m = ms[sh.i], e = ease(sh.prog);
+      g.setLineDash(sh.live ? [] : [3 * d, 4 * d]);
+      g.lineWidth = (sh.live ? 1.4 : 0.9) * d;
+      m.lines.forEach(function (ln, li) {
+        var A = proj[ln[0]], B = proj[ln[1]], faint = m.faint && li > 0;
+        g.strokeStyle = "rgba(" + (sh.live ? GOLD_HI : GOLD) + "," + ((sh.live ? 0.95 : 0.4) * (faint ? 0.4 : 1)) + ")";
+        seg(A, { x: A.x + (B.x - A.x) * e, y: A.y + (B.y - A.y) * e });
+        if (sh.live && !faint) {
+          g.fillStyle = "rgba(" + GOLD_HI + "," + e + ")";
+          [A, B].forEach(function (Q) { g.beginPath(); g.arc(Q.x, Q.y, 2.4 * d, 0, 7); g.fill(); });
+        }
+      });
+      (m.ticks || []).forEach(function (n) { var p = proj[n]; seg({ x: p.x - 10 * d, y: p.y }, { x: p.x + 10 * d, y: p.y }); });
+      g.setLineDash([]);
+    });
+    shown.forEach(function (sh) { // плашки поверх линий, наружу от средней линии лица
+      var m = ms[sh.i], A = proj[m.at], e = ease(sh.prog), out = A.x < proj[168].x ? -1 : 1;
+      var reach = Math.min(70 * d, W * 0.16), lx = m.above ? A.x : A.x + out * reach, ly = m.above ? A.y - 46 * d : A.y;
+      g.strokeStyle = "rgba(" + GOLD + "," + (0.5 * e) + ")"; g.lineWidth = 0.8 * d;
+      seg(A, { x: lx, y: ly });
+      g.fillStyle = "rgba(" + GOLD_HI + "," + e + ")";
+      g.beginPath(); g.arc(A.x, A.y, 2 * d, 0, 7); g.fill();
+      pill(lx, ly, m.c || m.s, m.fmt(m.v * e), ease(sh.prog * 1.4), sh.live, d);
+    });
+    if (o.chips) {
+      var bs = o.chips.querySelectorAll("button[data-i]");
+      for (i = 0; i < bs.length; i++) bs[i].classList.toggle("on", +bs[i].getAttribute("data-i") === cur);
+    }
+    if (stA) {
+      var ph = t < T_P ? [ru ? "Ставим точки" : "Placing points", nP + " / " + P.length]
+        : t < tRot ? [ru ? "Строим сетку" : "Building mesh", nE + (ru ? " рёбер" : " edges")]
+        : cur < 0 ? [ru ? "Переходим в 3D" : "Going 3D", ""]
+        : cur < ms.length ? [(ru ? "Замер " : "Measure ") + (cur + 1) + (ru ? " из " : " of ") + ms.length, ms[cur].s]
+        : [ru ? "Геометрия готова" : "Geometry done", P.length + (ru ? " точек" : " points")];
+      stA.textContent = ph[0]; stB.textContent = ph[1];
+    }
+  }
+
+  // Вращение одним пальцем или мышью, масштаб — щипком, жестом трекпада и кнопками.
+  var clampZoom = function (z) { return Math.max(0.6, Math.min(2.6, z)); };
+  var gap = function () { var v = Object.keys(pointers).map(function (k) { return pointers[k]; }); return Math.hypot(v[0].x - v[1].x, v[0].y - v[1].y); };
+  var count = function () { return Object.keys(pointers).length; };
+  cv.addEventListener("pointerdown", function (e) {
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+    if (count() === 2) { drag = null; pinch = { d0: gap(), z0: zoom }; }
+    else if (count() === 1) drag = { x: e.clientX, y: e.clientY, yaw: yaw, pitch: pitch };
+  });
+  cv.addEventListener("pointermove", function (e) {
+    if (!pointers[e.pointerId]) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (pinch && count() === 2) { zoom = clampZoom(pinch.z0 * gap() / pinch.d0); return; }
+    if (!drag) return;
+    yaw = drag.yaw + (e.clientX - drag.x) / 120;
+    pitch = Math.max(-0.6, Math.min(0.6, drag.pitch - (e.clientY - drag.y) / 160));
+  });
+  function release(e) {
+    delete pointers[e.pointerId];
+    if (count() < 2) pinch = null;
+    if (drag && count() === 0) { userTurned = yaw - autoYaw(performance.now() - t0) * lastFade; drag = null; }
+  }
+  cv.addEventListener("pointerup", release);
+  cv.addEventListener("pointercancel", release);
+  // Колесо без ctrl листает страницу; щипок на трекпаде приходит как колесо с ctrl.
+  cv.addEventListener("wheel", function (e) {
+    if (!e.ctrlKey) return;
+    e.preventDefault(); zoom = clampZoom(zoom * Math.exp(-e.deltaY * 0.01));
+  }, { passive: false });
+  host.querySelector(".mesh3d-zoom").addEventListener("click", function (e) {
+    var z = e.target.getAttribute && e.target.getAttribute("data-z");
+    if (z) zoom = clampZoom(zoom * +z);
+  });
+
+  raf = requestAnimationFrame(frame);
+  return { stop: function () { alive = false; cancelAnimationFrame(raf); if (io) io.disconnect(); } };
+}
+
+// Блок сетки в отчёте. Только для свежего анализа: у отчёта из истории точки на странице
+// могут быть от другого фото.
+var _meshReport = null;
+function renderMeshBlock(isTeaser, skip) {
+  var card = document.getElementById("meshBlock");
+  if (!card) return;
+  if (_meshReport) { _meshReport.stop(); _meshReport = null; }
+  var lm = window._fmLandmarks, metrics = window._fmMetrics;
+  if (skip || !lm || !metrics || !MESH3D_EDGES) { card.classList.add("hidden"); return; }
+  var M = mesh3dPoints(lm, window._fmPoseMatrix);
+  var all = mesh3dMeasures(lm, metrics, M.P, M.yaw, true), base = mesh3dMeasures(lm, metrics, M.P, M.yaw, false);
+  _meshReport = mesh3dMount(document.getElementById("reportMesh"), {
+    lm: lm, matrix: window._fmPoseMatrix, measures: isTeaser ? base : all,
+    chips: document.getElementById("meshChips"), locked: isTeaser ? all.length - base.length : 0,
+  });
+  card.classList.remove("hidden");
+}
+
 function classifyFaceShape(metrics) {
   // Пороги отсчитываются от эталонного лица MediaPipe, спроецированного с 50 см:
   // лоб/скулы 0.974, челюсть/скулы 0.888, длина/ширина 1.337. Форма — это
@@ -1459,6 +1806,7 @@ async function processImage(img, sideImage) {
     var metrics   = computeFaceMetrics(lm);
     var mats = results.facialTransformationMatrixes;
     metrics.pose = (mats && mats[0]) ? headPose(mats[0].data) : null;
+    window._fmPoseMatrix = (mats && mats[0]) ? mats[0].data : null; // выпрямление 3D-сетки
     var shapeInfo = classifyFaceShape(metrics);
     window._fmLandmarks = lm;          // карточка, блок пропорций и рендер видео
     window._fmMetrics   = metrics;
@@ -1693,7 +2041,8 @@ function drawJawSymLine(lm, metrics) {
   ctx.font = fs + "px 'SF Mono',Consolas,monospace";
   ctx.fillStyle = "rgba(196,164,107,0.78)"; ctx.textAlign = "center"; ctx.textBaseline = "top";
   ctx.shadowBlur = 8;
-  ctx.fillText("SYM  " + Math.round(metrics.symmetryScore * 100) + "%", (ljaw.x + rjaw.x) / 2, midY + tick + 4);
+  // Число симметрии здесь больше не пишем: на 3D-сетке своя, по отражению половин лица,
+  // а две разные цифры за минуту выглядели бы ошибкой. symmetryScore по-прежнему уходит модели.
   ctx.restore();
 }
 
@@ -2401,6 +2750,7 @@ function renderAIReport(text, skipSideEffects, isTeaser) {
     }, 120);
   } else { scoreEl.textContent = "--"; }
   renderProportions(window._fmLandmarks, window._fmMetrics && window._fmMetrics.pose);
+  try { renderMeshBlock(isTeaser, skipSideEffects); } catch (e) { console.error(e); } // украшение не должно ломать отчёт
   renderRadar(parsed.categories);
   var tierEl = document.getElementById("tierBadge");
   if (tierEl) {
@@ -3770,14 +4120,30 @@ function gateGeoWord(r) {
 
 // Гейт стоит после скана, и раньше человек видел там только «?.?». Геометрия считается
 // на устройстве и токенов не стоит, поэтому часть результата отдаём до входа.
+var _meshGate = null;
 function renderGateGeo() {
   var host = document.getElementById("pwGeo");
   var box = document.querySelector("#paywall .pw-box");
   if (!host || !box) return;
   // Пейволл открывается и из кабинета, и из дуэли: там этого скана могло не быть.
   var show = _afterGate === startAI && _pendingAnalysis && window._fmLandmarks;
-  var rows = show ? gateGeoRows(computeProportions(window._fmLandmarks, window._fmMetrics && window._fmMetrics.pose)) : [];
-  box.classList.toggle("has-geo", rows.length > 0);
+  // Есть сетка — показываем её вместо строк пропорций. Перезапускаем только на новом скане:
+  // гейт перерисовывается при каждой смене шага (вход, подписка, оплата).
+  var meshHost = document.getElementById("pwMesh");
+  var mesh = !!(show && meshHost && MESH3D_EDGES && window._fmMetrics && window.cleanImageCanvas);
+  if (meshHost && (!mesh || meshHost._lm !== window._fmLandmarks)) {
+    if (_meshGate) { _meshGate.stop(); _meshGate = null; }
+    meshHost._lm = null; meshHost.innerHTML = "";
+  }
+  if (mesh && !_meshGate) {
+    var M = mesh3dPoints(window._fmLandmarks, window._fmPoseMatrix);
+    _meshGate = mesh3dMount(meshHost, { lm: window._fmLandmarks, matrix: window._fmPoseMatrix, photo: window.cleanImageCanvas,
+      measures: mesh3dMeasures(window._fmLandmarks, window._fmMetrics, M.P, M.yaw, false) });
+    meshHost._lm = window._fmLandmarks;
+  }
+  if (meshHost) meshHost.hidden = !mesh;
+  var rows = show && !mesh ? gateGeoRows(computeProportions(window._fmLandmarks, window._fmMetrics && window._fmMetrics.pose)) : [];
+  box.classList.toggle("has-geo", rows.length > 0 || mesh);
   host.innerHTML = rows.length ? rows.map(function (r) {
     return '<div class="prop-row"><span class="prop-name">' + r.label + '</span>' +
            '<span class="prop-val">' + r.value.toFixed(2) + '</span>' +
