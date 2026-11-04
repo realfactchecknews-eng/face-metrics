@@ -156,7 +156,7 @@ function start(image) {
   const res = landmarker.detect(img);
   const lm = res.faceLandmarks && res.faceLandmarks[0];
   if (!lm) { $("stTxt").textContent = "Лицо не найдено, попробуй другое фото"; $("drop").hidden = false; return; }
-  const W = img.naturalWidth, H = img.naturalHeight;
+  const W = img.width, H = img.height;
   // MediaPipe отдаёт x, y в долях кадра, а z примерно в масштабе ширины: приводим к пикселям.
   P = lm.map((p) => ({ X: p.x * W, Y: p.y * H, Z: p.z * W }));
   const xs = P.map((p) => p.X), ys = P.map((p) => p.Y);
@@ -198,7 +198,7 @@ function pill(x, y, caption, value, alpha, live, d) {
   ctx.fillStyle = "rgba(14,12,9,.82)";
   ctx.strokeStyle = `rgba(${live ? GOLD_HI : GOLD},${live ? 0.9 : 0.35})`;
   ctx.lineWidth = 1 * d;
-  ctx.beginPath(); ctx.roundRect(x, y, w, h, 8 * d); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, 8 * d); else ctx.rect(x, y, w, h); ctx.fill(); ctx.stroke(); // roundRect нет в старых Safari
   ctx.fillStyle = "rgba(138,138,138,1)";
   ctx.font = `500 ${8.5 * d}px system-ui, sans-serif`;
   ctx.letterSpacing = `${1.2 * d}px`;
@@ -230,7 +230,7 @@ function frame(now) {
   ctx.clearRect(0, 0, Wc, Hc);
   if (fade < 1) {
     ctx.globalAlpha = 0.85 * (1 - fade);
-    ctx.drawImage(img, CX - cxp * s, CY - cyp * s, img.naturalWidth * s, img.naturalHeight * s);
+    ctx.drawImage(img, CX - cxp * s, CY - cyp * s, img.width * s, img.height * s);
     ctx.globalAlpha = 1;
   }
   const zMin = -P.span * 0.3, zMax = P.span * 0.25;
@@ -352,11 +352,30 @@ $("zout").addEventListener("click", () => { zoom = clampZoom(zoom / 1.25); });
 
 // ── Загрузка фото ──
 async function loadSrc(src) {
-  $("stTxt").textContent = "Загружаем модель точек…"; $("stNum").textContent = "";
-  await init();
-  const im = new Image();
-  im.onload = () => start(im);
-  im.src = src;
+  const say = (a, b = "") => { $("stTxt").textContent = a; $("stNum").textContent = b; };
+  try {
+    say("Загружаем модель точек…");
+    await init();
+    say("Открываем фото…");
+    const im = await new Promise((ok, bad) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => bad(new Error("фото не открылось, попробуй JPG"));
+      i.src = src;
+    });
+    // Как на сайте: точки ищем на холсте, а не на <img>. Снимок с телефона сначала уменьшаем —
+    // 12 мегапикселей телефон разбирает долго, а точности это не добавляет.
+    const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+    say("Ищем лицо…");
+    await new Promise((r) => setTimeout(r, 30)); // дать браузеру показать статус до тяжёлого шага
+    start(c);
+  } catch (e) {
+    console.error(e);
+    say("Ошибка: " + (e && e.message ? e.message : e));
+  }
 }
 const drop = $("drop");
 $("file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) loadSrc(URL.createObjectURL(f)); });
@@ -365,7 +384,9 @@ drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) loadSrc(URL.createObjectURL(f)); });
 $("replay").addEventListener("click", replay);
 $("another").addEventListener("click", () => { cancelAnimationFrame(raf); ctx.clearRect(0, 0, cv.width, cv.height); $("drop").hidden = false; $("file").value = ""; $("gate").classList.remove("on"); $("list").innerHTML = ""; $("zoom").hidden = true; });
-window.loadFromUrl = loadSrc; // для проверки со стенда без диалога выбора файла
+window.loadFromUrl = loadSrc;
+// Ошибку в анимации тоже показываем на экране: на телефоне консоли не видно.
+addEventListener("error", (e) => { $("stTxt").textContent = "Ошибка: " + e.message; }); // для проверки со стенда без диалога выбора файла
 fit();
 </script>
 </html>
