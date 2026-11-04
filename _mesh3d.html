@@ -132,9 +132,12 @@ function measures(P) {
   const MID = [10, 151, 9, 168, 6, 197, 195, 5, 4, 1, 2, 164, 0, 17, 18, 200, 199, 175, 152];
   const mx = MID.reduce((sum, i) => sum + P[i].X, 0) / MID.length, ipd = dist(P[33], P[263]);
   const dev = Math.sqrt(pairs.reduce((sum, [l, r]) => sum + (Math.hypot(2 * mx - P[l].X - P[r].X, P[l].Y - P[r].Y) / ipd) ** 2, 0) / pairs.length);
-  // С поворота больше 12° скрытую половину лица MediaPipe дорисовывает сам: там отклонение
-  // на калибровке скакало до 13% у симметричных лиц. Такой цифре не верим.
-  const sym = P.yaw > 12 ? null : Math.max(0, Math.min(100, 100 - dev * 550));
+  // С поворота больше 12° скрытую половину лица MediaPipe дорисовывает сам и врёт по горизонтали:
+  // ровные лица в три четверти давали 10-17% и симметрию ~19%. Тогда берём только расхождение
+  // по вертикали — у них 3-4%, а поднятый уголок рта всё равно даёт 7-9%. Цифра с «≈».
+  const rough = P.yaw > 12;
+  const devY = Math.sqrt(pairs.reduce((sum, [l, r]) => sum + ((P[l].Y - P[r].Y) / ipd) ** 2, 0) / pairs.length);
+  const sym = Math.max(0, Math.min(100, rough ? 100 - devY * 450 : 100 - dev * 550));
   return [
     { k: "Кантальный наклон", v: ct, fmt: (x) => (x > 0 ? "+" : "") + x.toFixed(1) + "°", h: "Угол между внутренним и внешним уголком глаза",
       s: "Наклон глаз", at: 263, side: 1, lines: [[133, 33], [362, 263]] },
@@ -144,9 +147,10 @@ function measures(P) {
       s: "Средняя / нижняя", at: 152, side: 1, lines: [[168, 2], [2, 152]], ticks: [168, 2, 152] },
     { k: "Челюсть к скулам", v: jaw, fmt: (x) => Math.round(x * 100) + "%", h: "Ширина в углах челюсти относительно ширины скул",
       s: "Челюсть / скулы", at: 172, side: -1, lines: [[172, 397], [234, 454]] },
-    { k: "Симметрия", v: sym, fmt: (x) => Math.round(x) + "%",
-      h: sym == null ? "Голова повёрнута — для симметрии нужно фото строго в анфас" : "Левая половина лица, отражённая на правую: насколько совпали 20 пар точек",
-      s: "Симметрия", at: 10, side: 0, faint: true, lines: [[10, 152], ...pairs.map(([l, r]) => [l, r])] },
+    { k: "Симметрия", v: sym, fmt: (x) => (rough ? "≈" : "") + Math.round(x) + "%",
+      h: rough ? "Фото не ровное: голова повёрнута, цифра приблизительная. Для точной — фото строго в анфас"
+        : "Левая половина лица, отражённая на правую: насколько совпали 20 пар точек",
+      s: rough ? "Симметрия · фото не ровное" : "Симметрия", at: 10, side: 0, faint: true, lines: [[10, 152], ...pairs.map(([l, r]) => [l, r])] },
   ];
 }
 
@@ -213,7 +217,7 @@ function replay() {
   cancelAnimationFrame(raf); fit(); raf = requestAnimationFrame(frame);
 }
 
-const show = (m, prog) => m.v == null ? "анфас?" : m.fmt(m.v * ease(prog));
+const show = (m, prog) => m.fmt(m.v * ease(prog));
 const ease = (x) => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
 const autoYaw = (t) => Math.sin((t - T_POINTS - T_EDGES) / 2600) * 0.55;
 
