@@ -121,11 +121,20 @@ function measures(P) {
   const fwhr = dist(P[234], P[454]) / dist(P[9], P[0]);
   const thirds = dist(P[168], P[2]) / dist(P[2], P[152]);
   const jaw = dist(P[172], P[397]) / dist(P[234], P[454]);
-  // Симметрия: насколько парные точки одинаково далеко от средней линии 168–152.
-  const a = P[168], b = P[152], L = dist(a, b);
-  const off = (p) => Math.abs((b.X - a.X) * (a.Y - p.Y) - (a.X - p.X) * (b.Y - a.Y)) / L;
-  const pairs = [[33, 263], [133, 362], [61, 291], [234, 454], [172, 397], [70, 300], [98, 327]];
-  const dev = pairs.reduce((s, [l, r]) => s + Math.abs(off(P[l]) - off(P[r])) / dist(P[234], P[454]), 0) / pairs.length;
+  // Симметрия: отражаем левую половину выпрямленной сетки на правую и меряем, на сколько
+  // пары точек разошлись по обеим осям, в долях расстояния между глазами. Старая версия брала
+  // только расстояние до средней линии и пропускала гримасы: поднятый уголок рта её не двигал.
+  // Среднеквадратичное, а не среднее: гримаса задевает 5-6 пар из 20, и в среднем растворяется.
+  // Калибровка 42 лица в анфас: медиана 1.7%, худшее 6.7% -> 91% и 63%. Те же лица с поднятым
+  // на 0.15 межглазного уголком рта: 7.4-10.2% -> 59-44%. Диапазоны не пересекаются.
+  const pairs = [[33, 263], [133, 362], [159, 386], [145, 374], [70, 300], [105, 334], [107, 336], [98, 327], [50, 280],
+    [61, 291], [37, 267], [84, 314], [40, 270], [91, 321], [172, 397], [136, 365], [176, 400], [234, 454], [127, 356], [58, 288]];
+  const MID = [10, 151, 9, 168, 6, 197, 195, 5, 4, 1, 2, 164, 0, 17, 18, 200, 199, 175, 152];
+  const mx = MID.reduce((sum, i) => sum + P[i].X, 0) / MID.length, ipd = dist(P[33], P[263]);
+  const dev = Math.sqrt(pairs.reduce((sum, [l, r]) => sum + (Math.hypot(2 * mx - P[l].X - P[r].X, P[l].Y - P[r].Y) / ipd) ** 2, 0) / pairs.length);
+  // С поворота больше 12° скрытую половину лица MediaPipe дорисовывает сам: там отклонение
+  // на калибровке скакало до 13% у симметричных лиц. Такой цифре не верим.
+  const sym = P.yaw > 12 ? null : Math.max(0, Math.min(100, 100 - dev * 550));
   return [
     { k: "Кантальный наклон", v: ct, fmt: (x) => (x > 0 ? "+" : "") + x.toFixed(1) + "°", h: "Угол между внутренним и внешним уголком глаза",
       s: "Наклон глаз", at: 263, side: 1, lines: [[133, 33], [362, 263]] },
@@ -135,8 +144,9 @@ function measures(P) {
       s: "Средняя / нижняя", at: 152, side: 1, lines: [[168, 2], [2, 152]], ticks: [168, 2, 152] },
     { k: "Челюсть к скулам", v: jaw, fmt: (x) => Math.round(x * 100) + "%", h: "Ширина в углах челюсти относительно ширины скул",
       s: "Челюсть / скулы", at: 172, side: -1, lines: [[172, 397], [234, 454]] },
-    { k: "Симметрия", v: 100 - dev * 100, fmt: (x) => x.toFixed(1) + "%", h: "Парные точки относительно средней линии",
-      s: "Симметрия", at: 10, side: 0, faint: true, lines: [[168, 152], ...pairs.map(([l, r]) => [l, r])] },
+    { k: "Симметрия", v: sym, fmt: (x) => Math.round(x) + "%",
+      h: sym == null ? "Голова повёрнута — для симметрии нужно фото строго в анфас" : "Левая половина лица, отражённая на правую: насколько совпали 20 пар точек",
+      s: "Симметрия", at: 10, side: 0, faint: true, lines: [[10, 152], ...pairs.map(([l, r]) => [l, r])] },
   ];
 }
 
@@ -181,6 +191,9 @@ function start(image) {
       return { X: o[0], Y: -o[1], Z: -o[2] };
     });
   }
+  // Поворот головы влево-вправо: куда смотрит ось «вперёд» канонической модели. В три четверти
+  // MediaPipe дорисовывает скрытую половину лица наугад, и симметрия по ней врёт.
+  P.yaw = mx ? Math.abs(Math.atan2(mx.data[8], mx.data[10]) * 180 / Math.PI) : 0;
   window._mesh = { P0, P }; // для проверки со стенда
   P.span = span;
   P.top = Math.min(...ys) - cyp; P.bottom = Math.max(...ys) - cyp;
@@ -200,6 +213,7 @@ function replay() {
   cancelAnimationFrame(raf); fit(); raf = requestAnimationFrame(frame);
 }
 
+const show = (m, prog) => m.v == null ? "анфас?" : m.fmt(m.v * ease(prog));
 const ease = (x) => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
 const autoYaw = (t) => Math.sin((t - T_POINTS - T_EDGES) / 2600) * 0.55;
 
@@ -316,7 +330,7 @@ function frame(now) {
     labels.push({ m, i, prog, live });
     const el = $("m" + i);
     el.classList.add("on"); el.classList.toggle("now", live);
-    $("v" + i).textContent = m.fmt(m.v * ease(prog));
+    $("v" + i).textContent = show(m, prog);
   });
   // Плашки — поверх всех линий, с выноской к своей точке.
   for (const { m, prog, live } of labels) {
@@ -327,7 +341,7 @@ function frame(now) {
     seg(A, { x: lx, y: ly });
     ctx.fillStyle = `rgba(${GOLD_HI},${ease(prog)})`;
     ctx.beginPath(); ctx.arc(A.x, A.y, 2 * d, 0, 7); ctx.fill();
-    pill(lx, ly, m.s, m.fmt(m.v * ease(prog)), ease(prog * 1.4), live, d);
+    pill(lx, ly, m.s, show(m, prog), ease(prog * 1.4), live, d);
   }
   if (cur >= M.length) $("gate").classList.add("on");
 
