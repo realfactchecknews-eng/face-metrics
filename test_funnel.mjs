@@ -6,6 +6,7 @@ const w = readFileSync('worker.js', 'utf8');
 const a = readFileSync('app.js', 'utf8');
 const { funnelHit, funnelText, FUNNEL_STEPS } = new Function('cors',
   w.match(/^const FUNNEL_STEPS = \[[\s\S]*?^\];/m)[0] + '\n' +
+  w.match(/^const FUNNEL_FAIL_CODE = .*$/m)[0] + '\n' +
   w.match(/^async function funnelHit[\s\S]*?^\}/m)[0] + '\n' +
   w.match(/^async function funnelText[\s\S]*?^\}/m)[0] +
   '\nreturn { funnelHit, funnelText, FUNNEL_STEPS };')((body, status) => ({ body, status }));
@@ -21,15 +22,26 @@ assert.equal([...store].find(([k]) => k.endsWith(':visit'))[1], '2', 'повто
 for (const x of [{ step: 'hack' }, { step: '__proto__' }, {}, 'bad']) await funnelHit(req(x), env);
 assert.equal(store.size, 2, 'неизвестный шаг и мусор ключей не создают');
 
+// Ошибки по кодам: известный код считается как есть, произвольная строка — как other.
+for (const code of ['E-REF', 'E-REF', 'H502', 'x'.repeat(500)]) await funnelHit(req({ step: 'ai_fail', code }), env);
+const errKeys = [...store.keys()].filter((k) => k.startsWith('fnerr:'));
+assert.equal(errKeys.length, 1, 'коды одного дня лежат в одном ключе');
+assert.deepEqual(JSON.parse(store.get(errKeys[0])), { 'E-REF': 2, H502: 1, other: 1 });
+await funnelHit(req({ step: 'visit', code: 'E-REF' }), env);
+assert.equal(JSON.parse(store.get(errKeys[0]))['E-REF'], 2, 'код без ai_fail не считается');
+
 const text = await funnelText(env, 7);
-assert.match(text, /Открыли сайт: 2 \(100%\)/);
-assert.match(text, /Увидели результат: 1 \(50%\)/);
+assert.match(text, /Открыли сайт: 3 \(100%\)/);
+assert.match(text, /Увидели результат: 1 \(33%\)/);
+assert.match(text, /Ошибки по кодам: E-REF 2, H502 1, other 1/);
 
 // Каждый шаг, который шлёт сайт, воркер должен знать: иначе он молча не посчитается.
-const sent = [...a.matchAll(/fmStep\("(\w+)"\)/g)].map((m) => m[1]);
+const sent = [...a.matchAll(/fmStep\("(\w+)"[,)]/g)].map((m) => m[1]);
 assert.ok(sent.length >= 9, 'шаги на сайте пропали');
 for (const s of new Set(sent)) assert.ok(FUNNEL_STEPS.some((x) => x[0] === s), 'воркер не знает шаг ' + s);
-assert.match(a, /fmStep\(data\.error === "pay" \? "gate_pay" : "ai_fail"\)/, 'отказ сервера должен считаться');
+assert.match(a, /else fmStep\("ai_fail", data\.code \|\| data\.error\)/, 'отказ сервера должен считаться с кодом');
+for (const s of ['auth_ok', 'sub_ok']) assert.ok(sent.includes(s), 'сайт не шлёт ' + s);
+assert.match(a, /fmStep\("gate_" \+ gs\)/, 'гейт после входа снова не считается');
 
 // Слова на гейте: положение относительно среднего, без оценки.
 const gateGeoWord = new Function(a.match(/^function gateGeoWord[\s\S]*?^\}/m)[0] + '; return gateGeoWord;')();

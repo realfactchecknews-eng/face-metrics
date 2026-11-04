@@ -5979,18 +5979,31 @@ async function pickTip(env, tgid, week) {
 // цифры ориентировочные. Для денег считать по translog, для точности нужен Analytics Engine.
 const FUNNEL_STEPS = [
   ['visit', 'Открыли сайт'], ['upload', 'Загрузили фото'], ['scan_start', 'Запустили скан'],
-  ['scan_done', 'Скан завершён'], ['gate_auth', 'Гейт: вход'], ['gate_sub', 'Гейт: подписка'],
-  ['gate_pay', 'Гейт: оплата'], ['ai_start', 'Пошли в модель'], ['result', 'Увидели результат'],
+  ['scan_done', 'Скан завершён'], ['gate_auth', 'Гейт: вход'], ['auth_ok', 'Вошли с гейта'],
+  ['gate_sub', 'Гейт: подписка'], ['sub_ok', 'Подписались с гейта'], ['gate_pay', 'Гейт: оплата'], ['ai_start', 'Пошли в модель'], ['result', 'Увидели результат'],
   ['ai_fail', 'Ошибка модели'],
 ];
 
+// Коды ошибок анализа: E-* от воркера (explainAiError, E-REF, E-LEN), отказы до модели
+// (auth, limit…), H5xx/NET/JS — сбой на стороне браузера. Всё прочее — other: эндпоинт
+// открыт, и произвольная строка не должна плодить ключи.
+const FUNNEL_FAIL_CODE = /^(E-[A-Z]{2,4}|E-\d{3}|H\d{3}|NET|JS|auth|sub|limit|ip|global|img|bad|server)$/;
+
 async function funnelHit(request, env) {
-  let step = null;
-  try { step = (await request.json()).step; } catch { /* мусор не считаем */ }
+  let step = null, code = null;
+  try { ({ step, code } = await request.json()); } catch { /* мусор не считаем */ }
   if (FUNNEL_STEPS.some((s) => s[0] === step)) {
-    const key = `fn:${new Date().toISOString().slice(0, 10)}:${step}`;
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `fn:${day}:${step}`;
     const n = parseInt(await env.RATE_LIMIT.get(key) || '0', 10);
     await env.RATE_LIMIT.put(key, String(n + 1), { expirationTtl: 60 * 60 * 24 * 90 });
+    if (step === 'ai_fail') {
+      const c = FUNNEL_FAIL_CODE.test(String(code)) ? String(code) : 'other';
+      let errs = {};
+      try { errs = JSON.parse(await env.RATE_LIMIT.get(`fnerr:${day}`) || '{}'); } catch { /* битое — начнём заново */ }
+      errs[c] = (errs[c] || 0) + 1;
+      await env.RATE_LIMIT.put(`fnerr:${day}`, JSON.stringify(errs), { expirationTtl: 60 * 60 * 24 * 90 });
+    }
   }
   return cors(null, 204);
 }
@@ -6002,8 +6015,14 @@ async function funnelText(env, days) {
     return { label, n: vals.reduce((sum, v) => sum + (parseInt(v || '0', 10)), 0) };
   }));
   const visits = lines[0].n;
+  const errs = {};
+  for (const raw of await Promise.all(dates.map((d) => env.RATE_LIMIT.get(`fnerr:${d}`)))) {
+    try { for (const [c, n] of Object.entries(JSON.parse(raw || '{}'))) errs[c] = (errs[c] || 0) + n; } catch { /* пропускаем */ }
+  }
+  const errLine = Object.entries(errs).sort((x, y) => y[1] - x[1]).map(([c, n]) => `${c} ${n}`).join(', ');
   return `📊 Воронка сайта, дней: ${days} (UTC, сессии, цифры ориентировочные)\n\n`
-    + lines.map((l) => `${l.label}: ${l.n}${visits ? ` (${Math.round(l.n / visits * 100)}%)` : ''}`).join('\n');
+    + lines.map((l) => `${l.label}: ${l.n}${visits ? ` (${Math.round(l.n / visits * 100)}%)` : ''}`).join('\n')
+    + (errLine ? `\n\nОшибки по кодам: ${errLine}` : '');
 }
 
 // Человекочитаемые названия категорий - для подписи совета.

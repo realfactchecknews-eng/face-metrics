@@ -648,14 +648,14 @@ document.getElementById("frontRemove").addEventListener("click", function(e) {
 
 // Счётчик воронки: каждый шаг считается один раз за сессию вкладки, то есть это люди, а
 // не повторные анализы. Beacon не держит страницу и не ломает её, если воркер не ответил.
-function fmStep(step) {
+function fmStep(step, code) {
   if (location.hostname === "localhost" || location.hostname === "127.0.0.1") return;
   try {
     var key = "fm-step-" + step;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");
   } catch (e) { /* без хранилища шаг может посчитаться повторно */ }
-  try { navigator.sendBeacon(WORKER_URL + "/funnel", new Blob([JSON.stringify({ step: step })], { type: "text/plain" })); } catch (e) {}
+  try { navigator.sendBeacon(WORKER_URL + "/funnel", new Blob([JSON.stringify({ step: step, code: code })], { type: "text/plain" })); } catch (e) {}
 }
 
 function loadFrontFile(file) {
@@ -1844,7 +1844,7 @@ async function callAI(metrics, shapeInfo) {
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
-    if (data.error) { fmStep(data.error === "pay" ? "gate_pay" : "ai_fail"); stopAIHUD(); showGate(data); return; }
+    if (data.error) { if (data.error === "pay") fmStep("gate_pay"); else fmStep("ai_fail", data.code || data.error); stopAIHUD(); showGate(data); return; }
     var reportText = data.text || t("emptyAnswer");
     // Дерзкий режим — второй запрос поверх готового отчёта (балл считает нейтральный
     // промпт, см. personaPrompt). Ждём его ДО показа: иначе человек видит вежливый разбор,
@@ -1868,7 +1868,8 @@ async function callAI(metrics, shapeInfo) {
     if (typeof data.creditsLeft !== "undefined") updateQuotaChip(data.freeLeft, data.creditsLeft, data.subscribed);
     if (data.cashback) showCashbackToast();
   } catch (err) {
-    fmStep("ai_fail");
+    var em = String(err && err.message || ""), hm = /^HTTP (\d{3})/.exec(em);
+    fmStep("ai_fail", hm ? "H" + hm[1] : /fetch|network|load failed/i.test(em) ? "NET" : "JS");
     stopAIHUD();
     aiErrorText.textContent = t("errPrefix") + err.message;
     aiError.classList.remove("hidden");
@@ -3555,10 +3556,11 @@ function onLoginSuccess(st) {
   if (pw && !pw.classList.contains("hidden")) {
     // Страница жива и анализ ждёт за гейтом — сохранённая копия фото больше не нужна.
     if (_afterGate === startAI && _pendingAnalysis) clearResumePhotos();
+    fmStep("auth_ok");
     pwRecheck();
     return;
   }
-  if (resumeSavedAnalysis()) return;
+  if (resumeSavedAnalysis()) { fmStep("auth_ok"); return; }
   var lock = document.getElementById("pgLocked");
   if (lock && !lock.hidden && typeof pgLoad === "function") pgLoad();
 }
@@ -3783,7 +3785,9 @@ function renderGateGeo() {
   }).join("") + '<p class="prop-note">' + t("pwGeoNote") + '</p>' : "";
 }
 
+var _pwSubSeen = false; // видел гейт подписки — значит подписка после него считается шагом sub_ok
 function showPaywall(state, st) {
+  if (state === "sub") _pwSubSeen = true;
   // Сбой украшения не должен закрывать путь к входу и оплате.
   try { renderGateGeo(); } catch (e) { console.error(e); }
   var pw = document.getElementById("paywall");
@@ -3907,8 +3911,14 @@ function pwRecheck(silent) {
     _gateBusy = false;
     if (st.error) { if (!silent) showPaywall("auth"); return; }
     renderAccount(st);
+    if (st.subscribed && _pwSubSeen) fmStep("sub_ok");
     if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); runAfterGate(); }
-    else if (!silent) showPaywall(!st.subscribed ? "sub" : "pay", st);
+    else if (!silent) {
+      // После входа гейт подписки или оплаты тоже считаем: раньше их видели только те, кто пришёл уже залогиненным.
+      var gs = !st.subscribed ? "sub" : "pay";
+      if (_pendingAnalysis) fmStep("gate_" + gs);
+      showPaywall(gs, st);
+    }
   }).catch(function(){ _gateBusy = false; });
 }
 
