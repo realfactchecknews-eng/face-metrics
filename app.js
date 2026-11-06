@@ -724,6 +724,7 @@ analyzeBtn.addEventListener("click", function() {
 function runAnalysis() {
   if (!frontImg) return;
   fmStep("scan_start");
+  if (sideImg) fmStep("scan_side"); // сколько сканов идут с профилем: решаем, стоит ли разбирать профиль
   clearReport();
   errorBox.classList.add("hidden");
   resultsDiv.classList.add("hidden");
