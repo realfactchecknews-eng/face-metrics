@@ -3152,3 +3152,26 @@ body.analyzing #mainFooter .footer-extra { display: none; }
   transition: border-color .2s var(--ease), background .2s var(--ease);
 }
 .gate-secondary:hover { border-color: var(--accent); background: rgba(196, 164, 107, 0.08); }
+
+/* ═══ 3D-сетка лица: гейт и отчёт (mesh3dMount в app.js) ═══ */
+.mesh3d { position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 52vh; margin: 0 auto;
+  border-radius: 14px; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #16130e 0%, #0a0a0a 72%);
+  border: 1px solid #232323; touch-action: pan-y; }
+.mesh3d[hidden] { display: none; }
+.mesh3d canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.mesh3d canvas:active { cursor: grabbing; }
+.mesh3d-zoom { position: absolute; top: 10px; right: 10px; display: grid; gap: 6px; }
+.mesh3d-zoom button { width: 32px; height: 32px; border-radius: 9px; border: 1px solid #232323; background: rgba(14,12,9,.75);
+  color: #e8d4a0; font: 300 1.15rem/1 system-ui, sans-serif; cursor: pointer; padding: 0; }
+.mesh3d-status { position: absolute; left: 14px; right: 14px; bottom: 10px; display: flex; justify-content: space-between; gap: 10px;
+  font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); pointer-events: none; text-align: left; }
+.mesh3d-status b { font-weight: 400; color: var(--text-dim); }
+.pw-mesh { margin: 0 0 16px; }
+.pw-box.has-geo .pw-mock { margin-bottom: 8px; }
+.mesh3d-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+.mesh3d-chip { display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 11px; border-radius: 999px; border: 1px solid #232323;
+  background: #111; color: var(--text-dim); font: 400 .78rem system-ui, sans-serif; cursor: pointer; }
+.mesh3d-chip b { font: 400 1rem "Cormorant Garamond", Georgia, serif; color: #e8d4a0; }
+.mesh3d-chip.on { border-color: var(--accent); color: var(--text-bright); }
+.mesh3d-chip.locked { cursor: default; opacity: .6; }
+@media (max-width: 520px) { .pw-mesh { width: calc(100% + 32px); margin: 0 -16px 16px; } }

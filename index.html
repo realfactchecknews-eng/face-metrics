@@ -22,7 +22,7 @@
 <meta name="zen-verification" content="3OaMGH9M7VytOCY5pM7t4hjis97AQTIbLQ6TFWSDpoaOyhz5oCIbioCrn5yrwP9d" />
 
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=54" />
+<link rel="stylesheet" href="style.css?v=55" />
 
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
@@ -372,6 +372,12 @@
           <span id="tierBadge" class="tier-badge" hidden></span>
           <p id="overallDesc" class="overall-desc"></p>
         </div>
+        <div id="meshBlock" class="card scores-card mesh3d-card hidden">
+          <span class="eyebrow" data-i18n="meshTitle">Сетка лица &middot; 478 точек</span>
+          <div class="mesh3d" id="reportMesh"></div>
+          <div class="mesh3d-chips" id="meshChips"></div>
+          <p class="prop-note" data-i18n="meshNote">Крути пальцем, щипком приближай. Посчитано на твоём устройстве, фото никуда не уходит.</p>
+        </div>
         <div id="propBlock" class="card scores-card prop-block hidden"></div>
         <!-- Восьмиугольник по категориям. Рисуется из тех же баллов, что и полосы
              ниже, поэтому отдельных данных не требует. -->
@@ -601,6 +607,7 @@
       <div class="pw-mock-score">?.?<span>/8</span></div>
       <div class="pw-mock-bars"><i></i><i></i><i></i><i></i><i></i></div>
     </div>
+    <div class="mesh3d pw-mesh" id="pwMesh" hidden></div>
     <div class="prop-block pw-geo" id="pwGeo"></div>
     <span class="eyebrow" style="margin-bottom:10px">СКАНИРОВАНИЕ ЗАВЕРШЕНО</span>
     <h2 class="pw-title" id="pwTitle">Твой отчёт готов</h2>
@@ -638,7 +645,7 @@
      Модель assets/pill3d/scene.gltf — "Pill (Capsule)" by jaromir.ternavskiy,
      CC-BY-4.0, оставлена как исходник для пересъёмки:
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
-<script src="app.js?v=144"></script>
+<script src="app.js?v=145"></script>
 <script src="sharevideo.js?v=6"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════
