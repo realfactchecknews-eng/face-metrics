@@ -2114,6 +2114,22 @@ var PSL_SCALE_BANDS_METHOD =
 var PSL_SCALE_PROMPT = PSL_SCALE_HEAD + PSL_SCALE_BANDS;
 var PSL_SCALE_PROMPT_METHOD = PSL_SCALE_HEAD_METHOD + PSL_SCALE_BANDS_METHOD;
 
+// Обрыв сети на телефоне (NET в /funnel, ~15 в день) повторяем один раз, но только если
+// запрос упал быстро. Воркер списывает анализ после ответа модели, а модель думает дольше
+// FETCH_RETRY_MS, поэтому быстрый обрыв значит, что до списания дело не дошло. Долгий обрыв
+// не повторяем: ответ мог быть уже готов и списан, а повтор того же фото списал бы ещё раз.
+var FETCH_RETRY_MS = 4000;
+async function fetchAiOnce(body) {
+  var t0 = Date.now();
+  try {
+    return await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: body });
+  } catch (e) {
+    if (Date.now() - t0 > FETCH_RETRY_MS || !/fetch|network|load failed/i.test(String(e && e.message))) throw e;
+    await new Promise(function (r) { setTimeout(r, 1500); });
+    return await fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: body });
+  }
+}
+
 async function callAI(metrics, shapeInfo) {
   var aiReport    = document.getElementById("aiReport");
   var aiError     = document.getElementById("aiError");
@@ -2187,10 +2203,8 @@ async function callAI(metrics, shapeInfo) {
     var images = [oneToBase64(cleanImageCanvas || canvas)];
     if (cleanSideCanvas) images.push(oneToBase64(cleanSideCanvas));
     var acc = getAccount();
-    var res = await fetch(WORKER_URL, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: prompt, images: images, token: acc ? acc.token : null, lang: lang(), stable: STABLE_SCORE })
-    });
+    var body = JSON.stringify({ prompt: prompt, images: images, token: acc ? acc.token : null, lang: lang(), stable: STABLE_SCORE });
+    var res = await fetchAiOnce(body);
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
     if (data.error) { if (data.error === "pay") fmStep("gate_pay"); else fmStep("ai_fail", data.code || data.error); stopAIHUD(); showGate(data); return; }
