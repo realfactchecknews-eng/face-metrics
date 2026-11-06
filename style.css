@@ -3175,3 +3175,11 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 .mesh3d-chip.on { border-color: var(--accent); color: var(--text-bright); }
 .mesh3d-chip.locked { cursor: default; opacity: .6; }
 @media (max-width: 520px) { .pw-mesh { width: calc(100% + 32px); margin: 0 -16px 16px; } }
+
+/* ═══ Пример разбора на экране загрузки (initDemo в app.js) ═══ */
+.demo-card { max-width: 560px; margin: 28px auto 0; text-align: left; }
+.demo-card[hidden] { display: none; }
+.demo-title { font-weight: 300; font-size: 1.5rem; color: var(--text-bright); margin: 6px 0 14px; }
+.demo-mesh { max-height: 46vh; }
+.demo-list { margin: 14px 0 10px; padding-left: 18px; color: var(--text-dim); font-size: .9rem; line-height: 1.6; display: grid; gap: 6px; }
+.demo-cta { margin-top: 14px; width: 100%; }

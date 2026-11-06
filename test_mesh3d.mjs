@@ -50,4 +50,10 @@ assert.deepEqual(mesh3dPoints(lm, null).P, mesh3dPoints(lm, null).P0, 'без м
 // Сетка — украшение: её сбой не должен ломать ни гейт, ни отчёт.
 assert.match(a, /try \{ renderMeshBlock\(isTeaser, skipSideEffects\); \} catch/, 'сбой сетки ломает отчёт');
 assert.match(a, /try \{ renderGateGeo\(\); \} catch/, 'сбой сетки ломает гейт');
+// Пример до загрузки фото: эталонная маска целая, рёбра не выходят за точки, сбой прячет блок.
+const demo = JSON.parse(readFileSync('assets/demo-face.json', 'utf8'));
+assert.equal(demo.v.length, 468, 'в эталоне 468 точек');
+assert.ok(demo.e.length > 1000 && demo.e.every(([x, y]) => x >= 0 && y < 468 && x !== y), 'рёбра эталона битые');
+assert.match(a, /catch\(function \(\) \{ card\.hidden = true; \}\)/, 'не загрузился пример — блок должен прятаться');
+assert.match(a, /try \{ initDemo\(\); \} catch/, 'сбой примера не должен ломать страницу');
 console.log('3D-сетка: все проверки прошли');

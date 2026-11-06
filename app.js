@@ -129,6 +129,12 @@ var I18N = {
     pwLoginSub: "Log in with Telegram to unlock the result. One tap — no phone number, no password.",
     pwGeoNote: "These are proportions measured on your device, not a rating. Your PSL score and the full breakdown open next.",
     meshTitle: "Face mesh · 478 points",
+    demoEyebrow: "Sample breakdown",
+    demoTitle: "Here is what you get",
+    demoL1: "Free, once a week: PSL score from 0 to 8, tier, two categories and 5 measures on your 3D mesh",
+    demoL2: "Full report: all 8 categories, recommendations and 10 measures",
+    demoNote: "The sample is MediaPipe's reference face model, an averaged synthetic face. Your photo is not stored.",
+    demoCta: "Upload your photo",
     meshNote: "Drag to turn, pinch to zoom. Computed on your device, the photo goes nowhere.",
     pwGeoAbove: "above average", pwGeoNear: "near average", pwGeoBelow: "below average",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
@@ -261,6 +267,12 @@ var I18N = {
     pwLoginSub: "Войди через Telegram, чтобы открыть результат. Один тап — без номера и пароля.",
     pwGeoNote: "Это пропорции, замеренные на твоём устройстве, а не оценка. Балл PSL и полный разбор — дальше.",
     meshTitle: "Сетка лица · 478 точек",
+    demoEyebrow: "Пример разбора",
+    demoTitle: "Вот что ты получишь",
+    demoL1: "Бесплатно раз в неделю: балл PSL от 0 до 8, тир, две категории и 5 замеров на твоей 3D-сетке",
+    demoL2: "В полном отчёте: все 8 категорий, рекомендации и 10 замеров",
+    demoNote: "На примере — эталонная модель лица MediaPipe, усреднённое синтетическое лицо. Твоё фото не сохраняется.",
+    demoCta: "Загрузить своё фото",
     meshNote: "Крути пальцем, щипком приближай. Посчитано на твоём устройстве, фото никуда не уходит.",
     pwGeoAbove: "выше среднего", pwGeoNear: "около среднего", pwGeoBelow: "ниже среднего",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
@@ -544,6 +556,7 @@ var FM_FAST_LOAD = (function() {
 // Ссылки со статей (fwhr.html и т.п.) ведут на index.html#analyze —
 // сразу показываем экран загрузки фото, без интро/лендинга/меню.
 function jumpToAnalysis() {
+  fmStep("upload_view");
   var landing = document.getElementById("landingSection");
   if (landing && landing.parentNode) landing.remove();
   var menu = document.getElementById("menuScreen");
@@ -600,10 +613,12 @@ window.addEventListener("DOMContentLoaded", function() {
   }
   var beginBtn = document.getElementById("beginBtn");
   if (beginBtn) beginBtn.addEventListener("click", enterMenu);
+  try { initDemo(); } catch (e) { console.error(e); }
 });
 
 // Лендинг → полноэкранное меню.
 function enterMenu() {
+  fmStep("menu");
   var landing = document.getElementById("landingSection");
   var menu = document.getElementById("menuScreen");
   document.body.classList.add("entered");
@@ -619,6 +634,7 @@ function enterMenu() {
 
 // Меню → экран анализа (загрузка фото).
 function goToAnalysis() {
+  fmStep("upload_view");
   var menu = document.getElementById("menuScreen");
   if (menu) { menu.classList.remove("in"); setTimeout(function(){ menu.classList.add("hidden"); }, 420); }
   document.body.classList.add("post-landing");
@@ -1502,7 +1518,7 @@ function mesh3dMeasures(lm, metrics, P, yaw, full) {
 // сразу в 3D и замеры по кругу по одному, o.chips — кнопки выбора замера (отчёт).
 function mesh3dMount(host, o) {
   var M = mesh3dPoints(o.lm, o.matrix), P = M.P, P0 = M.P0, ms = o.measures;
-  var edges = (MESH3D_EDGES || []).slice().sort(function (a, b) {
+  var edges = (o.edges || MESH3D_EDGES || []).slice().sort(function (a, b) {
     return Math.min(P[a[0]].Y, P[a[1]].Y) - Math.min(P[b[0]].Y, P[b[1]].Y);
   });
   var order = P.map(function (p, i) { return i; }).sort(function (a, b) { return P[a].Y - P[b].Y; });
@@ -1716,6 +1732,32 @@ function mesh3dMount(host, o) {
 
   raf = requestAnimationFrame(frame);
   return { stop: function () { alive = false; cancelAnimationFrame(raf); if (io) io.disconnect(); } };
+}
+
+// Пример разбора на экране загрузки: 38% открывших сайт уходят, не загрузив фото, и часть —
+// потому что не знают, что получат, или боятся грузить лицо. Пример крутится на эталонной
+// модели MediaPipe (усреднённое синтетическое лицо, assets/demo-face.json — вершины и рёбра
+// из face_landmarker.task), а не на чьём-то фото. Данные грузятся, только когда блок виден.
+function initDemo() {
+  var card = document.getElementById("demoBlock");
+  if (!card || !("IntersectionObserver" in window)) return;
+  var cta = document.getElementById("demoCta");
+  if (cta) cta.addEventListener("click", function () { fileInput.click(); });
+  var io = new IntersectionObserver(function (en) {
+    if (!en[0].isIntersecting) return;
+    io.disconnect();
+    fmStep("demo_seen");
+    fetch("assets/demo-face.json").then(function (r) { return r.json(); }).then(function (d) {
+      // Эталон в сантиметрах, Y вверх, Z к зрителю — переводим в «пиксели кадра», как у живого скана.
+      var lm = d.v.map(function (p) { return { x: 500 + p[0] * 40, y: 500 - p[1] * 40, z: -p[2] * 40 }; });
+      var metrics = computeFaceMetrics(lm);
+      var P = mesh3dPoints(lm, null).P;
+      var base = mesh3dMeasures(lm, metrics, P, 0, false), all = mesh3dMeasures(lm, metrics, P, 0, true);
+      mesh3dMount(document.getElementById("demoMesh"), { lm: lm, matrix: null, edges: d.e, measures: base,
+        chips: document.getElementById("demoChips"), locked: all.length - base.length });
+    }).catch(function () { card.hidden = true; });
+  }, { rootMargin: "200px" });
+  io.observe(card);
 }
 
 // Блок сетки в отчёте. Только для свежего анализа: у отчёта из истории точки на странице
