@@ -7,6 +7,7 @@ const a = readFileSync('app.js', 'utf8');
 const { funnelHit, funnelText, FUNNEL_STEPS } = new Function('cors',
   w.match(/^const FUNNEL_STEPS = \[[\s\S]*?^\];/m)[0] + '\n' +
   w.match(/^const FUNNEL_FAIL_CODE = .*$/m)[0] + '\n' +
+  w.match(/^const FUNNEL_CODED = \{[\s\S]*?^\};/m)[0] + '\n' +
   w.match(/^async function funnelHit[\s\S]*?^\}/m)[0] + '\n' +
   w.match(/^async function funnelText[\s\S]*?^\}/m)[0] +
   '\nreturn { funnelHit, funnelText, FUNNEL_STEPS };')((body, status) => ({ body, status }));
@@ -30,8 +31,16 @@ assert.deepEqual(JSON.parse(store.get(errKeys[0])), { 'E-REF': 2, H502: 1, other
 await funnelHit(req({ step: 'visit', code: 'E-REF' }), env);
 assert.equal(JSON.parse(store.get(errKeys[0]))['E-REF'], 2, 'код без ai_fail не считается');
 
+// Срывы скана — в своём ключе, не в ошибках модели.
+for (const code of ['NOFACE', 'LEFTLOAD', 'E-REF']) await funnelHit(req({ step: 'scan_fail', code }), env);
+const scanKey = [...store.keys()].find((k) => k.startsWith('fnscan:'));
+assert.deepEqual(JSON.parse(store.get(scanKey)), { NOFACE: 1, LEFTLOAD: 1, other: 1 });
+assert.equal(JSON.parse(store.get(errKeys[0]))['E-REF'], 2, 'срыв скана не попадает в ошибки модели');
+for (const c of ['NOFACE', 'MP', 'DETECT', 'LEFTLOAD', 'LEFT', 'JS']) assert.ok(a.includes('"' + c + '"'), 'сайт не шлёт код ' + c);
+
 const text = await funnelText(env, 7);
 assert.match(text, /Открыли сайт: 3 \(100%\)/);
+assert.match(text, /Срывы скана: (NOFACE|LEFTLOAD|other) 1/);
 assert.match(text, /Увидели результат: 1 \(33%\)/);
 assert.match(text, /Ошибки по кодам: E-REF 2, H502 1, other 1/);
 

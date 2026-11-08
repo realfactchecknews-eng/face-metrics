@@ -5983,9 +5983,9 @@ async function pickTip(env, tgid, week) {
 // ponytail: чтение-запись в KV, параллельные запросы теряют единицы, и эндпоинт открыт, так что
 // цифры ориентировочные. Для денег считать по translog, для точности нужен Analytics Engine.
 const FUNNEL_STEPS = [
-  ['visit', 'Открыли сайт'], ['menu', 'Открыли меню'], ['upload_view', 'Экран загрузки'],
+  ['visit', 'Открыли сайт'], ['landing', 'Увидели лендинг'], ['menu', 'Открыли меню'], ['upload_view', 'Экран загрузки'],
   ['demo_seen', 'Увидели пример'], ['upload', 'Загрузили фото'], ['scan_start', 'Запустили скан'], ['scan_side', 'Скан с профилем'],
-  ['scan_done', 'Скан завершён'], ['gate_auth', 'Гейт: вход'], ['auth_ok', 'Вошли с гейта'],
+  ['scan_done', 'Скан завершён'], ['scan_fail', 'Скан сорвался'], ['gate_auth', 'Гейт: вход'], ['auth_ok', 'Вошли с гейта'],
   ['gate_sub', 'Гейт: подписка'], ['sub_ok', 'Подписались с гейта'], ['gate_pay', 'Гейт: оплата'], ['ai_start', 'Пошли в модель'], ['result', 'Увидели результат'],
   ['ai_fail', 'Ошибка модели'],
 ];
@@ -5994,6 +5994,11 @@ const FUNNEL_STEPS = [
 // (auth, limit…), H5xx/NET/JS — сбой на стороне браузера. Всё прочее — other: эндпоинт
 // открыт, и произвольная строка не должна плодить ключи.
 const FUNNEL_FAIL_CODE = /^(E-[A-Z]{2,4}|E-\d{3}|H\d{3}|NET|JS|auth|sub|limit|ip|global|img|bad|server)$/;
+// Шаги с кодом причины: ключ KV на день и допустимые коды (остальное — other).
+const FUNNEL_CODED = {
+  ai_fail: ['fnerr', FUNNEL_FAIL_CODE],
+  scan_fail: ['fnscan', /^(NOFACE|MP|DETECT|LEFTLOAD|LEFT|JS)$/],
+};
 
 async function funnelHit(request, env) {
   let step = null, code = null;
@@ -6003,12 +6008,13 @@ async function funnelHit(request, env) {
     const key = `fn:${day}:${step}`;
     const n = parseInt(await env.RATE_LIMIT.get(key) || '0', 10);
     await env.RATE_LIMIT.put(key, String(n + 1), { expirationTtl: 60 * 60 * 24 * 90 });
-    if (step === 'ai_fail') {
-      const c = FUNNEL_FAIL_CODE.test(String(code)) ? String(code) : 'other';
+    const coded = FUNNEL_CODED[step];
+    if (coded) {
+      const c = coded[1].test(String(code)) ? String(code) : 'other';
       let errs = {};
-      try { errs = JSON.parse(await env.RATE_LIMIT.get(`fnerr:${day}`) || '{}'); } catch { /* битое — начнём заново */ }
+      try { errs = JSON.parse(await env.RATE_LIMIT.get(`${coded[0]}:${day}`) || '{}'); } catch { /* битое — начнём заново */ }
       errs[c] = (errs[c] || 0) + 1;
-      await env.RATE_LIMIT.put(`fnerr:${day}`, JSON.stringify(errs), { expirationTtl: 60 * 60 * 24 * 90 });
+      await env.RATE_LIMIT.put(`${coded[0]}:${day}`, JSON.stringify(errs), { expirationTtl: 60 * 60 * 24 * 90 });
     }
   }
   return cors(null, 204);
@@ -6021,14 +6027,18 @@ async function funnelText(env, days) {
     return { label, n: vals.reduce((sum, v) => sum + (parseInt(v || '0', 10)), 0) };
   }));
   const visits = lines[0].n;
-  const errs = {};
-  for (const raw of await Promise.all(dates.map((d) => env.RATE_LIMIT.get(`fnerr:${d}`)))) {
-    try { for (const [c, n] of Object.entries(JSON.parse(raw || '{}'))) errs[c] = (errs[c] || 0) + n; } catch { /* пропускаем */ }
-  }
-  const errLine = Object.entries(errs).sort((x, y) => y[1] - x[1]).map(([c, n]) => `${c} ${n}`).join(', ');
+  const codeLine = async (prefix) => {
+    const errs = {};
+    for (const raw of await Promise.all(dates.map((d) => env.RATE_LIMIT.get(`${prefix}:${d}`)))) {
+      try { for (const [c, n] of Object.entries(JSON.parse(raw || '{}'))) errs[c] = (errs[c] || 0) + n; } catch { /* пропускаем */ }
+    }
+    return Object.entries(errs).sort((x, y) => y[1] - x[1]).map(([c, n]) => `${c} ${n}`).join(', ');
+  };
+  const errLine = await codeLine('fnerr'), scanLine = await codeLine('fnscan');
   return `📊 Воронка сайта, дней: ${days} (UTC, сессии, цифры ориентировочные)\n\n`
     + lines.map((l) => `${l.label}: ${l.n}${visits ? ` (${Math.round(l.n / visits * 100)}%)` : ''}`).join('\n')
-    + (errLine ? `\n\nОшибки по кодам: ${errLine}` : '');
+    + (errLine ? `\n\nОшибки по кодам: ${errLine}` : '')
+    + (scanLine ? `\nСрывы скана: ${scanLine}` : '');
 }
 
 // Человекочитаемые названия категорий - для подписи совета.

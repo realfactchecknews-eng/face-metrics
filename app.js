@@ -135,6 +135,9 @@ var I18N = {
     demoL2: "Full report: all 8 categories, recommendations and 10 measures",
     demoNote: "The sample is MediaPipe's reference face model, an averaged synthetic face. Your photo is not stored.",
     demoCta: "Upload your photo",
+    landQuote: "“Every measurement tells a story.”",
+    landPill: "TAKE THE GOLD PILL",
+    landFactEye: "LOOKSMAXX INSIGHT",
     meshNote: "Drag to turn, pinch to zoom. Computed on your device, the photo goes nowhere.",
     pwGeoAbove: "above average", pwGeoNear: "near average", pwGeoBelow: "below average",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
@@ -273,6 +276,18 @@ var I18N = {
     demoL2: "В полном отчёте: все 8 категорий, рекомендации и 10 замеров",
     demoNote: "На примере — эталонная модель лица MediaPipe, усреднённое синтетическое лицо. Твоё фото не сохраняется.",
     demoCta: "Загрузить своё фото",
+    landQuote: "«Каждый замер что-то говорит о лице.»",
+    landPill: "ПРИМИ ЗОЛОТУЮ ТАБЛЕТКУ",
+    landFactEye: "ФАКТ ИЗ ЛУКСМАКСИНГА",
+    landFacts: [
+      "Положительный кантальный наклон — «глаза охотника». Самая желанная форма глаз в луксмаксинге: читается как доминантность и половой диморфизм.",
+      "fWHR 1.9-2.1 — оптимальное отношение ширины лица к высоте. Связано с впечатлением доминантности и мужественной структурой.",
+      "Симметрия лица выше 90% встречается меньше чем у 4% людей. Важен каждый процент.",
+      "Идеальный гониальный угол 120-125° даёт чёткую линию челюсти. Острее — выглядит резко, тупее — челюсть «утопает».",
+      "Выдвинутая вперёд верхняя челюсть даёт гармонию средней трети, опору губам и убирает впалость под глазами.",
+      "Отношение ширины скул к ширине челюсти 1.2-1.35 — признак сильной структуры: широкие скулы, сужение к челюсти.",
+      "Межзрачковое расстояние 62-65 мм — идеальная посадка глаз. Шире или уже — и лицо воспринимается заметно иначе.",
+    ],
     meshNote: "Крути пальцем, щипком приближай. Посчитано на твоём устройстве, фото никуда не уходит.",
     pwGeoAbove: "выше среднего", pwGeoNear: "около среднего", pwGeoBelow: "ниже среднего",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
@@ -406,6 +421,16 @@ function applyLang() {
 }
 
 (function initLang() {
+  // Язык по устройству вместо экрана выбора: до меню не доходили 23% новых посетителей.
+  // Русский — если он есть среди языков устройства или заход из Telegram (весь наш трафик
+  // оттуда русский, а телефоны бывают на английском). Сменить можно кнопкой RU/EN в углу.
+  try {
+    if (!localStorage.getItem("fm-lang")) {
+      var ru = (navigator.languages || [navigator.language || ""]).some(function(l){ return /^(ru|uk|be|kk)/i.test(l); })
+        || isTgInAppBrowser() || /utm_source=telegram/.test(location.search);
+      localStorage.setItem("fm-lang", ru ? "ru" : "en");
+    }
+  } catch (e) {}
   applyLang();
   var lb = document.getElementById("langBtn");
   if (lb) lb.addEventListener("click", function(){ setLang(lang() === "en" ? "ru" : "en"); });
@@ -443,11 +468,12 @@ let _hudPhaseTimer   = null;
 function startLanding() {
   var el = document.getElementById("landingSection");
   if (!el) return;
+  fmStep("landing");
   var f = FM_FAST_LOAD ? 0.35 : 1; // короче при повторном заходе за последние ~12 минут
   el.classList.add("landing-visible");
   setTimeout(countUpStats, 200 * f);
   setTimeout(function() {
-    typeWriter(document.getElementById("landQuote"), "“Every measurement tells a story.”", FM_FAST_LOAD ? 14 : 38);
+    typeWriter(document.getElementById("landQuote"), t("landQuote"), FM_FAST_LOAD ? 14 : 38);
   }, 500 * f);
   setTimeout(function() {
     showFact(0);
@@ -490,7 +516,8 @@ function showFact(idx) {
   var el = document.getElementById("landFact");
   if (!el) return;
   el.classList.remove("fact-in");
-  setTimeout(function() { el.textContent = FACTS[idx]; el.classList.add("fact-in"); }, 320);
+  var facts = lang() === "ru" ? I18N.ru.landFacts : FACTS;
+  setTimeout(function() { el.textContent = facts[idx % facts.length]; el.classList.add("fact-in"); }, 320);
 }
 
 function transitionToAnalysis() {
@@ -569,7 +596,7 @@ function runIntro() {
   var overlay = document.getElementById("introOverlay");
   // Сохранённое фото после входа через Telegram — тоже сразу на экран анализа.
   var skipToAnalysis = location.hash === "#analyze" || !!readResumePhotos();
-  var delay = skipToAnalysis ? 0 : (FM_FAST_LOAD ? 500 : 2800);
+  var delay = skipToAnalysis ? 0 : (FM_FAST_LOAD ? 500 : 1300);
   if (overlay) {
     setTimeout(function() {
       overlay.classList.add("intro-exit");
@@ -588,29 +615,7 @@ function runIntro() {
 
 window.addEventListener("DOMContentLoaded", function() {
   fmStep("visit");
-  var gate = document.getElementById("langGate");
-  if (gate) {
-    if (localStorage.getItem("fm-lang-picked") === "1") {
-      gate.remove();
-      runIntro();
-    } else {
-      var btns = gate.querySelectorAll(".lg-btn");
-      for (var i = 0; i < btns.length; i++) {
-        btns[i].addEventListener("click", function(e) {
-          var chosen = e.currentTarget.getAttribute("data-lang");
-          localStorage.setItem("fm-lang-picked", "1");
-          setLang(chosen);
-          gate.classList.add("lg-exit");
-          gate.addEventListener("transitionend", function() {
-            gate.remove();
-            runIntro();
-          }, { once: true });
-        });
-      }
-    }
-  } else {
-    runIntro();
-  }
+  runIntro();
   var beginBtn = document.getElementById("beginBtn");
   if (beginBtn) beginBtn.addEventListener("click", enterMenu);
   try { initDemo(); } catch (e) { console.error(e); }
@@ -1804,9 +1809,18 @@ function classifyFaceShape(metrics) {
 }
 
 // -- Process image -----------------------------------------------------
+// Срыв скана с причиной: иначе разницу «запустили скан / скан завершён» не объяснить.
+// LEFTLOAD — закрыли страницу, пока грузилась модель точек, LEFT — во время анимации.
+// ponytail: pagehide на телефоне приходит не всегда (вкладку убили в фоне) — уходы занижены.
+var _scanStage = null;
+function scanFail(code) { _scanStage = null; fmStep("scan_fail", code); }
+window.addEventListener("pagehide", function() { if (_scanStage) scanFail(_scanStage === "load" ? "LEFTLOAD" : "LEFT"); });
+
 async function processImage(img, sideImage) {
   try {
+    _scanStage = "load";
     var fl = await initFaceLandmarker();
+    _scanStage = "detect";
     canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
 
@@ -1829,8 +1843,9 @@ async function processImage(img, sideImage) {
     var results = fl.detect(cleanImageCanvas);
     loadingCard.classList.add("hidden");
     if (!results.faceLandmarks || !results.faceLandmarks.length) {
-      showError(t("errNoFace")); return;
+      scanFail("NOFACE"); showError(t("errNoFace")); return;
     }
+    _scanStage = "anim";
     var raw = results.faceLandmarks[0];
     var w   = canvas.width, h = canvas.height;
     // z у MediaPipe примерно в том же масштабе, что x, поэтому множитель тот же.
@@ -1859,6 +1874,7 @@ async function processImage(img, sideImage) {
     });
   } catch (err) {
     console.error(err);
+    scanFail(_scanStage === "load" ? "MP" : _scanStage === "detect" ? "DETECT" : "JS");
     showError(t("errGeneric"));
   }
 }
@@ -4131,6 +4147,7 @@ function fetchStatus(fresh) {
 
 // Скан завершён → проверяем доступ; есть — генерим, нет — красивый пейволл.
 function gateThenAI(metrics, shapeInfo) {
+  _scanStage = null;
   fmStep("scan_done");
   _pendingAnalysis = { metrics: metrics, shapeInfo: shapeInfo };
   _afterGate = startAI;
