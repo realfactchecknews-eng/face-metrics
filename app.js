@@ -135,9 +135,6 @@ var I18N = {
     demoL2: "Full report: all 8 categories, recommendations and 10 measures",
     demoNote: "The sample is MediaPipe's reference face model, an averaged synthetic face. Your photo is not stored.",
     demoCta: "Upload your photo",
-    landQuote: "“Every measurement tells a story.”",
-    landPill: "TAKE THE GOLD PILL",
-    landFactEye: "LOOKSMAXX INSIGHT",
     meshNote: "Drag to turn, pinch to zoom. Computed on your device, the photo goes nowhere.",
     pwGeoAbove: "above average", pwGeoNear: "near average", pwGeoBelow: "below average",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Log in with Telegram",
@@ -276,18 +273,6 @@ var I18N = {
     demoL2: "В полном отчёте: все 8 категорий, рекомендации и 10 замеров",
     demoNote: "На примере — эталонная модель лица MediaPipe, усреднённое синтетическое лицо. Твоё фото не сохраняется.",
     demoCta: "Загрузить своё фото",
-    landQuote: "«Каждый замер что-то говорит о лице.»",
-    landPill: "ПРИМИ ЗОЛОТУЮ ТАБЛЕТКУ",
-    landFactEye: "ФАКТ ИЗ ЛУКСМАКСИНГА",
-    landFacts: [
-      "Положительный кантальный наклон — «глаза охотника». Самая желанная форма глаз в луксмаксинге: читается как доминантность и половой диморфизм.",
-      "fWHR 1.9-2.1 — оптимальное отношение ширины лица к высоте. Связано с впечатлением доминантности и мужественной структурой.",
-      "Симметрия лица выше 90% встречается меньше чем у 4% людей. Важен каждый процент.",
-      "Идеальный гониальный угол 120-125° даёт чёткую линию челюсти. Острее — выглядит резко, тупее — челюсть «утопает».",
-      "Выдвинутая вперёд верхняя челюсть даёт гармонию средней трети, опору губам и убирает впалость под глазами.",
-      "Отношение ширины скул к ширине челюсти 1.2-1.35 — признак сильной структуры: широкие скулы, сужение к челюсти.",
-      "Межзрачковое расстояние 62-65 мм — идеальная посадка глаз. Шире или уже — и лицо воспринимается заметно иначе.",
-    ],
     meshNote: "Крути пальцем, щипком приближай. Посчитано на твоём устройстве, фото никуда не уходит.",
     pwGeoAbove: "выше среднего", pwGeoNear: "около среднего", pwGeoBelow: "ниже среднего",
     pwLoginBtn: "<span class='tg-ic'>✈</span> Войти через Telegram",
@@ -473,7 +458,7 @@ function startLanding() {
   el.classList.add("landing-visible");
   setTimeout(countUpStats, 200 * f);
   setTimeout(function() {
-    typeWriter(document.getElementById("landQuote"), t("landQuote"), FM_FAST_LOAD ? 14 : 38);
+    typeWriter(document.getElementById("landQuote"), "“Every measurement tells a story.”", FM_FAST_LOAD ? 14 : 38);
   }, 500 * f);
   setTimeout(function() {
     showFact(0);
@@ -516,8 +501,7 @@ function showFact(idx) {
   var el = document.getElementById("landFact");
   if (!el) return;
   el.classList.remove("fact-in");
-  var facts = lang() === "ru" ? I18N.ru.landFacts : FACTS;
-  setTimeout(function() { el.textContent = facts[idx % facts.length]; el.classList.add("fact-in"); }, 320);
+  setTimeout(function() { el.textContent = FACTS[idx]; el.classList.add("fact-in"); }, 320);
 }
 
 function transitionToAnalysis() {
