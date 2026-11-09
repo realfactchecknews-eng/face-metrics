@@ -93,6 +93,58 @@
   .contact { border-top: 1px solid var(--accent); padding-top: 28px; display: grid; gap: 14px; }
   .handle { font: 400 2rem/1 var(--display); color: var(--accent-hi); user-select: all; }
   a { color: var(--accent-hi); text-underline-offset: 3px; }
+
+  /* Фон: тёплое свечение сверху, как от софтбокса над лицом */
+  body { background:
+    radial-gradient(900px 520px at 85% -8%, rgba(196,164,107,0.16), transparent 62%),
+    radial-gradient(700px 420px at -10% 38%, rgba(196,164,107,0.06), transparent 60%),
+    var(--bg); }
+  .gold { background: linear-gradient(100deg, #9c7b45 0%, #f4e4b8 38%, #c4a46b 55%, #8a6e40 75%, #e8d4a0&nbsp;100%);
+          background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+          animation: shimmer 7s linear infinite; font-style: italic; }
+  @keyframes shimmer { to { background-position: -220% 0; } }
+
+  /* Кнопка в Telegram */
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
+  .cta { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 10px;
+         padding: 15px 26px; border-radius: 999px; text-decoration: none;
+         font: 600 0.82rem/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase;
+         color: #16120a; background: linear-gradient(135deg, #f1dfae, #c4a46b 55%, #a8874f);
+         box-shadow: 0 10px 34px -12px rgba(196,164,107,0.7), inset 0 1px 0 rgba(255,255,255,0.45);
+         transition: transform .25s ease, box-shadow .25s ease; }
+  .cta::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%;
+                background: linear-gradient(100deg, transparent, rgba(255,255,255,0.55), transparent);
+                transform: skewX(-20deg); animation: sweep 3.8s ease-in-out infinite; }
+  @keyframes sweep { 0%, 55% { left: -60%; } 100% { left: 130%; } }
+  .cta:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -12px rgba(196,164,107,0.85), inset 0 1px 0 rgba(255,255,255,0.45); }
+  .cta:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 4px; }
+  .cta svg { width: 18px; height: 18px; flex: none; }
+  .ghost { color: var(--accent-hi); font-size: 0.9rem; text-decoration: none; border-bottom: 1px solid #5a4c33; padding-bottom: 2px; }
+  .ghost:hover { border-color: var(--accent); }
+  .float-cta { position: fixed; z-index: 20; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+               transform: translate(-50%, 160%); transition: transform .45s cubic-bezier(.2,.8,.2,1); white-space: nowrap; }
+  .float-cta.show { transform: translate(-50%, 0); }
+  .float-cta:hover { transform: translate(-50%, -2px); }
+
+  /* Появление при загрузке и прокрутке. Без JS всё сразу видно. */
+  .hero-text > * { animation: rise .9s cubic-bezier(.2,.7,.2,1) both; }
+  .hero-text > *:nth-child(2) { animation-delay: .12s; } .hero-text > *:nth-child(3) { animation-delay: .24s; }
+  .hero-text > *:nth-child(4) { animation-delay: .36s; } .hero-text > *:nth-child(5) { animation-delay: .48s; }
+  .mesh { animation: fadein 1.6s ease .2s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px); } }
+  @keyframes fadein { from { opacity: 0; transform: scale(.96); } }
+  html.js .rv { opacity: 0; transform: translateY(26px); transition: opacity .9s ease, transform .9s cubic-bezier(.2,.7,.2,1); }
+  html.js .rv.in { opacity: 1; transform: none; }
+  .contact { border-top: 0; position: relative; }
+  .contact::before { content: ""; position: absolute; top: 0; left: 0; height: 1px; width: 100%;
+                     background: linear-gradient(90deg, var(--accent), transparent); transform-origin: left; transform: scaleX(0); transition: transform 1.4s cubic-bezier(.2,.7,.2,1) .2s; }
+  .contact.in::before, html:not(.js) .contact::before { transform: scaleX(1); }
+  .contact h2 { font-size: clamp(2.2rem, 5vw, 3.2rem); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    html.js .rv { opacity: 1; transform: none; }
+    .contact::before { transform: scaleX(1); }
+  }
   a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 </style>
 </head>
@@ -102,27 +154,28 @@
   <header class="hero">
     <div class="hero-text">
       <span class="label">FaceRate · медиакит · ноябрь 2026</span>
-      <h1>Аудитория, которая прокачивает внешность</h1>
+      <h1>Аудитория, которая прокачивает <span class="gold">внешность</span></h1>
       <p class="lead">FaceRate разбирает лицо по фото: 3D-сетка из 478 точек, симметрия, пропорции и балл PSL. Каждый день сюда приходят люди, которые хотят выглядеть лучше и уже ищут, что для этого сделать.</p>
+      <div class="cta-row"><a class="cta" href="https://t.me/faceratemanager" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 3.2 2.9 10.4c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.7.4.9.9.9.4 0 .6-.2.9-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.3-.5-1.9-1.4-1.6zM9.6 13.6l8.7-5.5c.4-.3.8-.1.5.2l-7.4 6.7-.3 3.1-1.5-4.5z"/></svg>Написать в Telegram</a><a class="ghost" href="#formats">Форматы и цены ↓</a></div>
       <p class="dim small">facerate.ru · Telegram-бот и мини-приложение @faceratepay_bot · канал @wwwfacerateru</p>
     </div>
     <canvas class="mesh" id="mesh" width="720" height="720" aria-label="3D-сетка лица из 468 точек" role="img"></canvas>
   </header>
 
-  <section>
+  <section class="rv">
     <span class="label">Цифры</span>
     <div class="nums">
-      <div class="num"><b>~59 000</b><span>визитов на сайт в месяц</span></div>
-      <div class="num"><b>~32 000</b><span>сканов лица в месяц: человек видит свою 3D-сетку</span></div>
-      <div class="num"><b>~15 000</b><span>полных разборов в месяц: балл и оценки по чертам лица</span></div>
-      <div class="num"><b>6 800</b><span>просмотров у типичного поста в канале на 17 200 подписчиков, лучшие — до 14 000</span></div>
-      <div class="num"><b>242</b><span>платящих покупателя за последние 30 дней</span></div>
-      <div class="num"><b>319</b><span>покупок за последние 30 дней</span></div>
+      <div class="num"><b data-to="59000" data-pre="~">~59&nbsp;000</b><span>визитов на сайт в месяц</span></div>
+      <div class="num"><b data-to="32000" data-pre="~">~32&nbsp;000</b><span>сканов лица в месяц: человек видит свою 3D-сетку</span></div>
+      <div class="num"><b data-to="15000" data-pre="~">~15&nbsp;000</b><span>полных разборов в месяц: балл и оценки по чертам лица</span></div>
+      <div class="num"><b data-to="6800" data-pre="">6&nbsp;800</b><span>просмотров у типичного поста в канале на 17&nbsp;200 подписчиков, лучшие — до 14&nbsp;000</span></div>
+      <div class="num"><b data-to="242" data-pre="">242</b><span>платящих покупателя за последние 30 дней</span></div>
+      <div class="num"><b data-to="319" data-pre="">319</b><span>покупок за последние 30 дней</span></div>
     </div>
     <p class="src">Сайт: среднее за 6–8 ноября 2026 по внутреннему счётчику (сессии), пересчёт на 30 дней. Канал: публичная статистика Telegram на 9 ноября, медиана по 38 постам №81–120 (свежие посты ещё набирают просмотры). Покупатели и покупки: журнал платежей за 30 дней. Пол и возраст аудитории покажем по Яндекс Метрике по запросу.</p>
   </section>
 
-  <section class="moment">
+  <section class="moment rv">
     <div class="moment-text">
       <span class="label">Момент показа</span>
       <h2>Реклама там, где человек смотрит на свою кожу и стрижку</h2>
@@ -141,36 +194,36 @@
     </div>
   </section>
 
-  <section>
+  <section class="rv" id="formats">
     <span class="label">Форматы и цены</span>
     <div class="formats">
       <div class="fmt">
         <h3>Партнёр раздела в разборе</h3>
-        <div class="price">15 000 ₽<small>в месяц</small></div>
-        <p>Нативный блок под оценкой кожи, волос или в блоке «что можно поднять». Текст, ссылка и промокод бренда. Около 15 000 показов в месяц.</p>
+        <div class="price">15&nbsp;000 ₽<small>в месяц</small></div>
+        <p>Нативный блок под оценкой кожи, волос или в блоке «что можно поднять». Текст, ссылка и промокод бренда. Около 15&nbsp;000 показов в месяц.</p>
         <div class="meta">Считаем показы блока, переходы — по вашей UTM-метке. Отчёт в конце месяца.</div>
       </div>
       <div class="fmt">
         <h3>Пост в канале</h3>
-        <div class="price">3 500 ₽<small>за пост</small></div>
+        <div class="price">3&nbsp;500 ₽<small>за пост</small></div>
         <p>Пост в @wwwfacerateru с кнопкой-ссылкой. Текст пишем вместе, в тоне канала.</p>
-        <div class="meta">17 200 подписчиков. Пост набирает обычно 5 000–7 500 просмотров, медиана 6 800, лучшие до 14 000.</div>
+        <div class="meta">17&nbsp;200 подписчиков. Пост набирает обычно 5&nbsp;000–7&nbsp;500 просмотров, медиана 6&nbsp;800, лучшие до 14&nbsp;000.</div>
       </div>
       <div class="fmt">
         <h3>Совместный розыгрыш</h3>
-        <div class="price">6 000 ₽<small>+ призы от бренда</small></div>
+        <div class="price">6&nbsp;000 ₽<small>+ призы от бренда</small></div>
         <p>Пост в канале и розыгрыш в нашем боте. Бот сам проверяет подписку на канал партнёра, подводит итоги и публикует победителей.</p>
         <div class="meta">Кейс, октябрь–ноябрь 2026: розыгрыш с магазином парфюмерии собрал 159 участников.</div>
       </div>
       <div class="fmt">
         <h3>Месяц под ключ</h3>
-        <div class="price">20 000 ₽<small>в месяц</small></div>
+        <div class="price">20&nbsp;000 ₽<small>в месяц</small></div>
         <p>Партнёр раздела на месяц, два поста в канале и один совместный розыгрыш.</p>
       </div>
     </div>
   </section>
 
-  <section class="two">
+  <section class="two rv">
     <div style="display:grid;gap:14px;min-width:0">
       <span class="label">Кого берём</span>
       <ul>
@@ -194,7 +247,7 @@
     </div>
   </section>
 
-  <section>
+  <section class="rv">
     <span class="label">Условия</span>
     <ul>
       <li>Вся реклама маркируется: пометка «Реклама», рекламодатель и токен erid через оператора рекламных данных.</li>
@@ -204,13 +257,15 @@
     </ul>
   </section>
 
-  <section class="contact">
+  <section class="contact rv">
     <span class="label">Связаться</span>
     <h2>Обсудим формат под ваш бренд</h2>
-    <div class="handle">@FaceRateSupport_bot</div>
-    <p class="dim small">Напишите в Telegram. Пришлём статистику из Метрики и свободные даты.</p>
+    <p class="lead">Напишите менеджеру в Telegram. Пришлём статистику из Метрики, свободные даты и подберём формат под задачу.</p>
+    <div class="cta-row"><a class="cta" href="https://t.me/faceratemanager" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 3.2 2.9 10.4c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.7.4.9.9.9.4 0 .6-.2.9-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.3-.5-1.9-1.4-1.6zM9.6 13.6l8.7-5.5c.4-.3.8-.1.5.2l-7.4 6.7-.3 3.1-1.5-4.5z"/></svg>Написать в Telegram</a><span class="handle">@faceratemanager</span></div>
   </section>
 </div>
+
+<a class="cta float-cta" id="floatCta" href="https://t.me/faceratemanager" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 3.2 2.9 10.4c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.7.4.9.9.9.4 0 .6-.2.9-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.3-.5-1.9-1.4-1.6zM9.6 13.6l8.7-5.5c.4-.3.8-.1.5.2l-7.4 6.7-.3 3.1-1.5-4.5z"/></svg>Написать менеджеру</a>
 
 <script>
 // Эталонная маска MediaPipe (canonical_face_model, Apache-2.0): 468 вершин в сантиметрах и рёбра сетки.
@@ -218,7 +273,7 @@ const MESH = {"v":[[0,-3.41,5.98],[0,-1.13,7.48],[0,-2.09,6.06],[-0.46,0.96,6.63
 (function () {
   const cv = document.getElementById("mesh"), c = cv.getContext("2d"), W = cv.width, H = cv.height;
   const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function draw(th) {
+  function draw(th, scan) {
     const ph = 0.06, s = 30, cx = W / 2, cy = H / 2 + 6;
     const P = MESH.v.map(([x, y, z]) => {
       const x1 = x * Math.cos(th) + z * Math.sin(th), z1 = -x * Math.sin(th) + z * Math.cos(th);
@@ -232,7 +287,8 @@ const MESH = {"v":[[0,-3.41,5.98],[0,-1.13,7.48],[0,-2.09,6.06],[-0.46,0.96,6.63
     c.lineWidth = 1.1;
     for (const [a, b] of MESH.e) {
       const k = t((P[a][2] + P[b][2]) / 2);
-      c.strokeStyle = "rgba(196,164,107," + (0.06 + 0.55 * k * k).toFixed(3) + ")";
+      const glow = scan == null ? 0 : Math.max(0, 1 - Math.abs((P[a][1] + P[b][1]) / 2 - scan) / 46);
+      c.strokeStyle = "rgba(" + (glow > 0 ? "236,214,160," : "196,164,107,") + Math.min(1, 0.06 + 0.55 * k * k + 0.6 * glow).toFixed(3) + ")";
       c.beginPath(); c.moveTo(P[a][0], P[a][1]); c.lineTo(P[b][0], P[b][1]); c.stroke();
     }
     for (const p of P) {
@@ -240,13 +296,55 @@ const MESH = {"v":[[0,-3.41,5.98],[0,-1.13,7.48],[0,-2.09,6.06],[-0.46,0.96,6.63
       c.fillStyle = "rgba(232,212,160," + (0.2 + 0.6 * k).toFixed(3) + ")";
       c.beginPath(); c.arc(p[0], p[1], 1.6, 0, 6.283); c.fill();
     }
+    if (scan != null) { // сама линия сканера
+      const g = c.createLinearGradient(0, 0, W, 0);
+      g.addColorStop(0, "rgba(232,212,160,0)"); g.addColorStop(0.5, "rgba(232,212,160,0.55)"); g.addColorStop(1, "rgba(232,212,160,0)");
+      c.fillStyle = g; c.fillRect(W * 0.12, scan - 0.75, W * 0.76, 1.5);
+    }
   }
   draw(-0.42);
   if (still) return;
   const t0 = performance.now();
-  (function loop(now) { draw(-0.42 + 0.22 * Math.sin((now - t0) / 2600)); requestAnimationFrame(loop); })(t0);
+  (function loop(now) {
+    const ph = ((now - t0) / 4200) % 1;   // проход сверху вниз раз в ~4 с, с паузой
+    draw(-0.42 + 0.22 * Math.sin((now - t0) / 2600), ph < 0.75 ? H * (0.12 + 0.76 * ph / 0.75) : null);
+    requestAnimationFrame(loop);
+  })(t0);
 })();
 </script>
-
+<script>
+(function () {
+  document.documentElement.classList.add("js");
+  const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fmt = (n) => n.toLocaleString("ru-RU"); // неразрывный пробел: «14 000» не рвётся по строкам
+  function count(el) {
+    const to = +el.dataset.to, pre = el.dataset.pre || "", t0 = performance.now(), dur = 1600;
+    (function step(now) {
+      const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = pre + fmt(Math.round(to * e));
+      if (p < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+  const fl = document.getElementById("floatCta");
+  if (!("IntersectionObserver" in window) || still) {
+    document.querySelectorAll(".rv").forEach((e) => e.classList.add("in"));
+    fl.hidden = true;   // без наблюдателя не понять, когда её показывать; кнопки есть в шапке и в конце
+    return;
+  }
+  const io = new IntersectionObserver((list) => list.forEach((en) => {
+    if (!en.isIntersecting) return;
+    en.target.classList.add("in");
+    en.target.querySelectorAll("[data-to]").forEach(count);
+    io.unobserve(en.target);
+  }), { threshold: 0.15 });
+  document.querySelectorAll(".rv").forEach((e) => io.observe(e));
+  // Плавающая кнопка: после шапки и пока не видна кнопка в самом конце.
+  const hero = document.querySelector(".hero"), end = document.querySelector(".contact");
+  let heroOut = false, endIn = false;
+  const upd = () => fl.classList.toggle("show", heroOut && !endIn);
+  new IntersectionObserver(([e]) => { heroOut = !e.isIntersecting; upd(); }).observe(hero);
+  new IntersectionObserver(([e]) => { endIn = e.isIntersecting; upd(); }).observe(end);
+})();
+</script>
 </body>
 </html>
