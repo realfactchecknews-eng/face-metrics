@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Стенд стиль-разбора — FaceRate</title>
+<!-- Черновик платного стиль-разбора (appeal): пять карточек, листаются как сторис.
+     Только для локальной проверки: файлы на _ в deploy.yml не попадают.
+     Фото никуда не уходит. Цвета, форма лица, половины и чертежи считаются в браузере
+     по точкам MediaPipe. Ответ модели (оценки, тип волос) — заглушка в блоке внизу. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap">
+<style>
+  :root { --accent:#c4a46b; --accent-hi:#e8d4a0; --text:#f0ece6; --dim:#8a8a8a; --bg:#0a0a0a; --card:#111; --line:#232323; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 system-ui,-apple-system,sans-serif;
+         padding-block:28px 48px; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); }
+  .wrap { max-width:1100px; margin:0 auto; display:grid; gap:20px; }
+  h1 { font:300 2rem/1.1 "Cormorant Garamond", Georgia, serif; margin:0; }
+  .sub, .note { color:var(--dim); font-size:.82rem; }
+  .drop { border:1px dashed #3a3328; border-radius:16px; padding:36px 20px; text-align:center; color:var(--dim); cursor:pointer; }
+  .drop.over { background:#c4a46b12; color:var(--text); }
+  .drop .big { font:300 1.5rem "Cormorant Garamond", Georgia, serif; color:var(--text); display:block; }
+  #status { color:var(--accent); font-size:.75rem; letter-spacing:.14em; text-transform:uppercase; min-height:1.2em; }
+
+  .deck { display:grid; grid-auto-flow:column; grid-auto-columns:min(400px, calc(100vw - 40px)); gap:16px;
+          overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:10px; overscroll-behavior-x:contain; align-items:start; }
+  .card { scroll-snap-align:center; background:radial-gradient(ellipse at 50% 0%, #17130d 0%, var(--card) 60%);
+          border:1px solid var(--line); border-radius:20px; padding:20px 18px; display:flex; flex-direction:column; gap:12px; min-width:0; }
+  .eyebrow { font-size:.68rem; letter-spacing:.2em; text-transform:uppercase; color:var(--accent); }
+  .card h3 { font:300 1.9rem/1.05 "Cormorant Garamond", Georgia, serif; margin:0; }
+  .card h4 { font-size:.68rem; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); font-weight:400; margin:6px 0 0; }
+  .card p { margin:0; font-size:.86rem; color:#cfc9bf; }
+  .card canvas { width:100%; display:block; border-radius:12px; }
+  .btn { appearance:none; border:1px solid var(--accent); border-radius:10px; padding:10px 14px; font:500 .85rem system-ui, sans-serif;
+         background:transparent; color:var(--accent-hi); cursor:pointer; }
+  .btn:hover { background:#c4a46b18; }
+
+  .sw { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; }
+  .sw div { display:grid; gap:4px; font-size:.68rem; color:var(--dim); text-align:center; }
+  .sw i { display:block; aspect-ratio:1; border-radius:50%; border:1px solid #ffffff22; }
+  .g12 { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:6px; }
+  .g12 i, .g4 i { display:block; aspect-ratio:1; border-radius:8px; border:1px solid #ffffff1a; position:relative; }
+  .g4 { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:6px; }
+  .g4 i::after { content:""; position:absolute; inset:0; background:linear-gradient(to top right, transparent 46%, #0a0a0acc 47%, #0a0a0acc 53%, transparent 54%); }
+  .names { font-size:.72rem; color:var(--dim); }
+
+  .cuts { display:flex; gap:6px; flex-wrap:wrap; }
+  .cuts button { appearance:none; border:1px solid var(--line); background:#0d0d0d; color:var(--dim); border-radius:999px;
+                 padding:6px 10px; font-size:.75rem; cursor:pointer; }
+  .cuts button.on { border-color:var(--accent); color:var(--accent-hi); }
+  .avoid { border-left:2px solid #7a3b2e; padding-left:10px; }
+
+  .halves { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+  .halves figure { margin:0; display:grid; gap:4px; text-align:center; font-size:.7rem; color:var(--dim); }
+  .halves figure.win canvas { outline:1px solid var(--accent); }
+
+  .steps { display:grid; gap:10px; }
+  .step { display:grid; gap:4px; }
+  .step .top { display:flex; justify-content:space-between; gap:10px; font-size:.82rem; }
+  .step .top b { font:400 1.15rem/1 "Cormorant Garamond", Georgia, serif; color:var(--accent-hi); white-space:nowrap; }
+  .bar { height:6px; border-radius:3px; background:#1d1b17; position:relative; overflow:hidden; }
+  .bar span { position:absolute; top:0; bottom:0; background:var(--accent); border-radius:3px; }
+  .bar span.base { background:#5b4d33; }
+  .big { font:300 3.4rem/1 "Cormorant Garamond", Georgia, serif; color:var(--accent-hi); }
+
+  details { border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:#0d0d0d; }
+  summary { cursor:pointer; color:var(--dim); font-size:.85rem; }
+  .stub { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; margin-top:12px; font-size:.8rem; }
+  .stub label { display:grid; gap:4px; color:var(--dim); }
+  .stub input, .stub select { background:#151515; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px; }
+</style>
+
+<div class="wrap">
+  <div>
+    <h1>Стиль-разбор: черновик</h1>
+    <div class="sub">Пять карточек листаются вбок. Фото никуда не уходит; ответ модели — заглушка внизу страницы.</div>
+  </div>
+  <label class="drop" id="drop"><input id="file" type="file" accept="image/*" hidden>
+    <span class="big">Перетащи фото сюда</span>или нажми, чтобы выбрать. Анфас, лицо крупно, лучше при дневном свете.</label>
+  <div id="status"></div>
+
+  <div class="deck" id="deck" hidden>
+    <section class="card">
+      <div class="eyebrow">01 · Итог</div>
+      <canvas id="coverCv" width="1080" height="1350"></canvas>
+      <button class="btn" id="coverSave" type="button">Сохранить карточку</button>
+    </section>
+
+    <section class="card">
+      <div class="eyebrow">02 · Палитра</div>
+      <h3 id="seasonTitle"></h3>
+      <p id="seasonSub"></p>
+      <canvas id="palCv"></canvas>
+      <div class="sw" id="sw"></div>
+      <h4>Твои цвета в одежде</h4>
+      <div class="g12" id="g12"></div>
+      <div class="names" id="n12"></div>
+      <h4>Мимо</h4>
+      <div class="g4" id="g4"></div>
+      <div class="names" id="n4"></div>
+      <p class="note" id="palNote"></p>
+    </section>
+
+    <section class="card">
+      <div class="eyebrow">03 · Стрижка</div>
+      <h3 id="cutTitle"></h3>
+      <p id="cutSub"></p>
+      <canvas id="cutCv"></canvas>
+      <div class="cuts" id="cutPick"></div>
+      <p class="avoid" id="cutAvoid"></p>
+      <button class="btn" id="cutSave" type="button">Сохранить для барбера</button>
+    </section>
+
+    <section class="card">
+      <div class="eyebrow">04 · Сильная сторона</div>
+      <h3 id="sideTitle"></h3>
+      <div class="halves">
+        <figure id="figL"><canvas id="halfL"></canvas><figcaption>Две левые половины</figcaption></figure>
+        <figure id="figR"><canvas id="halfR"></canvas><figcaption>Две правые половины</figcaption></figure>
+      </div>
+      <p id="sideSub"></p>
+      <p class="note">Лево и право — как на фото. Фронтальная камера телефона часто отражает кадр.</p>
+    </section>
+
+    <section class="card">
+      <div class="eyebrow">05 · Что даст больше всего</div>
+      <div><span class="big" id="lnNow"></span> <span class="note">внешний вид сейчас</span></div>
+      <div class="steps" id="steps"></div>
+      <p id="lnFree"></p>
+      <p class="note">Числа считает та же формула внешнего вида, что и блок потенциала: кожа и волосы до 8.5, угловатость +0.8. Кость не меняется, её тут нет.</p>
+      <button class="btn" type="button">Дойти до потолка за 90 дней — «Ведение»</button>
+    </section>
+  </div>
+
+  <details id="stubBox">
+    <summary>Заглушка ответа модели (потом придёт из основного разбора и отдельного запроса)</summary>
+    <div class="stub" id="stub"></div>
+  </details>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+let vision, landmarker, CONTOURS = [];
+
+async function init() {
+  if (landmarker) return landmarker;
+  vision = await import("./vendor/mediapipe/vision_bundle.mjs");
+  const fileset = await vision.FilesetResolver.forVisionTasks("./vendor/mediapipe/wasm");
+  landmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: "./vendor/mediapipe/face_landmarker.task" }, runningMode: "IMAGE", numFaces: 1,
+  });
+  const FL = vision.FaceLandmarker;
+  CONTOURS = FL.FACE_LANDMARKS_CONTOURS.map((e) => [e.start, e.end]);
+  return landmarker;
+}
+
+/* ── Цвет ── */
+const toLin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+const toSrgb = (l) => { const c = l <= 0.0031308 ? 12.92 * l : 1.055 * l ** (1 / 2.4) - 0.055; return Math.round(Math.max(0, Math.min(1, c)) * 255); };
+function lab([r, g, b]) {
+  const R = toLin(r), G = toLin(g), B = toLin(b);
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const fx = f((R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047), fy = f(R * 0.2126 + G * 0.7152 + B * 0.0722),
+        fz = f((R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883);
+  return { L: 116 * fy - 16, a: 500 * (fx - fy), b: 200 * (fy - fz) };
+}
+const hex = (c) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+const lum = (p) => 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+const D = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+function inPoly(x, y, poly) {
+  let ins = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) ins = !ins;
+  }
+  return ins;
+}
+// Пиксели в рамке, прошедшие проверку test(x, y).
+function collect(img, x0, y0, x1, y1, test) {
+  const out = [], W = img.width, d = img.data;
+  for (let y = Math.max(0, y0 | 0); y < Math.min(img.height, y1); y++)
+    for (let x = Math.max(0, x0 | 0); x < Math.min(W, x1); x++)
+      if (test(x, y)) { const k = (y * W + x) * 4; out.push([d[k], d[k + 1], d[k + 2]]); }
+  return out;
+}
+const inCircles = (img, cs) => cs.flatMap(([p, r]) => collect(img, p.x - r, p.y - r, p.x + r + 1, p.y + r + 1, (x, y) => (x - p.x) ** 2 + (y - p.y) ** 2 <= r * r));
+const inPolys = (img, polys, test = () => true) => polys.flatMap((poly) => {
+  const xs = poly.map((p) => p.x), ys = poly.map((p) => p.y);
+  return collect(img, Math.min(...xs), Math.min(...ys), Math.max(...xs) + 1, Math.max(...ys) + 1, (x, y) => inPoly(x, y, poly) && test(x, y));
+});
+// Медиана по каналам среди пикселей с яркостью в полосе [from, to] (доли после сортировки).
+function band(px, from, to) {
+  if (!px.length) return null;
+  const s = px.slice().sort((p, q) => lum(p) - lum(q));
+  const part = s.slice(Math.floor(s.length * from), Math.max(Math.floor(s.length * from) + 1, Math.floor(s.length * to)));
+  return [0, 1, 2].map((c) => { const v = part.map((p) => p[c]).sort((a, b) => a - b); return v[v.length >> 1]; });
+}
+
+const R_EYE = [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7];
+const L_EYE = [263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249];
+const LIPS_OUT = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146];
+// Середина брови: между верхним (63, 105, 66 / 293, 334, 296) и нижним контуром. Верхние
+// точки сидят на краю и захватывают лоб.
+const browPts = (lm) => [[63, 53], [105, 52], [66, 65], [293, 283], [334, 282], [296, 295]]
+  .map(([a, b]) => ({ x: (lm[a].x + lm[b].x) / 2, y: (lm[a].y + lm[b].y) / 2 }));
+const LIPS_IN = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95];
+
+// Пороги по прогону 46 лиц калибровки (window.measureUrl, 09.11): тёплый/холодный — медиана
+// и трети угла оттенка кожи в Lab, контраст — трети разницы светлоты кожи и бровей,
+// «глубокий» — нижняя четверть светлоты бровей. Это деление выборки, а не стандарт цветотипа.
+const HUE_WARM = 59, HUE_COOL = 49.5, HUE_MID = 56;
+const CONTRAST_HI = 38, CONTRAST_LO = 27;
+const DEEP_BROW = 25;
+// Обычный оттенок белка, доли каналов в линейном свете. ponytail: прикидка (белок слегка
+// розоватый), не замер — калибровочные лица слишком мелкие. Проверять парой фото одного
+// человека при дневном свете и под лампой: сезон должен совпасть.
+const SCLERA_REF = [1.08, 0.99, 0.93];
+
+function palette(img, lm) {
+  const ipd = D(lm[33], lm[263]), P = (ids) => ids.map((i) => lm[i]);
+  const irises = [[lm[468], D(lm[468], lm[469])], [lm[473], D(lm[473], lm[474])]];
+  const outsideIris = (x, y) => irises.every(([c, r]) => (x - c.x) ** 2 + (y - c.y) ** 2 > (r * 1.15) ** 2);
+  const raw = {
+    skin: band(inCircles(img, [[lm[50], ipd * 0.11], [lm[280], ipd * 0.11], [lm[151], ipd * 0.08]]), 0.2, 0.9),
+    lips: band(inPolys(img, [P(LIPS_OUT)], (x, y) => !inPoly(x, y, P(LIPS_IN))), 0.15, 0.85),
+    iris: band(irises.flatMap(([c, r]) => collect(img, c.x - r, c.y - r, c.x + r + 1, c.y + r + 1, (x, y) => {
+      const q = (x - c.x) ** 2 + (y - c.y) ** 2; return q <= (r * 0.85) ** 2 && q >= (r * 0.35) ** 2;
+    })), 0.15, 0.85),
+    brow: band(inCircles(img, browPts(lm).map((p) => [p, ipd * 0.045])), 0, 0.4),
+  };
+  // Баланс белого по белку глаза: он почти нейтральный, а тёплая лампа без поправки делает
+  // всех «осенью». Берём самые светлые 40% пикселей глаза вне радужки. Усиление каналов
+  // ограничено ±20%: прищур и красные глаза иначе перекрашивают всё лицо.
+  // В контур глаза попадает край века, поэтому из светлой половины пикселей берём самые
+  // бесцветные. Белок не серый, а слегка розоватый, поэтому выравниваем не до серого,
+  // а до его обычного оттенка — медианы по 46 лицам калибровки (SCLERA_REF).
+  const eyePx = inPolys(img, [P(R_EYE), P(L_EYE)], outsideIris).sort((p, q) => lum(p) - lum(q));
+  const bright = eyePx.slice(eyePx.length >> 1).sort((p, q) => (Math.max(...p) - Math.min(...p)) - (Math.max(...q) - Math.min(...q)));
+  // На мелком лице белок — пара пикселей, и поправка по нему хуже, чем никакой.
+  const sclera = irises[0][1] >= 8 && bright.length >= 40 ? band(bright.slice(0, Math.ceil(bright.length * 0.4)), 0, 1) : null;
+  let gain = [1, 1, 1], scleraChroma = null;
+  if (sclera) {
+    const s = sclera.map(toLin), m = (s[0] + s[1] + s[2]) / 3;
+    scleraChroma = s.map((v) => v / m);
+    gain = scleraChroma.map((v, i) => Math.max(0.87, Math.min(1.15, SCLERA_REF[i] / v)));
+  }
+  const fix = (c) => (c ? c.map((v, i) => toSrgb(toLin(v) * gain[i])) : [128, 128, 128]);
+  const col = {}; for (const k in raw) col[k] = fix(raw[k]);
+  const skin = lab(col.skin), brow = lab(col.brow);
+  const hue = Math.atan2(skin.b, skin.a) * 180 / Math.PI, dL = skin.L - brow.L;
+  const undertone = hue >= HUE_WARM ? "тёплый" : hue <= HUE_COOL ? "холодный" : hue >= HUE_MID ? "нейтральный, ближе к тёплому" : "нейтральный, ближе к холодному";
+  const contrast = dL >= CONTRAST_HI ? "высокий" : dL <= CONTRAST_LO ? "низкий" : "средний";
+  const season = hue >= HUE_MID ? (brow.L < DEEP_BROW || contrast === "высокий" ? "autumn" : "spring") : (contrast === "высокий" ? "winter" : "summer");
+  return { col, hue, dL, undertone, contrast, season, gain, sclera: !!sclera, scleraChroma, browL: brow.L, skinL: skin.L };
+}
+
+const SEASONS = {
+  winter: { name: "Зима", sub: "Холодно и контрастно: чистые насыщенные цвета, чёрный и белый рядом с лицом.",
+    good: [["#111111", "чёрный"], ["#f7f7f5", "белый"], ["#333a40", "графит"], ["#1b2a4a", "тёмно-синий"], ["#2546a8", "королевский синий"], ["#0f6b4f", "изумруд"],
+      ["#6d1530", "бордо"], ["#8e1d4e", "ягодный"], ["#cfe3f2", "ледяной голубой"], ["#1e3b33", "хвоя"], ["#9aa3ab", "серебристо-серый"], ["#3d2b56", "баклажан"]],
+    bad: [["#d8c3a0", "бежевый"], ["#e07b2a", "оранжевый"], ["#c9a227", "горчичный"], ["#7a4b28", "тёплый коричневый"], ["#b4a582", "хаки"], ["#e8a07a", "персик"]] },
+  summer: { name: "Лето", sub: "Холодно и мягко: приглушённые серо-голубые цвета, без резкого чёрного.",
+    good: [["#7d9bb8", "пыльно-голубой"], ["#4f6378", "серо-синий"], ["#8a9aa6", "сизый"], ["#9c94b0", "лавандово-серый"], ["#b9959b", "пыльная роза"], ["#eceae6", "мягкий белый"],
+      ["#4a4e55", "графит"], ["#5e8c88", "приглушённая волна"], ["#6b4a63", "сливовый"], ["#5a7391", "деним"], ["#c4c7cb", "светло-серый"], ["#2f3e5a", "мягкий тёмно-синий"]],
+    bad: [["#0d0d0d", "чёрный"], ["#e07b2a", "оранжевый"], ["#c9a227", "горчичный"], ["#a2472b", "кирпичный"], ["#7a4b28", "тёплый коричневый"], ["#d9b779", "золотистый"]] },
+  autumn: { name: "Осень", sub: "Тепло и глубоко: землистые приглушённые цвета, коричневый вместо чёрного.",
+    good: [["#5e6b2f", "оливковый"], ["#8a7f4f", "хаки"], ["#b0844e", "кэмел"], ["#4e3220", "шоколад"], ["#a65233", "терракота"], ["#b8922d", "горчичный"],
+      ["#2f4a33", "бутылочный"], ["#8f3e1e", "ржавый"], ["#efe3c8", "кремовый"], ["#7b6a58", "тёплый тауп"], ["#1f4f56", "петроль"], ["#6e2a22", "тёплое бордо"]],
+    bad: [["#0d0d0d", "чёрный"], ["#ffffff", "чисто-белый"], ["#c2187a", "фуксия"], ["#cfe3f2", "ледяной голубой"], ["#9aa3ab", "серебристый"], ["#2546a8", "королевский синий"]] },
+  spring: { name: "Весна", sub: "Тепло и светло: чистые тёплые цвета, слоновая кость вместо белого.",
+    good: [["#f3ead5", "слоновая кость"], ["#c99b62", "светлый кэмел"], ["#e9735a", "коралл"], ["#2e9c8f", "тёплая бирюза"], ["#6aa84f", "травяной"], ["#25395c", "тёплый тёмно-синий"],
+      ["#d9b779", "золотистый бежевый"], ["#f0a46a", "абрикос"], ["#9aa457", "светлая олива"], ["#f08a6e", "лосось"], ["#a59d90", "тёплый серый"], ["#4f78c4", "васильковый"]],
+    bad: [["#0d0d0d", "чёрный"], ["#3a3d42", "угольный"], ["#5d1630", "холодное бордо"], ["#b98a96", "пыльная роза"], ["#9aa3ab", "серебристый"], ["#3d2b56", "баклажан"]] },
+};
+
+/* ── Форма лица: копия порогов classifyFaceShape из app.js ── */
+function faceShape(lm) {
+  const cb = D(lm[227], lm[447]) || 1, lengthRatio = D(lm[10], lm[152]) / cb, foreCb = D(lm[21], lm[251]) / cb, jawCb = D(lm[58], lm[288]) / cb;
+  if (lengthRatio >= 1.5) return "oblong";
+  if (foreCb >= 1.02 && jawCb <= 0.85) return "heart";
+  if (foreCb <= 0.93 && jawCb <= 0.85) return "diamond";
+  if (jawCb >= 0.95) return "square";
+  if (lengthRatio <= 1.2 && jawCb >= 0.9) return "round";
+  return "oval";
+}
+const SHAPE_RU = { oval: "овальное", round: "круглое", square: "квадратное", oblong: "вытянутое", heart: "сердцевидное", diamond: "ромбовидное" };
+
+/* ── Стрижки. Половина силуэта (u ≥ 0) от виска вверх к макушке: u — доли полуширины лица,
+   v — доли высоты лица от верха сетки (точка 10). O — внешний контур, I — линия роста. ── */
+const CUTS = {
+  crop: { name: "Текстурный кроп", side: "виски 1–3 мм, фейд", top: "верх 3–5 см", extra: "короткая рваная чёлка", fade: true,
+    O: [[1, 0.4], [1.05, 0.18], [0.98, -0.07], [0.75, -0.22], [0.4, -0.28], [0, -0.3]], I: [[.93, .4], [.88, .16], [.8, .08], [.55, .12], [.28, .15], [0, .14]] },
+  quiff: { name: "Квифф", side: "бока 6–9 мм", top: "верх 7–10 см", extra: "объём вверх и назад", fade: true,
+    O: [[1, 0.4], [1.04, 0.17], [0.96, -0.09], [0.74, -0.31], [0.38, -0.43], [0, -0.46]], I: [[.93, .4], [.87, .14], [.78, .02], [.52, -.02], [.26, -.04], [0, -.04]] },
+  part: { name: "Классика с пробором", side: "бока 9–12 мм, ножницы", top: "верх 5–7 см", extra: "пробор на трети головы", part: true,
+    O: [[1.03, 0.4], [1.08, 0.17], [1.02, -0.08], [0.78, -0.28], [0.4, -0.36], [0, -0.38]], I: [[.94, .4], [.88, .14], [.78, .03], [.52, 0], [.26, -.02], [0, -.03]] },
+  buzz: { name: "Базз-кат", side: "3–6 мм по всей голове", top: "верх той же длины", extra: "ровная линия у лба",
+    O: [[0.99, 0.4], [1.02, 0.18], [0.95, -0.06], [0.72, -0.19], [0.37, -0.25], [0, -0.26]], I: [[.93, .4], [.87, .14], [.78, .03], [.52, 0], [.26, -.02], [0, -.03]] },
+  flow: { name: "Средняя длина", side: "бока прикрывают верх ушей", top: "длина 8–12 см", extra: "зачёс назад и вбок, текстура",
+    O: [[1.12, 0.52], [1.2, 0.24], [1.13, -0.07], [0.86, -0.3], [0.42, -0.4], [0, -0.42]], I: [[.96, .5], [.9, .18], [.8, .08], [.56, .06], [.28, .08], [0, .06]] },
+  slick: { name: "Андеркат, зачёс назад", side: "бока 3–6 мм", top: "верх 8–12 см", extra: "зачёс назад, матовый стайлинг", fade: true,
+    O: [[1, 0.4], [1.03, 0.17], [0.97, -0.1], [0.76, -0.32], [0.4, -0.4], [0, -0.42]], I: [[.93, .4], [.87, .14], [.78, .02], [.52, -.02], [.26, -.04], [0, -.04]] },
+};
+const BY_SHAPE = {
+  oval: { best: ["quiff", "part", "crop", "slick"], avoid: "Тяжёлая чёлка до бровей: прячет удачные пропорции." },
+  round: { best: ["quiff", "slick", "part", "crop"], avoid: "Объём по бокам и короткий ровный верх: лицо станет шире." },
+  square: { best: ["crop", "part", "quiff", "buzz"], avoid: "Прямая геометричная чёлка: повторяет углы челюсти." },
+  oblong: { best: ["crop", "flow", "part", "buzz"], avoid: "Высокий квифф и помпадур: лицо станет длиннее." },
+  heart: { best: ["flow", "part", "crop", "quiff"], avoid: "Короткие бока с высоким верхом: лоб станет шире." },
+  diamond: { best: ["crop", "flow", "part", "quiff"], avoid: "Очень короткие виски: скулы выступят ещё сильнее." },
+};
+// Что меняет ответ модели: кудри не лягут гладко назад, с залысинами длинный верх их подчёркивает.
+function pickCuts(shape, stub) {
+  let list = BY_SHAPE[shape].best.slice();
+  if (stub.texture === "curly") list = list.filter((c) => c !== "slick" && c !== "part").concat(["flow"]);
+  if (stub.hairline === "receding") list = ["buzz", "crop"].concat(list.filter((c) => c !== "slick" && c !== "flow" && c !== "quiff"));
+  return [...new Set(list)].slice(0, 3);
+}
+
+/* ── Половины лица ── */
+const MID = [10, 151, 9, 168, 6, 197, 195, 5, 4, 1, 2, 164, 0, 17, 18, 200, 199, 175, 152];
+function levelled(lm) { // поворачиваем так, чтобы линия глаз стала горизонтальной
+  const roll = Math.atan2(lm[263].y - lm[33].y, lm[263].x - lm[33].x), o = { x: (lm[33].x + lm[263].x) / 2, y: (lm[33].y + lm[263].y) / 2 };
+  const c = Math.cos(-roll), s = Math.sin(-roll);
+  return { roll, o, P: lm.map((p) => ({ x: o.x + (p.x - o.x) * c - (p.y - o.y) * s, y: o.y + (p.x - o.x) * s + (p.y - o.y) * c })) };
+}
+// Какая половина «сильнее»: шире открыт глаз и выше уголок рта. Грубая эвристика черновика,
+// пороги не калиброваны; ponytail: заменить замером по 52 лицам, если карточка останется.
+function sides(lm) {
+  const { P } = levelled(lm), ipd = D(P[33], P[263]), ref = (P[13].y + P[14].y) / 2;
+  const apL = (P[145].y - P[159].y) / Math.abs(P[133].x - P[33].x), apR = (P[374].y - P[386].y) / Math.abs(P[263].x - P[362].x);
+  const liftL = (ref - P[61].y) / ipd, liftR = (ref - P[291].y) / ipd;
+  const score = (apL - apR) / ((apL + apR) / 2 || 1) + (liftL - liftR) * 4;
+  return { score, win: Math.abs(score) < 0.06 ? null : score > 0 ? "L" : "R", eye: apL - apR, lift: liftL - liftR };
+}
+
+/* ── Внешний вид: формула дата-шита из app.js (APPEAL_FEATURE_WEIGHTS, PILLAR_WEIGHTS) ── */
+const APPEAL_W = { SKIN: 0.214, HAIR: 0.197, MOUTH: 0.164, EYES: 0.149, SYMMETRY: 0.129, NOSE: 0.079, EARS: 0.068 };
+const PILLAR_W = { HARMONY: 0.32, DIMORPHISM: 0.2, ANGULARITY: 0.2, FEATURES: 0.28 };
+const appealRaw = (v) => 0.8 * (PILLAR_W.HARMONY * v.HARMONY + PILLAR_W.DIMORPHISM * v.DIMORPHISM + PILLAR_W.ANGULARITY * v.ANGULARITY
+  + PILLAR_W.FEATURES * Object.keys(APPEAL_W).reduce((s, k) => s + v[k] * APPEAL_W[k], 0));
+const r1 = (x) => Math.round(Math.max(0, Math.min(8, x)) * 10) / 10;
+function ladder(v, cutName) {
+  const now = appealRaw(v), steps = [];
+  const add = (key, to, title, how) => { if (to > v[key]) steps.push({ key, title, how, from: v[key], to, d: appealRaw({ ...v, [key]: to }) - now }); };
+  add("HAIR", 8.5, "Волосы", `Стрижка «${cutName}» и укладка матовой пастой.`);
+  add("SKIN", 8.5, "Кожа", "Умывание утром и вечером, SPF 30+ днём, увлажняющий крем.");
+  add("ANGULARITY", Math.min(v.ANGULARITY + 0.8, 8.5), "Отёк и жир", "Меньше соли и алкоголя вечером, сон 7–8 часов, вода; при лишнем весе — дефицит калорий.");
+  steps.sort((a, b) => b.d - a.d);
+  return { now, steps, max: now + steps.reduce((s, x) => s + x.d, 0) };
+}
+
+/* ── Заглушка модели ── */
+const STUB = { HARMONY: 5.2, DIMORPHISM: 5.4, ANGULARITY: 5.0, SKIN: 5.5, HAIR: 4.8, MOUTH: 5.3, EYES: 5.6, SYMMETRY: 5.8, NOSE: 5.0, EARS: 5.5, texture: "straight", hairline: "normal" };
+(function buildStub() {
+  const box = $("stub");
+  for (const k of Object.keys(STUB)) {
+    const lab = document.createElement("label"); lab.textContent = k;
+    let el;
+    if (k === "texture" || k === "hairline") {
+      el = document.createElement("select");
+      const opts = k === "texture" ? [["straight", "прямые"], ["wavy", "волнистые"], ["curly", "кудрявые"]] : [["normal", "ровная линия роста"], ["receding", "залысины"]];
+      for (const [v, t] of opts) el.add(new Option(t, v));
+    } else { el = document.createElement("input"); el.type = "number"; el.step = "0.1"; el.min = "1"; el.max = "10"; }
+    el.value = STUB[k];
+    el.addEventListener("input", () => { STUB[k] = el.tagName === "SELECT" ? el.value : parseFloat(el.value) || 0; if (current) renderAll(current); });
+    lab.appendChild(el); box.appendChild(lab);
+  }
+})();
+
+/* ── Рисование ── */
+const GOLD = "#c4a46b", GOLD_HI = "#e8d4a0";
+function fit(cv, w, h) { const k = devicePixelRatio || 1; cv.width = Math.round(w * k); cv.height = Math.round(h * k); const c = cv.getContext("2d"); c.setTransform(k, 0, 0, k, 0, 0); return c; }
+function smooth(c, pts, closed) {
+  const n = pts.length; if (n < 2) return;
+  const m = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  if (closed) { const s = m(pts[n - 1], pts[0]); c.moveTo(s[0], s[1]); for (let i = 0; i < n; i++) { const e = m(pts[i], pts[(i + 1) % n]); c.quadraticCurveTo(pts[i][0], pts[i][1], e[0], e[1]); } }
+  else { c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < n - 1; i++) { const e = m(pts[i], pts[i + 1]); c.quadraticCurveTo(pts[i][0], pts[i][1], e[0], e[1]); } c.lineTo(pts[n - 1][0], pts[n - 1][1]); }
+}
+function arrow(c, x1, y1, x2, y2) {
+  const a = Math.atan2(y2 - y1, x2 - x1), h = 6;
+  c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2);
+  for (const [x, y, d] of [[x1, y1, a], [x2, y2, a + Math.PI]]) { c.moveTo(x + h * Math.cos(d - 0.4), y + h * Math.sin(d - 0.4)); c.lineTo(x, y); c.lineTo(x + h * Math.cos(d + 0.4), y + h * Math.sin(d + 0.4)); }
+  c.stroke();
+}
+
+// Кадр чертежа: начало в точке 10, ось x — вдоль линии глаз, y — вниз по лицу, в пикселях фото.
+function frame(lm) {
+  const ex0 = { x: lm[263].x - lm[33].x, y: lm[263].y - lm[33].y }, n = Math.hypot(ex0.x, ex0.y), ex = { x: ex0.x / n, y: ex0.y / n }, ey = { x: -ex.y, y: ex.x };
+  const loc = (p) => ({ x: (p.x - lm[10].x) * ex.x + (p.y - lm[10].y) * ex.y, y: (p.x - lm[10].x) * ey.x + (p.y - lm[10].y) * ey.y });
+  const L = lm.map(loc), x0 = (L[234].x + L[454].x) / 2, halfW = Math.abs(L[454].x - L[234].x) / 2, faceH = L[152].y;
+  return { L, uv: ([u, v]) => ({ x: x0 + u * halfW, y: v * faceH }), halfW, faceH, x0 };
+}
+
+function drawBlueprint(cv, lm, cutId, W, H) {
+  const c = fit(cv, W, H), F = frame(lm), cut = CUTS[cutId];
+  c.fillStyle = "#0c0b09"; c.fillRect(0, 0, W, H);
+  c.strokeStyle = "#ffffff08"; c.lineWidth = 1;
+  for (let x = 0; x < W; x += 16) { c.beginPath(); c.moveTo(x + 0.5, 0); c.lineTo(x + 0.5, H); c.stroke(); }
+  for (let y = 0; y < H; y += 16) { c.beginPath(); c.moveTo(0, y + 0.5); c.lineTo(W, y + 0.5); c.stroke(); }
+  // По вертикали укладываем v от -0.62 (макушка с запасом под подпись) до 1.08 (под подбородком).
+  const s = Math.min(W / (3.9 * F.halfW), (H - 30) / (1.7 * F.faceH)), cx = W / 2, cy = (H - 30 - 1.7 * F.faceH * s) / 2 + 0.62 * F.faceH * s;
+  const T = (p) => [cx + (p.x - F.x0) * s, cy + p.y * s];
+  // лицо — тонко
+  c.strokeStyle = "#c4a46b55"; c.lineWidth = 1; c.beginPath();
+  for (const [a, b] of CONTOURS) { const A = T(F.L[a]), B = T(F.L[b]); c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]); }
+  c.stroke();
+  // силуэт стрижки
+  const half = (arr, sign) => arr.map(([u, v]) => T(F.uv([u * sign, v])));
+  const outer = half(cut.O, -1).concat(half(cut.O, 1).reverse().slice(1));
+  const inner = half(cut.I, -1).concat(half(cut.I, 1).reverse().slice(1));
+  c.beginPath(); smooth(c, outer.concat(inner.slice().reverse()), true); c.fillStyle = "#c4a46b16"; c.fill();
+  c.strokeStyle = "#c4a46b40"; c.lineWidth = 0.8;
+  for (const t of [0.3, 0.55, 0.8]) { c.beginPath(); smooth(c, outer.map((p, i) => [inner[i][0] + (p[0] - inner[i][0]) * t, inner[i][1] + (p[1] - inner[i][1]) * t]), false); c.stroke(); }
+  c.strokeStyle = GOLD_HI; c.lineWidth = 1.6; c.beginPath(); smooth(c, outer, false); c.stroke();
+  c.strokeStyle = GOLD; c.lineWidth = 1.1; c.beginPath(); smooth(c, inner, false); c.stroke();
+  if (cut.fade) { // граница перехода с коротких боков на верх
+    c.setLineDash([4, 4]); c.strokeStyle = GOLD; c.lineWidth = 1;
+    for (const sg of [-1, 1]) { const a = T(F.uv([1.03 * sg, 0.02])), b = T(F.uv([0.86 * sg, -0.2])); c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo(a[0] - 4 * sg, b[1] + 6, b[0], b[1]); c.stroke(); }
+    c.setLineDash([]);
+  }
+  if (cut.part) { const a = T(F.uv([-0.42, -0.01])), b = T(F.uv([-0.36, -0.33])); c.strokeStyle = GOLD_HI; c.lineWidth = 1.4; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
+  // размеры
+  c.strokeStyle = GOLD; c.fillStyle = GOLD_HI; c.lineWidth = 1; c.font = "11px system-ui, sans-serif";
+  const topIn = T(F.uv([0, cut.I[5][1]])), topOut = T(F.uv([0, cut.O[5][1]])), dx = cx + 1.42 * F.halfW * s;
+  c.setLineDash([2, 3]); c.beginPath(); c.moveTo(topIn[0], topIn[1]); c.lineTo(dx + 6, topIn[1]); c.moveTo(topOut[0], topOut[1]); c.lineTo(dx + 6, topOut[1]); c.stroke(); c.setLineDash([]);
+  arrow(c, dx, topIn[1], dx, topOut[1]);
+  const label = (txt, x, y, align) => {
+    const t = txt.toUpperCase(), w = c.measureText(t).width, x0 = align === "right" ? x - w : x;
+    c.fillStyle = "#0c0b09e6"; c.fillRect(x0 - 4, y - 11, w + 8, 15);
+    c.fillStyle = GOLD_HI; c.textAlign = align; c.fillText(t, x, y);
+  };
+  label(cut.top, dx - 6, topOut[1] - 8, "right");
+  const sideP = T(F.uv([1.05, 0.25])), sideL = [cx + 1.3 * F.halfW * s, sideP[1] + 34];
+  c.beginPath(); c.moveTo(sideP[0], sideP[1]); c.lineTo(sideL[0], sideL[1]); c.lineTo(sideL[0] + 6, sideL[1]); c.stroke();
+  label(cut.side, Math.min(W - 6, sideL[0] + 8), sideL[1] + 4, W - sideL[0] < 120 ? "right" : "left");
+  const exP = T(F.uv([-0.3, cut.I[4][1]])), exL = [cx - 1.25 * F.halfW * s, exP[1] - 46];
+  c.beginPath(); c.moveTo(exP[0], exP[1]); c.lineTo(exL[0], exL[1]); c.lineTo(exL[0] - 6, exL[1]); c.stroke();
+  label(cut.extra, Math.max(6, exL[0] - 8), exL[1] - 6, "left");
+  c.fillStyle = "#8a8a8a"; c.textAlign = "left"; c.font = "10px system-ui, sans-serif";
+  c.fillText("FACERATE · ЧЕРТЁЖ ДЛЯ БАРБЕРА", 12, H - 12);
+  c.textAlign = "right"; c.fillStyle = GOLD_HI; c.font = '300 20px "Cormorant Garamond", Georgia, serif';
+  c.fillText(cut.name, W - 12, H - 12);
+}
+
+function drawPalettePhoto(cv, src, lm, W) {
+  const xs = lm.map((p) => p.x), ys = lm.map((p) => p.y), fw = Math.max(...xs) - Math.min(...xs);
+  const x0 = Math.min(...xs) - fw * 0.12, x1 = Math.max(...xs) + fw * 0.12, y0 = Math.min(...ys) - fw * 0.1, y1 = (lm[13].y + lm[152].y) / 2 + fw * 0.05;
+  const H = W * (y1 - y0) / (x1 - x0), c = fit(cv, W, H), k = W / (x1 - x0), T = (p) => [(p.x - x0) * k, (p.y - y0) * k];
+  c.drawImage(src, x0, y0, x1 - x0, y1 - y0, 0, 0, W, H);
+  c.fillStyle = "#0a0a0a55"; c.fillRect(0, 0, W, H);
+  const ipd = D(lm[33], lm[263]);
+  c.strokeStyle = GOLD_HI; c.lineWidth = 1.2;
+  for (const [p, r] of [[lm[50], ipd * 0.11], [lm[280], ipd * 0.11], [lm[151], ipd * 0.08], [lm[468], D(lm[468], lm[469])], [lm[473], D(lm[473], lm[474])]]) {
+    const [x, y] = T(p); c.beginPath(); c.arc(x, y, r * k, 0, Math.PI * 2); c.stroke();
+  }
+  for (const ids of [LIPS_OUT, R_EYE, L_EYE]) { c.beginPath(); smooth(c, ids.map((i) => T(lm[i])), true); c.stroke(); }
+  c.fillStyle = GOLD_HI;
+  for (const p of browPts(lm)) { const [x, y] = T(p); c.beginPath(); c.arc(x, y, 2.5, 0, Math.PI * 2); c.fill(); }
+}
+
+function drawHalves(src, lm, win) {
+  const { roll, o, P } = levelled(lm);
+  const mx = MID.reduce((s, i) => s + P[i].x, 0) / MID.length, ys = P.map((p) => p.y);
+  const w = Math.max(...P.map((p) => Math.abs(p.x - mx))) * 1.15, h = Math.max(...ys) - Math.min(...ys), y0 = Math.min(...ys) - h * 0.25, hh = h * 1.35;
+  // выпрямленный кадр
+  const lev = document.createElement("canvas"); lev.width = src.width; lev.height = src.height;
+  const lc = lev.getContext("2d"); lc.translate(o.x, o.y); lc.rotate(-roll); lc.translate(-o.x, -o.y); lc.drawImage(src, 0, 0);
+  for (const [id, side] of [["halfL", -1], ["halfR", 1]]) {
+    const cv = $(id), W = cv.parentElement.clientWidth || 160, H = W * hh / (2 * w), c = fit(cv, W, H);
+    const sx = side < 0 ? mx - w : mx;
+    c.drawImage(lev, sx, y0, w, hh, side < 0 ? 0 : W / 2, 0, W / 2, H);
+    c.save(); c.translate(W, 0); c.scale(-1, 1);
+    c.drawImage(lev, sx, y0, w, hh, side < 0 ? 0 : W / 2, 0, W / 2, H);
+    c.restore();
+  }
+  $("figL").classList.toggle("win", win === "L"); $("figR").classList.toggle("win", win === "R");
+}
+
+async function drawCover(cv, d) {
+  await document.fonts.load('300 40px "Cormorant Garamond"');
+  const c = cv.getContext("2d"), W = 1080, H = 1350, S = SEASONS[d.pal.season], cut = CUTS[d.cuts[0]], ln = d.ladder;
+  const g = c.createRadialGradient(W / 2, 0, 50, W / 2, 0, H); g.addColorStop(0, "#1d170e"); g.addColorStop(1, "#0a0a0a");
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  // контур лица сверху справа
+  const F = frame(d.lm), s = 300 / F.faceH, T = (p) => [760 + (p.x - F.x0) * s, 170 + p.y * s];
+  c.strokeStyle = "#c4a46b44"; c.lineWidth = 2; c.beginPath();
+  for (const [a, b] of CONTOURS) { const A = T(F.L[a]), B = T(F.L[b]); c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]); }
+  c.stroke();
+  c.fillStyle = GOLD; c.font = "500 26px system-ui, sans-serif"; c.textAlign = "left";
+  c.fillText("FACERATE · СТИЛЬ-РАЗБОР", 80, 120);
+  c.fillStyle = GOLD_HI; c.font = '300 300px "Cormorant Garamond", Georgia, serif'; c.fillText(r1(ln.now).toFixed(1), 70, 500); // у Cormorant цифры старого стиля: 4 и 9 уходят ниже строки
+  c.fillStyle = "#8a8a8a"; c.font = "30px system-ui, sans-serif";
+  c.fillText("внешний вид из 8", 84, 630);
+  c.fillStyle = GOLD; c.fillText("потолок без операций  " + r1(ln.max).toFixed(1), 84, 680);
+  c.strokeStyle = "#c4a46b55"; c.beginPath(); c.moveTo(80, 730); c.lineTo(W - 80, 730); c.stroke();
+  c.fillStyle = "#f0ece6"; c.font = '300 64px "Cormorant Garamond", Georgia, serif';
+  c.fillText(S.name + " · " + d.pal.contrast + " контраст", 80, 820);
+  c.fillText(SHAPE_RU[d.shape].replace(/ое$/, "ое лицо") + " · " + cut.name.toLowerCase(), 80, 900);
+  S.good.slice(0, 6).forEach(([h], i) => { c.fillStyle = h; c.beginPath(); c.arc(130 + i * 150, 1040, 52, 0, Math.PI * 2); c.fill(); c.strokeStyle = "#ffffff22"; c.stroke(); });
+  c.fillStyle = "#8a8a8a"; c.font = "26px system-ui, sans-serif"; c.fillText("твои цвета", 80, 1140);
+  c.fillStyle = GOLD; c.font = "28px system-ui, sans-serif"; c.fillText("facerate.ru", 80, 1260);
+}
+
+/* ── Сборка ── */
+let current = null;
+function save(cv, name) { cv.toBlob((b) => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }); }
+
+function renderAll(d) {
+  d.cuts = pickCuts(d.shape, STUB);
+  if (!d.cut || !d.cuts.includes(d.cut)) d.cut = d.cuts[0];
+  d.ladder = ladder(STUB, CUTS[d.cuts[0]].name);
+  const S = SEASONS[d.pal.season], W = $("palCv").parentElement.clientWidth - 36;
+  // 02 палитра
+  $("seasonTitle").textContent = S.name;
+  $("seasonSub").textContent = `Подтон ${d.pal.undertone}, контраст ${d.pal.contrast}. ${S.sub}`;
+  drawPalettePhoto($("palCv"), d.src, d.lm, W);
+  $("sw").innerHTML = [["skin", "кожа"], ["lips", "губы"], ["iris", "глаза"], ["brow", "брови"]]
+    .map(([k, t]) => `<div><i style="background:${hex(d.pal.col[k])}"></i>${t}</div>`).join("");
+  $("g12").innerHTML = S.good.map(([h, n]) => `<i style="background:${h}" title="${n}"></i>`).join("");
+  $("n12").textContent = S.good.map((x) => x[1]).join(", ");
+  $("g4").innerHTML = S.bad.map(([h, n]) => `<i style="background:${h}" title="${n}"></i>`).join("");
+  $("n4").textContent = S.bad.map((x) => x[1]).join(", ");
+  $("palNote").textContent = (d.pal.sclera ? "≈ Свет поправлен по белку глаза. " : "≈ Глаза не разобрать, свет не поправлен. ")
+    + "При дневном свете у окна точнее, чем под лампой.";
+  // 03 стрижка
+  const cut = CUTS[d.cut];
+  $("cutTitle").textContent = cut.name;
+  $("cutSub").textContent = `Лицо ${SHAPE_RU[d.shape]}. ${d.cut === d.cuts[0] ? "Лучший вариант для него." : "Запасной вариант."}`;
+  drawBlueprint($("cutCv"), d.lm, d.cut, W, W * 1.15);
+  $("cutPick").innerHTML = d.cuts.map((id) => `<button type="button" data-cut="${id}" class="${id === d.cut ? "on" : ""}">${CUTS[id].name}</button>`).join("");
+  $("cutAvoid").textContent = "Избегать: " + BY_SHAPE[d.shape].avoid;
+  // 04 сторона
+  drawHalves(d.src, d.lm, d.sides.win);
+  $("sideTitle").textContent = d.sides.win ? `Сильнее половина ${d.sides.win === "L" ? "слева" : "справа"}` : "Половины почти равны";
+  $("sideSub").textContent = d.sides.win
+    ? `На ней ${d.sides.win === "L" === (d.sides.eye > 0) ? "шире открыт глаз" : "выше уголок рта"}. Поворачивайся к камере так, чтобы этой половины в кадре было больше, камера чуть выше линии глаз.`
+    : "Разница меньше, чем меняет свет. Снимайся с удобной стороны, камера чуть выше линии глаз.";
+  // 05 лестница
+  const ln = d.ladder, lo = Math.min(ln.now, 4), span = Math.max(0.5, ln.max - lo);
+  $("lnNow").textContent = r1(ln.now).toFixed(1);
+  let acc = ln.now;
+  $("steps").innerHTML = ln.steps.map((st) => {
+    const from = acc; acc += st.d;
+    return `<div class="step"><div class="top"><span>${st.title} <span class="note">${st.from.toFixed(1)} → ${st.to.toFixed(1)}</span></span><b>+${st.d.toFixed(2)}</b></div>
+      <div class="bar"><span class="base" style="left:0;width:${(from - lo) / span * 100}%"></span><span style="left:${(from - lo) / span * 100}%;width:${st.d / span * 100}%"></span></div>
+      <p class="note">${st.how}</p></div>`;
+  }).join("") + `<div class="step"><div class="top"><span>Потолок без операций</span><b>${r1(ln.max).toFixed(1)}</b></div></div>`;
+  $("lnFree").textContent = `Без чисел, но в ту же сторону: одежда в цветах «${S.name}» рядом с лицом, аккуратные брови.`;
+  drawCover($("coverCv"), d);
+}
+
+$("cutPick").addEventListener("click", (e) => { const b = e.target.closest("button[data-cut]"); if (b && current) { current.cut = b.dataset.cut; renderAll(current); } });
+$("cutSave").addEventListener("click", () => {
+  if (!current) return;
+  const cv = document.createElement("canvas"); drawBlueprint(cv, current.lm, current.cut, 900, 1100); save(cv, "facerate-strizhka.png");
+});
+$("coverSave").addEventListener("click", () => save($("coverCv"), "facerate-stil.png"));
+
+async function loadImage(url) { const im = new Image(); im.src = url; await im.decode(); return im; }
+function toCanvas(im) {
+  const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement("canvas");
+  c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+  c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); return c;
+}
+async function analyze(src) {
+  await init();
+  const r = landmarker.detect(src);
+  if (!r.faceLandmarks || !r.faceLandmarks.length) throw new Error("Лицо не найдено");
+  const lm = r.faceLandmarks[0].map((p) => ({ x: p.x * src.width, y: p.y * src.height }));
+  const img = src.getContext("2d").getImageData(0, 0, src.width, src.height);
+  return { src, lm, pal: palette(img, lm), shape: faceShape(lm), sides: sides(lm) };
+}
+// Для прогона по калибровочным лицам: числа без отрисовки.
+window.measureUrl = async (url) => {
+  const d = await analyze(toCanvas(await loadImage(url)));
+  return { hue: +d.pal.hue.toFixed(1), dL: +d.pal.dL.toFixed(1), browL: +d.pal.browL.toFixed(1), skinL: +d.pal.skinL.toFixed(1),
+    gain: d.pal.gain.map((g) => +g.toFixed(2)), sc: d.pal.scleraChroma && d.pal.scleraChroma.map((g) => +g.toFixed(3)), season: d.pal.season, shape: d.shape, side: +d.sides.score.toFixed(3) };
+};
+
+async function run(url) {
+  $("status").textContent = "Загружаем модель точек…";
+  try {
+    const src = toCanvas(await loadImage(url));
+    current = await analyze(src);
+    $("status").textContent = "";
+    $("deck").hidden = false;
+    renderAll(current);
+  } catch (e) { console.error(e); $("status").textContent = "Ошибка: " + (e && e.message || e); }
+}
+window.loadFromUrl = run;
+const drop = $("drop");
+$("file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) run(URL.createObjectURL(f)); });
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) run(URL.createObjectURL(f)); });
+</script>
