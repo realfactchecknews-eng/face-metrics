@@ -99,10 +99,11 @@
     radial-gradient(900px 520px at 85% -8%, rgba(196,164,107,0.16), transparent 62%),
     radial-gradient(700px 420px at -10% 38%, rgba(196,164,107,0.06), transparent 60%),
     var(--bg); }
-  .gold { background: linear-gradient(100deg, #9c7b45 0%, #f4e4b8 38%, #c4a46b 55%, #8a6e40 75%, #e8d4a0&nbsp;100%);
-          background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
-          animation: shimmer 7s linear infinite; font-style: italic; }
-  @keyframes shimmer { to { background-position: -220% 0; } }
+  /* Перелив сменой цвета, а не градиентом в тексте: background-clip:text внутри
+     анимированного блока Safari рисует пустым — слово просто пропадало. */
+  .gold { color: var(--accent-hi); font-style: italic; animation: shimmer 5s ease-in-out infinite;
+          text-shadow: 0 0 28px rgba(196,164,107,0.35); }
+  @keyframes shimmer { 0%, 100% { color: #c4a46b; } 50% { color: #f4e4b8; } }
 
   /* Кнопка в Telegram */
   .cta-row { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
