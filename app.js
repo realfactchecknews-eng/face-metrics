@@ -579,7 +579,9 @@ function jumpToAnalysis() {
 function runIntro() {
   var overlay = document.getElementById("introOverlay");
   // Сохранённое фото после входа через Telegram — тоже сразу на экран анализа.
-  var skipToAnalysis = location.hash === "#analyze" || (TG_MINI && TG_MINI.start === "analyze") || !!readResumePhotos();
+  // open=analyze — для кнопки меню бота: ей нельзя передать startapp, а хеш занимает Telegram.
+  var skipToAnalysis = location.hash === "#analyze" || (TG_MINI && TG_MINI.start === "analyze")
+    || /[?&]open=analyze(&|$)/.test(location.search) || !!readResumePhotos();
   var delay = skipToAnalysis ? 0 : (FM_FAST_LOAD ? 500 : 1300);
   if (overlay) {
     setTimeout(function() {
