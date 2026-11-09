@@ -5000,6 +5000,7 @@ async function authWebApp(request, env) {
   if (!user) return json({ error: 'auth' });
   const token = crypto.randomUUID() + '-' + crypto.randomUUID();
   await env.RATE_LIMIT.put(`sess:${token}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 30 });
+  await rememberUsername(env, user.username, user.id).catch(() => {}); // как при обычном входе
   return json(await statusFor(env, user, token));
 }
 
@@ -5983,7 +5984,7 @@ async function pickTip(env, tgid, week) {
 // ponytail: чтение-запись в KV, параллельные запросы теряют единицы, и эндпоинт открыт, так что
 // цифры ориентировочные. Для денег считать по translog, для точности нужен Analytics Engine.
 const FUNNEL_STEPS = [
-  ['visit', 'Открыли сайт'], ['landing', 'Увидели лендинг'], ['menu', 'Открыли меню'], ['upload_view', 'Экран загрузки'],
+  ['visit', 'Открыли сайт'], ['mini', 'Открыли как мини-апп'], ['landing', 'Увидели лендинг'], ['menu', 'Открыли меню'], ['upload_view', 'Экран загрузки'],
   ['demo_seen', 'Увидели пример'], ['upload', 'Загрузили фото'], ['scan_start', 'Запустили скан'], ['scan_side', 'Скан с профилем'],
   ['scan_done', 'Скан завершён'], ['scan_fail', 'Скан сорвался'], ['gate_auth', 'Гейт: вход'], ['auth_ok', 'Вошли с гейта'],
   ['gate_sub', 'Гейт: подписка'], ['sub_ok', 'Подписались с гейта'], ['gate_pay', 'Гейт: оплата'], ['ai_start', 'Пошли в модель'], ['result', 'Увидели результат'],

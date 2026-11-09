@@ -1,0 +1,27 @@
+// Мини-приложение: данные входа из хеша переживают стирание хеша, обычный визит
+// мини-аппом не считается, звёзды в мини-аппе открываются родным окном оплаты.
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert';
+const a = readFileSync('app.js', 'utf8');
+const w = readFileSync('worker.js', 'utf8');
+const iife = a.match(/^var TG_MINI = (\(function \(\) \{[\s\S]*?^\}\)\(\));/m)[1];
+
+function run(hash, store) {
+  const ss = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
+  return new Function('location', 'sessionStorage', 'return ' + iife)({ hash }, ss);
+}
+
+const store = {};
+const data = 'query_id=AAA&user=%7B%22id%22%3A42%7D&auth_date=1&hash=x';
+const m = run('#tgWebAppData=' + encodeURIComponent(data) + '&tgWebAppVersion=7.0&tgWebAppStartParam=analyze', store);
+assert.equal(m.initData, data, 'initData декодирован один раз');
+assert.equal(m.start, 'analyze');
+assert.deepEqual(run('', store), m, 'после стирания хеша данные берутся из sessionStorage');
+assert.equal(run('#analyze', {}), null, 'обычный визит — не мини-апп');
+
+const buy = a.match(/^function buyPack[\s\S]*?^\}/m)[0];
+assert.match(buy, /W\.openInvoice\(d\.link/, 'звёзды в мини-аппе — через openInvoice');
+assert.match(buy, /window\.location\.href = d\.link/, 'вне мини-аппа оплата как раньше');
+assert.ok(w.includes("['mini', 'Открыли как мини-апп']"), 'воркер не знает шаг mini');
+assert.match(w.match(/^async function authWebApp[\s\S]*?^\}/m)[0], /rememberUsername/, 'вход из мини-аппа не запоминает ник');
+console.log('мини-приложение: все проверки прошли');

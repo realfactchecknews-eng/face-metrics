@@ -579,7 +579,7 @@ function jumpToAnalysis() {
 function runIntro() {
   var overlay = document.getElementById("introOverlay");
   // Сохранённое фото после входа через Telegram — тоже сразу на экран анализа.
-  var skipToAnalysis = location.hash === "#analyze" || !!readResumePhotos();
+  var skipToAnalysis = location.hash === "#analyze" || (TG_MINI && TG_MINI.start === "analyze") || !!readResumePhotos();
   var delay = skipToAnalysis ? 0 : (FM_FAST_LOAD ? 500 : 1300);
   if (overlay) {
     setTimeout(function() {
@@ -3877,6 +3877,61 @@ function isTgInAppBrowser() {
   return /Telegram/i.test(navigator.userAgent) || !!window.TelegramWebviewProxy;
 }
 
+/* ═══════════ Мини-приложение Telegram ═══════════
+   Сайт открыт как мини-апп бота — Telegram кладёт в хеш адреса подписанные данные входа
+   (tgWebAppData). По ним воркер сразу выдаёт сессию (/auth-webapp), и гейт входа человек
+   не видит. Хеш потом стирается переходами, поэтому данные держим в sessionStorage.
+   SDK грузим только здесь: обычным посетителям он не нужен. */
+var TG_MINI = (function () {
+  try {
+    var m = location.hash.match(/tgWebAppData=([^&]*)/);
+    if (m) {
+      sessionStorage.setItem("fm-tg-initdata", decodeURIComponent(m[1]));
+      var sp = location.hash.match(/tgWebAppStartParam=([^&]*)/);
+      sessionStorage.setItem("fm-tg-start", sp ? decodeURIComponent(sp[1]) : "");
+    }
+    var d = sessionStorage.getItem("fm-tg-initdata");
+    return d ? { initData: d, start: sessionStorage.getItem("fm-tg-start") || "" } : null;
+  } catch (e) { return null; }
+})();
+function tgMini() { return TG_MINI && window.Telegram && window.Telegram.WebApp; }
+
+if (TG_MINI) {
+  fmStep("mini");
+  (function loadSdk() {
+    var sc = document.createElement("script");
+    sc.src = "https://telegram.org/js/telegram-web-app.js";
+    sc.onload = function () {
+      var W = tgMini(); if (!W) return;
+      W.ready(); W.expand();
+      try { W.setHeaderColor("#0a0a0a"); W.setBackgroundColor("#0a0a0a"); } catch (e) {}
+    };
+    document.head.appendChild(sc);
+  })();
+  // Внешние ссылки — средствами Telegram: обычный переход уводит из мини-аппа без возврата.
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a[href^='http']"), W = tgMini();
+    if (!a || !W || a.host === location.host) return;
+    e.preventDefault();
+    if (/^https:\/\/t\.me\//.test(a.href)) W.openTelegramLink(a.href); else W.openLink(a.href);
+  }, true);
+  // Вход: своя сессия уже есть и того же человека — ничего не делаем.
+  (function miniLogin() {
+    var acc = getAccount(), uid = null;
+    try { uid = JSON.parse(new URLSearchParams(TG_MINI.initData).get("user")).id; } catch (e) {}
+    if (acc && acc.user && uid && acc.user.id === uid) return;
+    fetch(WORKER_URL + "/auth-webapp", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initData: TG_MINI.initData }),
+    }).then(function (r) { return r.json(); }).then(function (st) {
+      if (!st || !st.token) return;   // не вышло — остаётся обычный вход через бота
+      saveAccount(st);
+      renderAccount(st);
+      onLoginSuccess(st);
+    }).catch(function () {});
+  })();
+}
+
 var TG_LOGIN_PENDING_KEY = "fm-login-pending";
 var TG_LOGIN_PENDING_MAX_MS = 5 * 60 * 1000; // 5 минут — окно на возврат из Telegram
 
@@ -3887,7 +3942,9 @@ function startTgLogin(btn) {
   // Telegram уходит со страницы, айфон выгружает вкладку, пока человек в Telegram, —
   // и раньше после входа приходилось загружать фото заново.
   if (_afterGate === startAI && _pendingAnalysis) saveResumePhotos();
-  if (isTgInAppBrowser()) {
+  if (tgMini()) {
+    tgMini().openTelegramLink("https://t.me/" + TG_BOT_USERNAME + "?start=" + code);
+  } else if (isTgInAppBrowser()) {
     location.href = "https://t.me/" + TG_BOT_USERNAME + "?start=" + code;
   } else {
     // window.open СИНХРОННО в клике — иначе мобильные браузеры режут попап.
@@ -4065,7 +4122,14 @@ function buyPack(pack, btn, payMethod) {
     if (btn) btn.disabled = false;
     if (d.error || !d.link) { if (btn) btn.textContent = t("invoiceErr"); return; }
     if (btn) btn.textContent = t("invoiceOpening");
-    window.location.href = d.link;
+    var W = tgMini();
+    if (W && /^https:\/\/t\.me\/(\$|invoice\/)/.test(d.link)) {
+      W.openInvoice(d.link, function (status) { if (status === "paid") { refreshAccount(); pwRecheck(true); } });
+    } else if (W) {
+      if (/^https:\/\/t\.me\//.test(d.link)) W.openTelegramLink(d.link); else W.openLink(d.link);
+    } else {
+      window.location.href = d.link;
+    }
     // Поллим баланс — после возврата из Telegram чип обновится сам.
     var tries = 0;
     var iv = setInterval(function(){
