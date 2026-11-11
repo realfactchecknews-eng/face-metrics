@@ -24,4 +24,7 @@ assert.match(buy, /W\.openInvoice\(d\.link/, 'звёзды в мини-аппе 
 assert.match(buy, /window\.location\.href = d\.link/, 'вне мини-аппа оплата как раньше');
 assert.ok(w.includes("['mini', 'Открыли как мини-апп']"), 'воркер не знает шаг mini');
 assert.match(w.match(/^async function authWebApp[\s\S]*?^\}/m)[0], /rememberUsername/, 'вход из мини-аппа не запоминает ник');
+assert.match(buy, /src: TG_MINI \? "mini" : "site"/, 'сайт не говорит воркеру, откуда открыт счёт');
+assert.match(w.match(/^async function buy\([\s\S]*?^\}/m)[0], /buysrc:\$\{sess\.id\}/, '/buy не запоминает источник счёта');
+assert.match(w.match(/^async function recordOrder[\s\S]*?^\}/m)[0], /buysrc:[\s\S]*src/, 'покупка не получает метку источника');
 console.log('мини-приложение: все проверки прошли');

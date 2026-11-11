@@ -1184,6 +1184,10 @@ async function buy(request, env) {
   if (!pack) return json({ error: 'pack', text: 'Неизвестный пакет.' });
   const L = body.lang === 'ru' ? 'ru' : 'en';
   const method = body.method || 'stars';
+  // Откуда открыли счёт — recordOrder допишет это в покупку (src: mini | site; нет — купили в боте).
+  // ponytail: метка на человека, а не на счёт: если за 6 ч он откроет счёт на сайте и купит
+  // в боте, покупка уйдёт сайту. Точнее — нести src в payload каждого из трёх счетов.
+  await env.RATE_LIMIT.put(`buysrc:${sess.id}`, body.src === 'mini' ? 'mini' : 'site', { expirationTtl: 6 * 3600 });
 
   const discPct = await buyerDiscountPct(env, sess.id, body.pack);
   // Скидку НЕ гасим здесь: счёт ещё не оплачен. Её гасят вебхуки после реальной оплаты
@@ -3967,7 +3971,8 @@ function genOrderId() { return crypto.randomUUID().slice(0, 8).toUpperCase(); }
 // Пишет и в общий лог транзакций (для админа), и в личную историю заказов покупателя.
 async function recordOrder(env, entry) {
   const id = entry.id || genOrderId();
-  const full = { ...entry, id };
+  const src = await env.RATE_LIMIT.get(`buysrc:${entry.tgid}`);
+  const full = { ...entry, id, ...(src && { src }) };
   await logTx(env, full);
   const key = `orders:${entry.tgid}`;
   const list = await getList(env, key);

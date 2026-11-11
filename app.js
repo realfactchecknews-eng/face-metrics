@@ -4119,7 +4119,7 @@ function buyPack(pack, btn, payMethod) {
   if (btn) { btn.disabled = true; btn.textContent = t("invoiceCreating"); }
   fetch(WORKER_URL + "/buy", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang(), method: payMethod || "stars" }),
+    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang(), method: payMethod || "stars", src: TG_MINI ? "mini" : "site" }),
   }).then(function(r){ return r.json(); }).then(function(d){
     if (btn) btn.disabled = false;
     if (d.error || !d.link) { if (btn) btn.textContent = t("invoiceErr"); return; }
