@@ -125,8 +125,11 @@ export default {
       if (path === '/admin-stats/data') return await adminStatsData(request, env);
       if (path === '/setup-webhook') return await setupWebhook(request, env);
       if (path === '/tg-webhook') return await tgWebhook(request, env, ctx);
-      if (path === '/crypto-webhook') return await cryptoWebhook(request, env);
-      if (path === '/lava-webhook') return await lavaWebhook(request, env);
+      // Оплаты — под waitUntil: если платёжка не дождётся ответа и оборвёт соединение,
+      // Cloudflare иначе прерывает воркер посередине. 11.11.2026 так потерялся безлимит:
+      // платёж уже помечен обработанным, а grantPack не успел — повтор вебхука его пропустил.
+      if (path === '/crypto-webhook') { const p = cryptoWebhook(request, env); ctx.waitUntil(p); return await p; }
+      if (path === '/lava-webhook') { const p = lavaWebhook(request, env); ctx.waitUntil(p); return await p; }
       if (path === '/support-webhook') return await supportWebhook(request, env);
       if (path === '/media-webhook')   return await mediaWebhook(request, env);
       if (path === '/roast')      return await roastRewrite(request, env);
@@ -1421,7 +1424,14 @@ async function lavaWebhook(request, env) {
     const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? BL[L].trackingOpen : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
     await offerUpgrade(env, tgid, pack, L);
-  } catch { /* payload сломан — игнор */ }
+  } catch (e) {
+    // Раньше ошибка глоталась молча, а платёж уже помечен обработанным — деньги взяты,
+    // ничего не выдано, и узнаём мы об этом только по жалобе.
+    console.log('lava fail', JSON.stringify({ contractId: upd.contractId, email: upd.buyer?.email, err: String(e?.message || e) }));
+    for (const admin of adminIds(env)) {
+      await tgApi(env, 'sendMessage', { chat_id: admin, text: `\u26a0\ufe0f Оплата Lava упала посередине — проверь начисление\n\nemail: ${upd.buyer?.email || '—'}\nсумма: ${upd.amount}\ncontractId: ${upd.contractId}\nошибка: ${String(e?.message || e).slice(0, 200)}` }).catch(() => {});
+    }
+  }
   return new Response('ok');
 }
 

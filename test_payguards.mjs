@@ -46,3 +46,12 @@ assert.ok(/Реквизиты: \$\{escHtml\(req\.requisites\)\}/.test(w),
   'реквизиты на выплату снова уходят админу без экранирования');
 
 console.log('защита платежей: все проверки прошли');
+
+// 11.11.2026: обрыв соединения платёжкой прерывал вебхук после пометки «обработан».
+const wsrc = readFileSync('worker.js', 'utf8');
+for (const h of ['lavaWebhook', 'cryptoWebhook']) {
+  assert.match(wsrc, new RegExp(`const p = ${h}\\(request, env\\); ctx\\.waitUntil\\(p\\)`), h + ' не под waitUntil');
+}
+assert.ok(!/catch \{ \/\* payload сломан — игнор \*\/ \}/.test(wsrc.slice(wsrc.indexOf('async function lavaWebhook'), wsrc.indexOf('async function cryptoWebhook'))), 'ошибка Lava снова глотается молча');
+console.log('вебхуки оплат под waitUntil: ок');
+
