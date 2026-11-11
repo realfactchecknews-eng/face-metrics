@@ -580,7 +580,7 @@ function runIntro() {
   var overlay = document.getElementById("introOverlay");
   // Сохранённое фото после входа через Telegram — тоже сразу на экран анализа.
   // open=analyze — для кнопки меню бота: ей нельзя передать startapp, а хеш занимает Telegram.
-  var skipToAnalysis = location.hash === "#analyze" || (TG_MINI && TG_MINI.start === "analyze")
+  var skipToAnalysis = location.hash === "#analyze" || (TG_MINI && /^(analyze|ads_)/.test(TG_MINI.start || ""))
     || /[?&]open=analyze(&|$)/.test(location.search) || !!readResumePhotos();
   var delay = skipToAnalysis ? 0 : (FM_FAST_LOAD ? 500 : 1300);
   if (overlay) {
@@ -4119,7 +4119,7 @@ function buyPack(pack, btn, payMethod) {
   if (btn) { btn.disabled = true; btn.textContent = t("invoiceCreating"); }
   fetch(WORKER_URL + "/buy", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang(), method: payMethod || "stars", src: TG_MINI ? "mini" : "site" }),
+    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang(), method: payMethod || "stars", src: TG_MINI ? "mini" + (/^ads_\w{1,20}$/.test(TG_MINI.start || "") ? ":" + TG_MINI.start : "") : "site" }),
   }).then(function(r){ return r.json(); }).then(function(d){
     if (btn) btn.disabled = false;
     if (d.error || !d.link) { if (btn) btn.textContent = t("invoiceErr"); return; }

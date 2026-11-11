@@ -1184,10 +1184,11 @@ async function buy(request, env) {
   if (!pack) return json({ error: 'pack', text: 'Неизвестный пакет.' });
   const L = body.lang === 'ru' ? 'ru' : 'en';
   const method = body.method || 'stars';
-  // Откуда открыли счёт — recordOrder допишет это в покупку (src: mini | site; нет — купили в боте).
+  // Откуда открыли счёт — recordOrder допишет это в покупку (src: mini | mini:ads_X — мини-апп из
+  // объявления t.me/faceratepay_bot/rate?startapp=ads_X | site; нет — купили в боте).
   // ponytail: метка на человека, а не на счёт: если за 6 ч он откроет счёт на сайте и купит
   // в боте, покупка уйдёт сайту. Точнее — нести src в payload каждого из трёх счетов.
-  await env.RATE_LIMIT.put(`buysrc:${sess.id}`, body.src === 'mini' ? 'mini' : 'site', { expirationTtl: 6 * 3600 });
+  await env.RATE_LIMIT.put(`buysrc:${sess.id}`, /^mini(:ads_\w{1,20})?$/.test(body.src || '') ? body.src : 'site', { expirationTtl: 6 * 3600 });
 
   const discPct = await buyerDiscountPct(env, sess.id, body.pack);
   // Скидку НЕ гасим здесь: счёт ещё не оплачен. Её гасят вебхуки после реальной оплаты

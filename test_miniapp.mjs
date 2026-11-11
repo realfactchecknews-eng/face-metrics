@@ -24,7 +24,13 @@ assert.match(buy, /W\.openInvoice\(d\.link/, 'звёзды в мини-аппе 
 assert.match(buy, /window\.location\.href = d\.link/, 'вне мини-аппа оплата как раньше');
 assert.ok(w.includes("['mini', 'Открыли как мини-апп']"), 'воркер не знает шаг mini');
 assert.match(w.match(/^async function authWebApp[\s\S]*?^\}/m)[0], /rememberUsername/, 'вход из мини-аппа не запоминает ник');
-assert.match(buy, /src: TG_MINI \? "mini" : "site"/, 'сайт не говорит воркеру, откуда открыт счёт');
+assert.match(buy, /src: TG_MINI \? "mini" \+/, 'сайт не говорит воркеру, откуда открыт счёт');
+const srcOf = (start) => new Function('TG_MINI', 'return ' + buy.match(/src: (TG_MINI \?.*?: "site")/)[1])(start === undefined ? null : { start });
+assert.equal(srcOf('ads_ch'), 'mini:ads_ch', 'метка объявления не доходит до покупки');
+assert.equal(srcOf('analyze'), 'mini');
+assert.equal(srcOf(undefined), 'site');
+const okSrc = new RegExp(w.match(/\/(\^mini\(:ads_[^/]+)\/\.test\(body\.src/)[1]);
+assert.ok(okSrc.test('mini:ads_ch') && !okSrc.test('mini:<script>') && !okSrc.test('x'), 'воркер пропускает мусор в src');
 assert.match(w.match(/^async function buy\([\s\S]*?^\}/m)[0], /buysrc:\$\{sess\.id\}/, '/buy не запоминает источник счёта');
 assert.match(w.match(/^async function recordOrder[\s\S]*?^\}/m)[0], /buysrc:[\s\S]*src/, 'покупка не получает метку источника');
 console.log('мини-приложение: все проверки прошли');
