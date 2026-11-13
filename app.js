@@ -2924,6 +2924,7 @@ function showTeaserUpsell() {
     (offer ? "<p class=\"teaser-offer\">−" + offer.pct + t("offerLine") + " <b class=\"teaser-offer-left\">" + fmtLeft(offerMsLeft(offer.until)) + "</b></p>" : "") +
     "<button class=\"teaser-upsell-btn\" type=\"button\">" + (offer ? t("offerBtn") : t("teaserBtn")) + "</button>";
   box.classList.remove("hidden");
+  if (offer) fmStep("offer_seen");
   clearInterval(_fmOfferTimer);
   if (offer) _fmOfferTimer = setInterval(function () {
     var left = offerMsLeft(offer.until), el = box.querySelector(".teaser-offer-left");
@@ -4164,6 +4165,7 @@ function buyPack(pack, btn, payMethod) {
   }).then(function(r){ return r.json(); }).then(function(d){
     if (btn) btn.disabled = false;
     if (d.error || !d.link) { if (btn) btn.textContent = t("invoiceErr"); return; }
+    fmStep("invoice_ok");
     if (btn) btn.textContent = t("invoiceOpening");
     var W = tgMini();
     if (W && /^https:\/\/t\.me\/(\$|invoice\/)/.test(d.link)) {
@@ -4352,6 +4354,7 @@ function showPaywall(state, st) {
       b.textContent = t("pwChecking"); pwRecheck();
     });
   } else { // pay
+    fmStep("pw_open");
     var packs = (st && st.packs) || {
       p1: { stars: 45, rub: 70, lavaRub: 70, oldStars: 39, oldRub: 62, oldLavaRub: 62 },
       p5: { stars: 99, rub: 149, lavaRub: 149, oldStars: 99, oldRub: 149, oldLavaRub: 149 },
@@ -4412,7 +4415,7 @@ function showPaywall(state, st) {
             top = " <i class='pw-hit'>×" + (Math.round(payPrice("p1", packs.p1) / one * 10) / 10) + " " + t("bestValue") + "</i>";
           }
         }
-        btn(packNames[id] + " — " + was + " " + price + per + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });
+        btn(packNames[id] + " — " + was + " " + price + per + top, "pw-btn pw-btn-main", function(b){ fmStep("pack_pick"); buyPack(id, b, method); });
       }
       packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1"); packBtn("gpdf");
       btn(t("pwBack"), "pw-btn pw-btn-ghost", function(){ showPaywall("pay", st); });

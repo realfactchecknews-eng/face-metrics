@@ -7,7 +7,9 @@ const html = readFileSync('index.html', 'utf8');
 
 assert.match(w, /const cost = body\.compare \? 2 : 1;/, 'цена дуэли не задана');
 assert.match(w, /else if \(credits >= cost\) mode = 'paid';/, 'гейт пускает с недостаточным балансом');
-assert.ok(w.includes('creditsLeft = credits - cost;'), 'списывается фиксированная единица');
+assert.ok(w.includes('creditsLeft = Math.max(0, fresh - cost);'), 'списывается фиксированная единица');
+// Остаток перечитывается перед записью (13.11.2026): иначе оплата во время анализа затиралась.
+assert.match(w, /const fresh = parseInt\(await env\.RATE_LIMIT\.get\(`credits:\$\{tgid\}`\)/, 'остаток не перечитывается перед списанием');
 assert.ok(/q = \{[^}]*cost \}/.test(w), 'цена не доходит до chargeQuota');
 
 // Кешбэк. Проверяем ту же арифметику, что в chargeQuota: считаем по cbe/cbg, а не по spent.

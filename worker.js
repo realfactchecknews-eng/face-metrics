@@ -268,7 +268,11 @@ async function chargeQuota(env, q) {
   } else if (mode === 'holder') {
     await env.RATE_LIMIT.put(dayKey, String(dayUsed + 1), { expirationTtl: 60 * 60 * 30 });
   } else if (mode === 'paid') {
-    creditsLeft = credits - cost;
+    // Остаток перечитываем прямо перед записью: `credits` прочитан до запроса к модели, ~15 с
+    // назад. Если за это время пришла оплата, запись старого значения стёрла бы начисление.
+    // ponytail: KV не атомарен — окно сужено до миллисекунд, а не закрыто; закрывает D1/Durable Object.
+    const fresh = parseInt(await env.RATE_LIMIT.get(`credits:${tgid}`) || '0', 10);
+    creditsLeft = Math.max(0, fresh - cost);
     // Кешбэк лояльности: каждые CASHBACK_EVERY потраченных ПЛАТНЫХ кредита (накопительно,
     // без привязки к дням) — +1 анализ сверху. Считаем от общего числа потраченных кредитов
     // за всё время (spent:tgid), не от текущей покупки — так работает и растянуто по времени,
@@ -1391,7 +1395,9 @@ async function createLavaInvoice(env, tgid, packId, L, discPct = 0, sbp = false)
 // Вебхук Lava.top: аутентификация Basic (логин/пароль задаются при настройке вебхука в их кабинете),
 // tgid достаём из синтетического email, пакет — обратным поиском offerId в LAVA_OFFER_IDS.
 async function lavaWebhook(request, env) {
-  if (env.LAVA_WEBHOOK_LOGIN) {
+  // Без настроенного логина вебхук закрыт: иначе любой POST с «payment.success» выдавал бы тариф.
+  if (!env.LAVA_WEBHOOK_LOGIN || !env.LAVA_WEBHOOK_PASS) return new Response('forbidden', { status: 403 });
+  {
     const auth = request.headers.get('authorization') || '';
     const expected = 'Basic ' + btoa(`${env.LAVA_WEBHOOK_LOGIN}:${env.LAVA_WEBHOOK_PASS}`);
     if (auth !== expected) return new Response('forbidden', { status: 403 });
@@ -1516,7 +1522,14 @@ async function cryptoWebhook(request, env) {
     const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? BL[L].trackingOpen : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
     await offerUpgrade(env, tgid, pack, L);
-  } catch { /* payload сломан — игнор */ }
+  } catch (e) {
+    // Как в Lava: платёж уже помечен обработанным, поэтому молчаливая ошибка = деньги взяты,
+    // ничего не выдано. Пусть хотя бы админ узнает сразу, а не по жалобе.
+    console.log('crypto fail', JSON.stringify({ invoice: upd.payload?.invoice_id, err: String(e?.message || e) }));
+    for (const admin of adminIds(env)) {
+      await tgApi(env, 'sendMessage', { chat_id: admin, text: `\u26a0\ufe0f Оплата криптой упала посередине — проверь начисление\n\ninvoice: ${upd.payload?.invoice_id || '—'}\nсумма: ${upd.payload?.amount || '—'} ${upd.payload?.asset || upd.payload?.fiat || ''}\nошибка: ${String(e?.message || e).slice(0, 200)}` }).catch(() => {});
+    }
+  }
   return new Response('ok');
 }
 
@@ -1932,7 +1945,7 @@ function packsKb(method, L, discPct, guidePct = discPct) {
 
 async function tgWebhook(request, env, ctx) {
   // Проверка, что вебхук реально от Telegram (секретный заголовок).
-  if (env.TG_WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TG_WEBHOOK_SECRET) {
+  if (!env.TG_WEBHOOK_SECRET || request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TG_WEBHOOK_SECRET) {
     return new Response('forbidden', { status: 403 });
   }
   let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
@@ -3065,7 +3078,7 @@ function promoGiftLabel(p) {
   return '?';
 }
 async function promoListText(env) {
-  const list = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+  const list = await listAll(env, 'promo:');
   const lines = [];
   for (const k of list.keys) {
     const raw = await env.RATE_LIMIT.get(k.name);
@@ -3084,7 +3097,7 @@ async function promoListText(env) {
 // который ссылался промокод — ничего не обнуляется. Сам ref:-объект не трогаем (на случай если
 // у него ещё есть отдельные клики по прямой ссылке) — просто отвязываем от него промокод.
 async function migrateOldMediaPromos(env) {
-  const list = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+  const list = await listAll(env, 'promo:');
   const migrated = [];
   const skipped = [];
   for (const k of list.keys) {
@@ -3112,7 +3125,7 @@ async function migrateOldMediaPromos(env) {
 }
 // Список кодов кнопками — открыть детальную карточку с удалением/изменением количества.
 async function promoManageKb(env) {
-  const list = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+  const list = await listAll(env, 'promo:');
   const codes = list.keys.map((k) => k.name.slice('promo:'.length)).sort();
   const rows = codes.map((c) => ([{ text: `🎟 ${c}`, callback_data: `promoedit:${c}` }]));
   if (!rows.length) rows.push([{ text: 'Промокодов нет', callback_data: 'admpromo' }]);
@@ -3361,6 +3374,19 @@ async function buyerDiscountPct(env, tgid, packId) {
   }
   return best;
 }
+// list() отдаёт не больше 1000 ключей за раз, без курсора хвост молча теряется. Форма ответа
+// та же ({ keys }). Только для префиксов, где ключи НЕ читаются по одному: иначе упрёмся в
+// лимит операций KV на запрос (поэтому `ref:` листается по-старому, см. nonPersonalRefCodes).
+async function listAll(env, prefix) {
+  const keys = [];
+  let cursor;
+  do {
+    const page = await env.RATE_LIMIT.list({ prefix, cursor });
+    keys.push(...page.keys);
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return { keys };
+}
 async function resultOfferUntil(env, tgid) {
   const until = parseInt(await env.RATE_LIMIT.get(`resoffer:${tgid}`) || '0', 10);
   return until > Date.now() ? until : 0;
@@ -3566,6 +3592,8 @@ async function trackReferralPurchase(env, tgid, pack, method, paidAmount) {
 // Персональные ссылки (каждый пользователь может сделать свою в главном боте) не показываем
 // в админ-панели медийок — иначе список зарастёт сотнями пользовательских кодов.
 async function nonPersonalRefCodes(env) {
+  // ponytail: только первая 1000 ключей — каждый код читается отдельно, а весь список (3300+, в основном
+  // личные U…) упёрся бы в лимит ~1000 операций KV на запрос. Чинить фильтром личных кодов до чтения.
   const list = await env.RATE_LIMIT.list({ prefix: 'ref:' });
   const codes = list.keys.map((k) => k.name.slice(4)).sort();
   const flags = await Promise.all(codes.map((c) => getRef(env, c)));
@@ -3773,7 +3801,7 @@ function mediaApi(env, method, body) {
 // Бот для медийных партнёров: привязывают выданный им реф-код и сами следят за статистикой
 // (переходы/покупки/выручка), без обращения в поддержку каждый раз.
 async function mediaWebhook(request, env) {
-  if (env.MEDIA_WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.MEDIA_WEBHOOK_SECRET) {
+  if (!env.MEDIA_WEBHOOK_SECRET || request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.MEDIA_WEBHOOK_SECRET) {
     return new Response('forbidden', { status: 403 });
   }
   let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
@@ -4056,7 +4084,7 @@ async function ordersText(env, tgid, L) {
 function packLabelById(packId, L) { const p = PACKS[packId]; return p ? packLabel(p, L) : (packId || '?'); }
 
 async function supportWebhook(request, env) {
-  if (env.SUPPORT_WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.SUPPORT_WEBHOOK_SECRET) {
+  if (!env.SUPPORT_WEBHOOK_SECRET || request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.SUPPORT_WEBHOOK_SECRET) {
     return new Response('forbidden', { status: 403 });
   }
   let upd; try { upd = await request.json(); } catch { return new Response('ok'); }
@@ -4488,6 +4516,7 @@ async function adminStatsData(request, env) {
     return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   }
   const translog = await getList(env, 'translog');
+  // ponytail: первая 1000 — см. nonPersonalRefCodes, тот же лимит операций KV.
   const refList = await env.RATE_LIMIT.list({ prefix: 'ref:' });
   const refs = [];
   for (const k of refList.keys) {
@@ -4496,7 +4525,7 @@ async function adminStatsData(request, env) {
     let r; try { r = JSON.parse(raw); } catch { continue; }
     refs.push({ code: k.name.slice(4), ...r, payout: refPayout(r) });
   }
-  const promoList = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+  const promoList = await listAll(env, 'promo:');
   const promos = [];
   for (const k of promoList.keys) {
     const raw = await env.RATE_LIMIT.get(k.name);
@@ -4735,7 +4764,7 @@ async function partnerAdmin(request, env) {
     });
   }
   if (body.action === 'list') {
-    const promoList = await env.RATE_LIMIT.list({ prefix: 'promo:' });
+    const promoList = await listAll(env, 'promo:');
     const partners = [];
     for (const k of promoList.keys) {
       const raw = await env.RATE_LIMIT.get(k.name);
@@ -4961,7 +4990,7 @@ async function adminWallets(request, env) {
   const adminSecret = env.FACE_ADMIN_SECRET || env.TG_WEBHOOK_SECRET;
   if (!adminSecret || secret !== adminSecret) return cors('Forbidden', 403);
   const day = url.searchParams.get('day') || new Date().toISOString().slice(0, 10);
-  const list = await env.RATE_LIMIT.list({ prefix: `wnew:${day}:` });
+  const list = await listAll(env, `wnew:${day}:`);
   const out = [];
   for (const k of list.keys) {
     const raw = await env.RATE_LIMIT.get(k.name);
@@ -5294,8 +5323,8 @@ async function markFacePaid(env, tgid) {
 // Что реально происходит с системой. Считаем по KV, без внешних запросов —
 // балансы тут не трогаем, иначе на каждом замере ходили бы в сеть за каждым юзером.
 async function faceStats(env) {
-  const count = async (prefix) => (await env.RATE_LIMIT.list({ prefix })).keys.length;
-  const claims = (await env.RATE_LIMIT.list({ prefix: 'faceclaim:' })).keys;
+  const count = async (prefix) => (await listAll(env, prefix)).keys.length;
+  const claims = (await listAll(env, 'faceclaim:')).keys;
   const byTask = {};
   for (const k of claims) {
     const id = k.name.split(':')[2];
@@ -5305,7 +5334,7 @@ async function faceStats(env) {
   // Сколько холдерских анализов израсходовано сегодня — прямая мера того,
   // пользуются перком или просто держат токен ради галочки.
   const today = new Date().toISOString().slice(0, 10);
-  const used = (await env.RATE_LIMIT.list({ prefix: `qd:` })).keys.filter((k) => k.name.endsWith(':' + today)).length;
+  const used = (await listAll(env, `qd:`)).keys.filter((k) => k.name.endsWith(':' + today)).length;
   return {
     wallets: await count('wallet:'),
     claimsByTask: byTask,
@@ -5318,7 +5347,7 @@ async function faceStats(env) {
 
 // Все незакрытые начисления, по убыванию суммы. Один источник и для бота, и для эндпоинта.
 async function pendingFacePayouts(env) {
-  const list = await env.RATE_LIMIT.list({ prefix: 'facepay:' });
+  const list = await listAll(env, 'facepay:');
   const out = [];
   for (const k of list.keys) {
     const tgid = k.name.slice(8);
@@ -6033,6 +6062,9 @@ const FUNNEL_STEPS = [
   ['scan_done', 'Скан завершён'], ['scan_fail', 'Скан сорвался'], ['gate_auth', 'Гейт: вход'], ['auth_ok', 'Вошли с гейта'],
   ['gate_sub', 'Гейт: подписка'], ['sub_ok', 'Подписались с гейта'], ['gate_pay', 'Гейт: оплата'], ['ai_start', 'Пошли в модель'], ['result', 'Увидели результат'],
   ['ai_fail', 'Ошибка модели'],
+  // После результата (13.11.2026): раньше счётчик обрывался на результате, и не было видно,
+  // где теряются покупки. Сама оплата — в translog (поле src).
+  ['offer_seen', 'Увидели оффер'], ['pw_open', 'Открыли тарифы'], ['pack_pick', 'Выбрали тариф'], ['invoice_ok', 'Получили счёт'],
 ];
 
 // Коды ошибок анализа: E-* от воркера (explainAiError, E-REF, E-LEN), отказы до модели

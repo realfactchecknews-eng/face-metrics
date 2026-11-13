@@ -55,3 +55,12 @@ for (const h of ['lavaWebhook', 'cryptoWebhook']) {
 assert.ok(!/catch \{ \/\* payload сломан — игнор \*\/ \}/.test(wsrc.slice(wsrc.indexOf('async function lavaWebhook'), wsrc.indexOf('async function cryptoWebhook'))), 'ошибка Lava снова глотается молча');
 console.log('вебхуки оплат под waitUntil: ок');
 
+// 13.11.2026: без настроенного секрета вебхук закрыт, а не открыт для всех.
+assert.match(wsrc, /if \(!env\.LAVA_WEBHOOK_LOGIN \|\| !env\.LAVA_WEBHOOK_PASS\) return new Response\('forbidden'/, 'Lava открыта без логина');
+for (const s of ['TG_WEBHOOK_SECRET', 'MEDIA_WEBHOOK_SECRET', 'SUPPORT_WEBHOOK_SECRET']) {
+  assert.ok(wsrc.includes(`if (!env.${s} || request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.${s})`), s + ': вебхук открыт без секрета');
+}
+const cw = wsrc.slice(wsrc.indexOf('async function cryptoWebhook'), wsrc.indexOf('// Если у покупателя сейчас висит pendingDiscount'));
+assert.ok(!cw.includes('catch { /* payload сломан — игнор */ }') && cw.includes("'crypto fail'"), 'ошибка крипты снова глотается молча');
+console.log('вебхуки закрыты без секрета, крипта не молчит: ок');
+
