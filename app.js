@@ -183,7 +183,8 @@ var I18N = {
     fbSend: "Send", fbSending: "Sending…", fbOk: "Thank you! Message sent.", fbErr: "Could not send. Try later.",
     labelSym: "Symmetry", labelLips: "Lips / Cheekbones",
     shareCardTag: "PSL RATING · facerate.ru", shareText: "My PSL rating — facerate.ru",
-    errNoFace: "Could not detect a face. Try another photo — the face should look at the camera in good lighting.",
+    errNoFace: "Couldn't find a face in this photo. What usually helps: face close-up and straight to the camera, nothing covering the eyes, even light from the front, no filters.",
+    offerLine: "% off any plan — ends in", offerBtn: "Unlock full report with discount",
     errGeneric: "Analysis error. Try refreshing the page.",
     emptyAnswer: "Empty response.",
     cashbackToast: "🎁 Cashback! +1 free analysis for every 5 credits you buy and spend.",
@@ -321,7 +322,8 @@ var I18N = {
     fbSend: "Отправить", fbSending: "Отправка…", fbOk: "Спасибо! Сообщение отправлено.", fbErr: "Не удалось отправить. Попробуйте позже.",
     labelSym: "Симметрия", labelLips: "Губы / Скулы",
     shareCardTag: "PSL РЕЙТИНГ · facerate.ru", shareText: "Мой PSL рейтинг — facerate.ru",
-    errNoFace: "Не удалось распознать лицо. Попробуйте другое фото — лицо должно быть направлено в камеру.",
+    errNoFace: "Не нашли лицо на фото. Чаще всего помогает: лицо крупно и прямо в камеру, глаза ничем не закрыты, ровный свет спереди, без фильтров.",
+    offerLine: "% на любой тариф — осталось", offerBtn: "Открыть полный разбор со скидкой",
     errGeneric: "Ошибка при анализе. Попробуйте обновить страницу.",
     emptyAnswer: "Пустой ответ.",
     cashbackToast: "🎁 Кешбэк! +1 бесплатный анализ за каждые 5 купленных и потраченных.",
@@ -909,8 +911,19 @@ function clearReport() {
   if (arc) { arc.style.transition = "none"; arc.style.strokeDashoffset = "516"; arc.style.stroke = "#c4a46b"; }
 }
 
-function showError(msg) {
+// withPhotoBtn — кнопка «загрузить другое фото»: без неё человек с «лицо не найдено»
+// оставался на тупиковом экране (123 таких срыва за 10–12.11).
+function showError(msg, withPhotoBtn) {
   errorText.textContent = msg;
+  var ob = document.getElementById("errorPhotoBtn");
+  if (ob) ob.remove();
+  if (withPhotoBtn) {
+    ob = document.createElement("button");
+    ob.id = "errorPhotoBtn"; ob.type = "button"; ob.className = "btn-primary";
+    ob.textContent = t("errAnotherPhoto");
+    ob.addEventListener("click", function(){ resetBtn.click(); });
+    errorBox.appendChild(ob);
+  }
   errorBox.classList.remove("hidden");
   loadingCard.classList.add("hidden");
   analysisView.classList.remove("hidden");
@@ -1829,7 +1842,7 @@ async function processImage(img, sideImage) {
     var results = fl.detect(cleanImageCanvas);
     loadingCard.classList.add("hidden");
     if (!results.faceLandmarks || !results.faceLandmarks.length) {
-      scanFail("NOFACE"); showError(t("errNoFace")); return;
+      scanFail("NOFACE"); showError(t("errNoFace"), true); return;
     }
     _scanStage = "anim";
     var raw = results.faceLandmarks[0];
@@ -2264,6 +2277,7 @@ async function callAI(metrics, shapeInfo) {
       if (roasted) reportText = roasted;
     }
     stopAIHUD();
+    if (data.offerEndsAt) _fmOffer = { until: data.offerEndsAt, pct: data.offerPct || 0 };
     renderAIReport(reportText, false, !!data.teaser);
     aiReport.classList.remove("hidden");
     fmStep("result");
@@ -2881,14 +2895,31 @@ function renderAIReport(text, skipSideEffects, isTeaser) {
   if (isTeaser) showTeaserUpsell(); else hideTeaserUpsell();
 }
 
+// Оффер с экрана результата: сервер включает его после бесплатного разбора (не чаще раза
+// в неделю) и сам считает скидку в /buy — здесь только показ и таймер.
+var _fmOffer = null, _fmOfferTimer = null;
+function offerMsLeft(until) { return until ? until - Date.now() : 0; }
+function fmtLeft(ms) { var s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2); }
+function offerPrice(amount, pct, method) {
+  var v = pct > 0 ? Math.max(1, Math.round(amount * (100 - pct) / 100)) : amount;
+  return (method === "rub" || method === "sbp") ? Math.max(50, v) : v; // как LAVA_MIN_RUB в воркере
+}
 function showTeaserUpsell() {
   var box = document.getElementById("teaserUpsell");
   if (!box) return;
+  var offer = _fmOffer && offerMsLeft(_fmOffer.until) > 0 && _fmOffer.pct ? _fmOffer : null;
   box.innerHTML = "<div class=\"teaser-upsell-lock\">🔒</div>" +
     "<p class=\"teaser-upsell-title\">" + t("teaserTitle") + "</p>" +
     "<p class=\"teaser-upsell-body\">" + t("teaserBody") + "</p>" +
-    "<button class=\"teaser-upsell-btn\" type=\"button\">" + t("teaserBtn") + "</button>";
+    (offer ? "<p class=\"teaser-offer\">−" + offer.pct + t("offerLine") + " <b class=\"teaser-offer-left\">" + fmtLeft(offerMsLeft(offer.until)) + "</b></p>" : "") +
+    "<button class=\"teaser-upsell-btn\" type=\"button\">" + (offer ? t("offerBtn") : t("teaserBtn")) + "</button>";
   box.classList.remove("hidden");
+  clearInterval(_fmOfferTimer);
+  if (offer) _fmOfferTimer = setInterval(function () {
+    var left = offerMsLeft(offer.until), el = box.querySelector(".teaser-offer-left");
+    if (!el || left <= 0) { clearInterval(_fmOfferTimer); var line = box.querySelector(".teaser-offer"); if (line) line.remove(); var b0 = box.querySelector(".teaser-upsell-btn"); if (b0) b0.textContent = t("teaserBtn"); return; }
+    el.textContent = fmtLeft(left);
+  }, 1000);
   var btn = box.querySelector(".teaser-upsell-btn");
   if (btn) btn.addEventListener("click", function() {
     var acc = getAccount(); if (!acc) return;
@@ -4319,6 +4350,7 @@ function showPaywall(state, st) {
       m1: { stars: 749, rub: 999, lavaRub: 999, oldStars: 749, oldRub: 999, oldLavaRub: 999 },
     };
     var saleEndsAt = (st && st.saleEndsAt) || 0;
+    var offerPct = st && st.offerEndsAt > Date.now() ? (st.offerPct || 0) : 0;
     // Таймер до конца недельной акции — на самом видном месте под заголовком.
     function saleCountdownText() {
       if (!saleEndsAt || saleEndsAt <= Date.now()) return "";
@@ -4328,7 +4360,7 @@ function showPaywall(state, st) {
       return "🔥 Цены недели! До повышения: " + left;
     }
     title.textContent = t("pwPayTitle");
-    sub.textContent = saleCountdownText() || t("pwPaySub");
+    sub.textContent = offerPct ? ("🔥 −" + offerPct + t("offerLine") + " " + fmtLeft(st.offerEndsAt - Date.now())) : (saleCountdownText() || t("pwPaySub"));
     var methods = (st && st.methods) || ["stars"];
     // Сколько анализов в пакете — для подписи «цена за анализ». У одиночного она
     // совпадает с ценой, поэтому подписывается только пятёрка (как и в боте).
@@ -4345,15 +4377,18 @@ function showPaywall(state, st) {
       function rawOldPrice(p) {
         return method === "stars" ? p.oldStars : (((method === "rub" || method === "sbp") && p.oldLavaRub) ? p.oldLavaRub : p.oldRub);
       }
+      // Цена с оффером результата — та же формула, что applyDiscount в воркере (ведение — без оффера).
+      function payPrice(id, p) { return offerPct && id !== "guide" ? offerPrice(rawPrice(p), offerPct, method) : rawPrice(p); }
       function packBtn(id) {
         var p = packs[id]; if (!p) return;
         var unit = method === "stars" ? "⭐" : "₽";
-        var price = rawPrice(p) + unit;
+        var price = payPrice(id, p) + unit;
         var was = "";
         // Зачёркнутая ОБЫЧНАЯ цена (до недельной акции), пока акция активна.
         var oldPrice = rawOldPrice(p);
         var onSale = !!(saleEndsAt && saleEndsAt > Date.now() && oldPrice && oldPrice > rawPrice(p));
         if (onSale) was = " <s class='pw-was'>" + oldPrice + unit + "</s>";
+        if (payPrice(id, p) < rawPrice(p)) { was = " <s class='pw-was'>" + rawPrice(p) + unit + "</s>"; onSale = true; }
         // «Хит скидки» — только если этот тариф ДЕЙСТВИТЕЛЬНО подешевел. Раньше подпись
         // висела на m1 при любой активной акции, даже когда его цена не менялась.
         var top = id === "m1" ? (" <i class='pw-hit'>" + (onSale ? "🔥 хит скидки" : "top") + "</i>") : "";
@@ -4361,10 +4396,10 @@ function showPaywall(state, st) {
         // (29 ₽ против 79 ₽) не читается — тарифы идут ценой по возрастанию.
         var per = "";
         if (PACK_UNITS[id]) {
-          var one = rawPrice(p) / PACK_UNITS[id];
+          var one = payPrice(id, p) / PACK_UNITS[id];
           per = " <i class='pw-per'>" + (Math.round(one * 10) / 10) + unit + " " + t("perUnit") + "</i>";
-          if (id === "p5" && packs.p1 && rawPrice(packs.p1) >= one * 1.5) {
-            top = " <i class='pw-hit'>×" + (Math.round(rawPrice(packs.p1) / one * 10) / 10) + " " + t("bestValue") + "</i>";
+          if (id === "p5" && packs.p1 && payPrice("p1", packs.p1) >= one * 1.5) {
+            top = " <i class='pw-hit'>×" + (Math.round(payPrice("p1", packs.p1) / one * 10) / 10) + " " + t("bestValue") + "</i>";
           }
         }
         btn(packNames[id] + " — " + was + " " + price + per + top, "pw-btn pw-btn-main", function(b){ buyPack(id, b, method); });

@@ -75,6 +75,6 @@ sent.forEach((b) => {
   assert.equal(b.messages[0].content.filter((c) => c.type === 'image_url').length, 1, 'одна фотография на запрос');
   assert.equal(b.temperature, 0, 'температура 0, как в обычном разборе');
 });
-assert.match(worker, /rates \}\);/, 'воркер отдаёт rates в ответе');
+assert.match(worker, /cashback, rates[,\s}]/, 'воркер отдаёт rates в ответе');
 
 console.log('дуэль: все проверки прошли');

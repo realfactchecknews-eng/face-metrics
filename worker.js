@@ -20,6 +20,12 @@
 // KV: RATE_LIMIT.
 
 const CHANNEL = '@wwwfacerateru';        // канал, подписка на который даёт 1 free/неделю
+// Оффер на экране результата (13.11.2026): после бесплатного разбора — скидка на всё, кроме
+// ведения, на полчаса. 87% покупок случаются в первый час, а продажи на результат упали вдвое.
+// Не чаще раза в неделю на человека, иначе её начнут ждать вместо покупки.
+const RESULT_OFFER_PCT = 20;
+const RESULT_OFFER_MS = 30 * 60 * 1000;
+const RESULT_OFFER_EVERY_S = 7 * 24 * 3600;
 const LAVA_MIN_RUB = 50;                 // минимальная сумма инвойса у Lava.top — ниже нельзя ни при какой скидке
 const FREE_PER_WEEK = 1;                 // бесплатных анализов в неделю подписчику (у всех одинаковый ритм)
 const CASHBACK_EVERY = 5;                // каждые N потраченных КУПЛЕННЫХ кредитов -> +1 анализ кешбэком
@@ -394,12 +400,12 @@ async function analyze(request, env) {
   else if (body.compare && credits > 0) {
     // Кредиты есть, но на дуэль не хватает — это отдельный случай: человек видит баланс
     // и без объяснения решит, что дуэль сломалась.
-    return json({ error: 'pay', text: `Дуэль стоит ${cost} анализа, а на счету ${credits}. Пополни счёт, чтобы сравнить лица.`, cost, creditsLeft: credits, packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0 });
+    return json({ error: 'pay', text: `Дуэль стоит ${cost} анализа, а на счету ${credits}. Пополни счёт, чтобы сравнить лица.`, cost, creditsLeft: credits, packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0, offerEndsAt: await resultOfferUntil(env, tgid), offerPct: RESULT_OFFER_PCT });
   }
   else if (!subscribed) {
     return json({ error: 'sub', text: 'Подпишись на канал ' + CHANNEL + ' — это даёт 1 бесплатный анализ в неделю.', channel: CHANNEL });
   } else {
-    return json({ error: 'pay', text: body.compare ? `Дуэль стоит ${cost} анализа. Купи кредиты, чтобы сравнить лица.` : 'Бесплатный анализ уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0 });
+    return json({ error: 'pay', text: body.compare ? `Дуэль стоит ${cost} анализа. Купи кредиты, чтобы сравнить лица.` : 'Бесплатный анализ уже использован. Купи кредиты, чтобы продолжить.', packs: PACKS, methods: enabledMethods(env), saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0, offerEndsAt: await resultOfferUntil(env, tgid), offerPct: RESULT_OFFER_PCT });
   }
   // Тизер (урезанный отчёт) — только для новичков, которые никогда не покупали.
   // Те, кто хоть раз покупал, получают ПОЛНЫЙ бесплатный анализ раз в 3 дня — бонус лояльности.
@@ -444,6 +450,7 @@ async function analyze(request, env) {
       console.log('AI cache hit', JSON.stringify({ tgid, isTeaser, mode, lang: body.lang || 'en' }));
       return json({
         text: hit, mode: 'cached', cached: true, teaser: isTeaser,
+        offerEndsAt: isTeaser ? await startResultOffer(env, tgid) : 0, offerPct: RESULT_OFFER_PCT,
         creditsLeft: paid.creditsLeft, freeLeft: Math.max(0, paid.freeLeft),
         subscribed, cashback: paid.cashback,
       });
@@ -635,7 +642,8 @@ async function analyze(request, env) {
   if (!buyer && (mode === 'free' || mode === 'holder')) await wbEnqueue(env, tgid).catch(() => {});
 
   const rates = ratesP ? await ratesP : null;
-  return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback, rates });
+  const offerEndsAt = isTeaser ? await startResultOffer(env, tgid) : 0;
+  return json({ text: data.choices[0].message.content, mode, teaser: isTeaser, creditsLeft, freeLeft, subscribed, cashback, rates, offerEndsAt, offerPct: RESULT_OFFER_PCT });
 }
 
 // Оценка каждого лица дуэли отдельно: один запрос — одна фотография. Ошибка одного
@@ -832,6 +840,7 @@ async function statusFor(env, user, token, fresh) {
     credits, channel: CHANNEL, packs: PACKS, methods: enabledMethods(env),
     saleEndsAt: Date.now() < SALE_ENDS_AT ? SALE_ENDS_AT : 0,
     unlimUntil: unlimUntil > Date.now() ? unlimUntil : 0,
+    offerEndsAt: await resultOfferUntil(env, user.id), offerPct: RESULT_OFFER_PCT,
   };
 }
 
@@ -3332,6 +3341,8 @@ async function buyerDiscountPct(env, tgid, packId) {
   // затёрла бы её, и человек заплатил бы за ведение больше, чем должен.
   let upgrade = 0;
   if (packId === 'guide' && await env.RATE_LIMIT.get(`gpdf:${tgid}`)) upgrade = guideUpgradePct();
+  // Оффер с экрана результата — на всё, кроме ведения (у него своя цена и своя скидка).
+  if (packId !== 'guide' && await resultOfferUntil(env, tgid)) upgrade = Math.max(upgrade, RESULT_OFFER_PCT);
   const pd = await env.RATE_LIMIT.get(`pendingDiscount:${tgid}`);
   if (pd) return Math.max(parseInt(pd, 10) || 0, upgrade);
   let best = upgrade;
@@ -3346,6 +3357,20 @@ async function buyerDiscountPct(env, tgid, packId) {
     if ((myRef?.purchases || 0) >= PERSONAL_REF_DISCOUNT_THRESHOLD) best = Math.max(best, PERSONAL_REF_OWNER_DISCOUNT_PCT);
   }
   return best;
+}
+async function resultOfferUntil(env, tgid) {
+  const until = parseInt(await env.RATE_LIMIT.get(`resoffer:${tgid}`) || '0', 10);
+  return until > Date.now() ? until : 0;
+}
+// Включает оффер, если за неделю его ещё не было. Возвращает время окончания или 0.
+async function startResultOffer(env, tgid) {
+  const cur = await resultOfferUntil(env, tgid);
+  if (cur) return cur;
+  if (await env.RATE_LIMIT.get(`resoffergiven:${tgid}`)) return 0;
+  const until = Date.now() + RESULT_OFFER_MS;
+  await env.RATE_LIMIT.put(`resoffer:${tgid}`, String(until), { expirationTtl: Math.ceil(RESULT_OFFER_MS / 1000) + 60 });
+  await env.RATE_LIMIT.put(`resoffergiven:${tgid}`, '1', { expirationTtl: RESULT_OFFER_EVERY_S });
+  return until;
 }
 function applyDiscount(amount, pct) { return pct > 0 ? Math.max(1, Math.round(amount * (100 - pct) / 100)) : amount; }
 

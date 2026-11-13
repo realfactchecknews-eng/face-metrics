@@ -1267,6 +1267,9 @@ canvas {
   cursor: pointer;
   transition: opacity 0.15s, transform 0.15s;
 }
+.teaser-offer { color: var(--accent, #c4a46b); font-size: 0.95rem; margin: -6px 0 14px; }
+.teaser-offer b { font-variant-numeric: tabular-nums; }
+#errorPhotoBtn { margin-top: 14px; }
 .teaser-upsell-btn:hover { opacity: 0.9; transform: translateY(-1px); }
 
 .recs-list {
