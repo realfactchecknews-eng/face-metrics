@@ -3132,3 +3132,33 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 .demo-mesh { max-height: 46vh; }
 .demo-list { margin: 14px 0 10px; padding-left: 18px; color: var(--text-dim); font-size: .9rem; line-height: 1.6; display: grid; gap: 6px; }
 .demo-cta { margin-top: 14px; width: 100%; }
+
+/* ═══ 13.11.2026: «Анализировать» и дерзкий режим в одном стиле с золотыми кнопками ═══
+   Старая кнопка — тонкая рамка с заливкой по ховеру, на телефоне ховера нет, и она
+   выглядела пустой. Теперь та же золотая таблетка, что «Загрузить своё фото».
+   .btn-analyze.hidden объявлен раньше и специфичнее — прятать кнопку он продолжает. */
+.btn-analyze {
+  display: block; width: 100%; max-width: 420px; margin: 0 auto;
+  border: none; border-radius: 100px; padding: 18px 32px;
+  background: linear-gradient(135deg, var(--accent-hi), var(--accent) 58%, #9c7f4e);
+  color: #141008; font-weight: 600; font-size: 0.9rem; letter-spacing: 0.16em;
+  box-shadow: 0 6px 26px rgba(196,164,107,0.3);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.btn-analyze::before, .btn-analyze-fill { display: none; }
+.btn-analyze:hover { color: #141008; transform: translateY(-2px); box-shadow: 0 10px 34px rgba(196,164,107,0.45); }
+.btn-analyze:active { transform: translateY(0); }
+.btn-analyze::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 34%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  animation: shimmer 5s ease-in-out infinite; pointer-events: none;
+}
+.tone-row {
+  max-width: 420px; margin: 6px auto 16px; padding: 12px 14px;
+  border: 1px solid rgba(196,164,107,0.18); border-radius: 16px;
+  background: rgba(255,255,255,0.025);
+}
+.tone-label { font-size: 0.85rem; line-height: 1.35; }
+.tone-slider { background: #1a1a1a; border-color: rgba(196,164,107,0.25); }
+.tone-slider::after { top: 3px; background: #8a7a5c; }
+

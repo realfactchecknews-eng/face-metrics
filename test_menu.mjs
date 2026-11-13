@@ -10,23 +10,26 @@ const { menuKb, BL } = new Function(`
   const CHANNEL = '@wwwfacerateru';
   ${pick(/const BL = \{[\s\S]*?\n\};/)}
   ${pick(/const FACE_T = \{[\s\S]*?\n\};/)}
+  ${pick(/^const MINIAPP_ANALYZE_URL = [^\n]*/m)}
   ${pick(/^function menuKb[\s\S]*?^\}/m)}
   return { menuKb, BL };
 `)();
 
-// С меткой Telegram: без неё Метрика пишет эти визиты в прямые заходы.
-const SITE = 'https://facerate.ru/?utm_source=telegram&utm_medium=bot';
+// С меткой Telegram: без неё Метрика пишет эти визиты в прямые заходы. С 13.11 кнопка
+// открывает мини-апп (web_app), а не сайт в браузере.
+const SITE = 'https://facerate.ru/?utm_source=telegram&utm_medium=miniapp&open=analyze';
+const urlOf = (b) => b.url || (b.web_app && b.web_app.url);
 for (const L of ['ru', 'en']) {
   const short = menuKb(L, true).inline_keyboard;
   const full  = menuKb(L, false).inline_keyboard;
 
   assert.ok(short.length <= 4, `${L}: новичку — не больше четырёх кнопок`);
-  assert.equal(short[0][0].url, SITE, `${L}: первая кнопка ведёт на анализ`);
-  assert.equal(full[0][0].url, SITE, `${L}: и в полном меню анализ первый`);
+  assert.equal(urlOf(short[0][0]), SITE, `${L}: первая кнопка ведёт на анализ`);
+  assert.equal(urlOf(full[0][0]), SITE, `${L}: и в полном меню анализ первый`);
   assert.ok(full.length > short.length, `${L}: полное меню шире короткого`);
 
   // ссылка на сайт не должна дублироваться двумя кнопками
-  const site = full.flat().filter((b) => b.url === SITE);
+  const site = full.flat().filter((b) => urlOf(b) === SITE);
   assert.equal(site.length, 1, `${L}: кнопка сайта одна`);
 
   // приветствие обязано объяснять действие, а не только называть сервис

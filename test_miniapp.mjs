@@ -33,4 +33,7 @@ const okSrc = new RegExp(w.match(/\/(\^mini\(:ads_[^/]+)\/\.test\(body\.src/)[1]
 assert.ok(okSrc.test('mini:ads_ch') && !okSrc.test('mini:<script>') && !okSrc.test('x'), 'воркер пропускает мусор в src');
 assert.match(w.match(/^async function buy\([\s\S]*?^\}/m)[0], /buysrc:\$\{sess\.id\}/, '/buy не запоминает источник счёта');
 assert.match(w.match(/^async function recordOrder[\s\S]*?^\}/m)[0], /buysrc:[\s\S]*src/, 'покупка не получает метку источника');
+const mk = w.match(/^function menuKb[\s\S]*?^\}/m)[0];
+assert.equal((mk.match(/kbAnalyze, web_app: \{ url: MINIAPP_ANALYZE_URL \}/g) || []).length, 2, '«Начать анализ» в боте не открывает мини-апп');
+assert.match(w, /MINIAPP_ANALYZE_URL = 'https:\/\/facerate\.ru\/\?[^']*open=analyze/, 'мини-апп из бота не ведёт сразу к загрузке');
 console.log('мини-приложение: все проверки прошли');

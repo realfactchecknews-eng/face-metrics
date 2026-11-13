@@ -657,6 +657,7 @@ document.getElementById("frontRemove").addEventListener("click", function(e) {
   document.getElementById("frontPlaceholder").classList.remove("hidden");
   analyzeBtn.classList.add("hidden");
   fileInput.value = "";
+  syncDemoCta();
 });
 
 // Счётчик воронки: каждый шаг считается один раз за сессию вкладки, то есть это люди, а
@@ -669,6 +670,11 @@ function fmStep(step, code) {
     sessionStorage.setItem(key, "1");
   } catch (e) { /* без хранилища шаг может посчитаться повторно */ }
   try { navigator.sendBeacon(WORKER_URL + "/funnel", new Blob([JSON.stringify({ step: step, code: code })], { type: "text/plain" })); } catch (e) {}
+}
+
+function syncDemoCta() {
+  var cta = document.getElementById("demoCta");
+  if (cta) cta.textContent = frontImg ? t("analyze") + " →" : t("demoCta");
 }
 
 function loadFrontFile(file) {
@@ -685,6 +691,7 @@ function loadFrontFile(file) {
       analyzeBtn.classList.remove("hidden");
       var tr = document.getElementById("toneRow");
       if (tr) tr.classList.remove("hidden");
+      syncDemoCta();
     };
     img.src = ev.target.result;
   };
@@ -876,6 +883,7 @@ resetBtn.addEventListener("click", function() {
   document.getElementById("sideThumb").classList.add("hidden");
   document.getElementById("sidePlaceholder").classList.remove("hidden");
   analyzeBtn.classList.add("hidden");
+  syncDemoCta();
   var sb = document.getElementById("shareBtn");
   if (sb) sb.classList.add("hidden");
   var tb = document.getElementById("tgCardBtn");
@@ -1746,7 +1754,9 @@ function initDemo() {
   var card = document.getElementById("demoBlock");
   if (!card || !("IntersectionObserver" in window)) return;
   var cta = document.getElementById("demoCta");
-  if (cta) cta.addEventListener("click", function () { fileInput.click(); });
+  // С загруженным фото нижняя кнопка запускает анализ: иначе человек долистывал до неё,
+  // видел «Загрузить своё фото» и листал обратно наверх к «Анализировать».
+  if (cta) cta.addEventListener("click", function () { if (frontImg) analyzeBtn.click(); else fileInput.click(); });
   var io = new IntersectionObserver(function (en) {
     if (!en[0].isIntersecting) return;
     io.disconnect();
@@ -3065,7 +3075,7 @@ function renderReportInto(box, text, score, date) {
   var html = "";
   var when = date ? new Date(date).toLocaleDateString("ru-RU") : "";
   html += "<div class='lr-hero'><span class='lr-score'>" + Number(score).toFixed(1) +
-          "</span><span class='lr-denom'>" + (typeof p.overallFromRarity === "number" ? "/8" : "/10") + "</span><div class='lr-when'>" + when + "</div></div>";
+          "</span><span class='lr-denom'>" + (typeof p.overallFromMethod === "number" || typeof p.overallFromRarity === "number" ? "/8" : "/10") + "</span><div class='lr-when'>" + when + "</div></div>";
   if (p.overallDesc) html += "<p class='lr-desc'>" + esc(p.overallDesc) + "</p>";
   p.categories.forEach(function(cat) {
     html += "<div class='lr-row'><div class='lr-row-h'><span>" + esc(cat.label) +

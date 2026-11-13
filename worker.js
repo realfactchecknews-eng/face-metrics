@@ -1770,18 +1770,21 @@ function fmtDate(ms, L) {
 // Ссылки ботов на сайт помечены utm_source=telegram: встроенный браузер Telegram часто не
 // передаёт, откуда человек пришёл, и Метрика писала эти визиты в «прямые заходы»
 // (переходов из мессенджеров за три месяца было 178 при канале на 16 тыс.).
+// «Начать анализ» открывает мини-апп прямо в Telegram (web_app работает только в личке —
+// menuKb туда и шлётся): вход без гейта, сразу экран загрузки (open=analyze).
+const MINIAPP_ANALYZE_URL = 'https://facerate.ru/?utm_source=telegram&utm_medium=miniapp&open=analyze';
 function menuKb(L, short) {
   const b = BL[L];
   if (short) {
     return { inline_keyboard: [
-      [{ text: b.kbAnalyze, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=bot' }],
+      [{ text: b.kbAnalyze, web_app: { url: MINIAPP_ANALYZE_URL } }],
       [{ text: b.kbChannel, url: 'https://t.me/wwwfacerateru' }],
       [{ text: b.kbStatus, callback_data: 'status' }],
       [{ text: b.kbAllMenu, callback_data: 'menu' }],
     ]};
   }
   return { inline_keyboard: [
-    [{ text: b.kbAnalyze, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=bot' }],
+    [{ text: b.kbAnalyze, web_app: { url: MINIAPP_ANALYZE_URL } }],
     [{ text: b.kbStatus, callback_data: 'status' }],
     [{ text: b.kbShop, callback_data: 'shop' }],
     [{ text: b.kbOrders, callback_data: 'orders' }],
