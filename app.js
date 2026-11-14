@@ -143,7 +143,7 @@ var I18N = {
     pwSubBtn: "<span class='tg-ic'>✈</span> Subscribe to the channel",
     pwSubCheck: "I subscribed — show my result",
     pwPayTitle: "Free analysis used for this week",
-    pwPaySub: "Pay with Telegram Stars in two taps. Or come back next week for a free one.",
+    pwPaySub: "Pick a package — card, SBP or Telegram Stars on the next step. Or come back next week for a free one.",
     pwPaid: "I paid — show my result",
     pwChecking: "Checking…",
     packP1: "1 analysis", packP5: "5 analyses", perUnit: "per analysis", bestValue: "best value", packH1: "Hour unlimited", packD1: "Day unlimited", packM1: "Month unlimited", packGpdf: "Guide (PDF)",
@@ -282,7 +282,7 @@ var I18N = {
     pwSubBtn: "<span class='tg-ic'>✈</span> Подписаться на канал",
     pwSubCheck: "Я подписался — показать результат",
     pwPayTitle: "Бесплатный анализ на этой неделе использован",
-    pwPaySub: "Оплата звёздами Telegram в два тапа. Или возвращайся на следующей неделе за бесплатным.",
+    pwPaySub: "Выбери пакет — оплата картой, СБП или звёздами на следующем шаге. Или возвращайся на следующей неделе за бесплатным.",
     pwPaid: "Я оплатил — показать результат",
     pwChecking: "Проверяю…",
     packP1: "1 анализ", packP5: "5 анализов", perUnit: "за анализ", bestValue: "выгоднее", packH1: "Безлимит на час", packD1: "Безлимит на день", packM1: "Безлимит на месяц", packGpdf: "Гайд (PDF)",
@@ -4380,51 +4380,60 @@ function showPaywall(state, st) {
     var PACK_UNITS = { p5: 5 };
     var packNames = { p1: t("packP1"), p5: t("packP5"), h1: "⏱ " + t("packH1"), d1: "🔥 " + t("packD1"), m1: "👑 " + t("packM1"), gpdf: "📄 " + t("packGpdf") };
     var methodNames = { stars: t("payStars"), rub: t("payCard"), sbp: t("paySbp"), crypto: t("payCrypto") };
-    // Шаг 2: тарифы под выбранный способ (цена в его валюте).
-    function showPacks(method) {
+    // 14.11.2026: сначала тарифы с ценой, потом способ оплаты. Раньше первым шагом был выбор
+    // способа без единой цены — из открывших пейволл тариф выбирали 11% (шаг pack_pick).
+    function rawPrice(p, method) {
+      return method === "stars" ? p.stars : (((method === "rub" || method === "sbp") && p.lavaRub) ? p.lavaRub : p.rub);
+    }
+    function rawOldPrice(p, method) {
+      return method === "stars" ? p.oldStars : (((method === "rub" || method === "sbp") && p.oldLavaRub) ? p.oldLavaRub : p.oldRub);
+    }
+    // Цена с оффером результата — та же формула, что applyDiscount в воркере (ведение — без оффера).
+    function payPrice(id, p, method) { return offerPct && id !== "guide" ? offerPrice(rawPrice(p, method), offerPct, method) : rawPrice(p, method); }
+    function unitOf(method) { return method === "stars" ? "⭐" : "₽"; }
+    // Способы в порядке показа: в мини-аппе звёзды первыми — они открываются родным окном Telegram.
+    var order = tgMini() ? ["stars", "rub", "sbp", "crypto"] : ["rub", "sbp", "stars", "crypto"];
+    var avail = order.filter(function (m) { return methods.indexOf(m) >= 0; });
+    // Валюта витрины: рубли, если есть рублёвый способ, иначе звёзды.
+    var shown = avail.filter(function (m) { return m !== "stars"; })[0] || avail[0] || "stars";
+    // Шаг 2: способ оплаты для выбранного тарифа, у каждого — его точная цена.
+    function showMethods(id) {
+      var p = packs[id]; if (!p) return;
+      if (avail.length === 1) { buyPack(id, null, avail[0]); return; }
       actions.innerHTML = "";
-      title.textContent = t("pwPickPack"); sub.textContent = methodNames[method] || "";
-      function rawPrice(p) {
-        return method === "stars" ? p.stars : (((method === "rub" || method === "sbp") && p.lavaRub) ? p.lavaRub : p.rub);
-      }
-      function rawOldPrice(p) {
-        return method === "stars" ? p.oldStars : (((method === "rub" || method === "sbp") && p.oldLavaRub) ? p.oldLavaRub : p.oldRub);
-      }
-      // Цена с оффером результата — та же формула, что applyDiscount в воркере (ведение — без оффера).
-      function payPrice(id, p) { return offerPct && id !== "guide" ? offerPrice(rawPrice(p), offerPct, method) : rawPrice(p); }
-      function packBtn(id) {
-        var p = packs[id]; if (!p) return;
-        var unit = method === "stars" ? "⭐" : "₽";
-        var price = payPrice(id, p) + unit;
-        var was = "";
-        // Зачёркнутая ОБЫЧНАЯ цена (до недельной акции), пока акция активна.
-        var oldPrice = rawOldPrice(p);
-        var onSale = !!(saleEndsAt && saleEndsAt > Date.now() && oldPrice && oldPrice > rawPrice(p));
-        if (onSale) was = " <s class='pw-was'>" + oldPrice + unit + "</s>";
-        if (payPrice(id, p) < rawPrice(p)) { was = " <s class='pw-was'>" + rawPrice(p) + unit + "</s>"; onSale = true; }
-        // «Хит скидки» — только если этот тариф ДЕЙСТВИТЕЛЬНО подешевел. Раньше подпись
-        // висела на m1 при любой активной акции, даже когда его цена не менялась.
-        var top = id === "m1" ? (" <i class='pw-hit'>" + (onSale ? "🔥 хит скидки" : "top") + "</i>") : "";
-        // Якорь на 5 анализов: цена за анализ видна у обоих пакетов, иначе разница
-        // (29 ₽ против 79 ₽) не читается — тарифы идут ценой по возрастанию.
-        var per = "";
-        if (PACK_UNITS[id]) {
-          var one = payPrice(id, p) / PACK_UNITS[id];
-          per = " <i class='pw-per'>" + (Math.round(one * 10) / 10) + unit + " " + t("perUnit") + "</i>";
-          if (id === "p5" && packs.p1 && payPrice("p1", packs.p1) >= one * 1.5) {
-            top = " <i class='pw-hit'>×" + (Math.round(payPrice("p1", packs.p1) / one * 10) / 10) + " " + t("bestValue") + "</i>";
-          }
-        }
-        btn(packNames[id] + " — " + was + " " + price + per + top, "pw-btn pw-btn-main", function(b){ fmStep("pack_pick"); buyPack(id, b, method); });
-      }
-      packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1"); packBtn("gpdf");
+      title.textContent = packNames[id] || t("pwPickPack");
+      sub.textContent = t("pwPickMethod");
+      avail.forEach(function (m) {
+        var was = payPrice(id, p, m) < rawPrice(p, m) ? " <s class='pw-was'>" + rawPrice(p, m) + unitOf(m) + "</s>" : "";
+        btn(methodNames[m] + " — " + was + " " + payPrice(id, p, m) + unitOf(m), "pw-btn pw-btn-main", function (b) { buyPack(id, b, m); });
+      });
       btn(t("pwBack"), "pw-btn pw-btn-ghost", function(){ showPaywall("pay", st); });
     }
-    // Шаг 1: выбор способа оплаты (только доступные).
-    if (methods.indexOf("stars") >= 0) btn(t("payStars"), "pw-btn pw-btn-main", function(){ showPacks("stars"); });
-    if (methods.indexOf("rub") >= 0) btn(t("payCard"), "pw-btn pw-btn-main", function(){ showPacks("rub"); });
-    if (methods.indexOf("sbp") >= 0) btn(t("paySbp"), "pw-btn pw-btn-main", function(){ showPacks("sbp"); });
-    if (methods.indexOf("crypto") >= 0) btn(t("payCrypto"), "pw-btn pw-btn-main", function(){ showPacks("crypto"); });
+    // Шаг 1: тарифы с ценой в валюте витрины.
+    function packBtn(id) {
+      var p = packs[id]; if (!p) return;
+      var method = shown, unit = unitOf(method);
+      var price = payPrice(id, p, method) + unit;
+      var was = "";
+      // Зачёркнутая ОБЫЧНАЯ цена (до недельной акции), пока акция активна.
+      var oldPrice = rawOldPrice(p, method);
+      var onSale = !!(saleEndsAt && saleEndsAt > Date.now() && oldPrice && oldPrice > rawPrice(p, method));
+      if (onSale) was = " <s class='pw-was'>" + oldPrice + unit + "</s>";
+      if (payPrice(id, p, method) < rawPrice(p, method)) { was = " <s class='pw-was'>" + rawPrice(p, method) + unit + "</s>"; onSale = true; }
+      // «Хит скидки» — только если этот тариф ДЕЙСТВИТЕЛЬНО подешевел.
+      var top = id === "m1" ? (" <i class='pw-hit'>" + (onSale ? "🔥 хит скидки" : "top") + "</i>") : "";
+      // Якорь на 5 анализов: цена за анализ видна у пятёрки, иначе разница не читается.
+      var per = "";
+      if (PACK_UNITS[id]) {
+        var one = payPrice(id, p, method) / PACK_UNITS[id];
+        per = " <i class='pw-per'>" + (Math.round(one * 10) / 10) + unit + " " + t("perUnit") + "</i>";
+        if (id === "p5" && packs.p1 && payPrice("p1", packs.p1, method) >= one * 1.5) {
+          top = " <i class='pw-hit'>×" + (Math.round(payPrice("p1", packs.p1, method) / one * 10) / 10) + " " + t("bestValue") + "</i>";
+        }
+      }
+      btn(packNames[id] + " — " + was + " " + price + per + top, "pw-btn pw-btn-main", function(){ fmStep("pack_pick"); showMethods(id); });
+    }
+    packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1"); packBtn("gpdf");
     btn(t("pwPaid"), "pw-btn pw-btn-ghost", function(b){
       b.textContent = t("pwChecking"); pwRecheck();
     });

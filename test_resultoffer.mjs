@@ -20,4 +20,8 @@ assert.match(w, /teaser: isTeaser,\s*offerEndsAt: isTeaser \? await startResultO
 assert.match(w, /const offerEndsAt = isTeaser \? await startResultOffer/, 'ответ модели без оффера');
 assert.match(w.match(/^async function startResultOffer[\s\S]*?^\}/m)[0], /resoffergiven:/, 'оффер без ограничения раз в неделю');
 assert.match(a, /showError\(t\("errNoFace"\), true\)/, '«лицо не найдено» снова без кнопки');
+// 14.11.2026: пейволл начинается с тарифов и цен, способ оплаты — вторым шагом.
+const pw = a.slice(a.indexOf('function showPaywall'), a.indexOf('function hidePaywall'));
+assert.match(pw, /fmStep\("pack_pick"\); showMethods\(id\)/, 'первым шагом снова выбор способа без цен');
+assert.ok(!pw.includes('function showPacks'), 'старый шаг «сначала способ» вернулся');
 console.log('оффер результата: все проверки прошли');
