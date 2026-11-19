@@ -4829,9 +4829,12 @@ async function walletLink(request, env) {
 
   const digest = await tonProofDigest({ wc: parseInt(wcStr, 10), hashHex, domain, ts, payload: proof.payload });
 
-  const pub = await walletPublicKey(address);
+  const tonLog = {};
+  const pub = await walletPublicKey(address, tonLog);
   if (!pub) {
-    const active = await accountActive(address);
+    const active = await accountActive(address, tonLog);
+    // Без этого лога «не удалось получить ключ» неотличимо: лимит API, сбой сети или кошелёк.
+    console.log('wallet pubkey fail', JSON.stringify({ address, active, ...tonLog }));
     return json({ error: 'bad', address, text: active === false
       ? 'Кошелёк ещё не активирован в сети: с него не уходило ни одной транзакции, поэтому подпись проверить нечем. Пополни его на любую сумму, отправь что-нибудь с него — и попробуй снова.'
       : 'Не удалось получить ключ кошелька из блокчейна. Попробуй через минуту.' });
@@ -4893,26 +4896,42 @@ async function walletUnlink(request, env) {
   return json({ ok: true });
 }
 
+// Запрос к публичному API TON с повтором: без своего ключа tonapi и toncenter режут
+// запросы с общих адресов Cloudflare (429), и привязка падала с «не удалось получить ключ».
+// Возвращает Response или null; статус последней попытки кладёт в log[label].
+async function tonFetch(url, opts, log, label) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await fetch(url, opts);
+      log[label] = r.status;
+      if (r.ok || (r.status !== 429 && r.status < 500)) return r;
+    } catch (e) { log[label] = 'err:' + String(e?.message || e).slice(0, 40); }
+    await new Promise((res) => setTimeout(res, 500 * (i + 1)));
+  }
+  return null;
+}
+
 // Публичный ключ кошелька (32 байта). Берём ИЗ БЛОКЧЕЙНА, а не из ответа кошелька:
 // иначе подписать чужой адрес можно было бы своим ключом. Два источника — tonapi
 // иногда отдаёт 429, и тогда привязка падала бы на ровном месте.
-async function walletPublicKey(address) {
+async function walletPublicKey(address, log = {}) {
   try {
-    const r = await fetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}/publickey`);
-    if (r.ok) {
+    const r = await tonFetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}/publickey`, undefined, log, 'tonapi');
+    if (r?.ok) {
       const d = await r.json();
       if (d.public_key) return hexBytes(d.public_key);
     }
   } catch { /* пробуем второй источник */ }
   try {
-    const r = await fetch('https://toncenter.com/api/v2/runGetMethod', {
+    const r = await tonFetch('https://toncenter.com/api/v2/runGetMethod', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ address, method: 'get_public_key', stack: [] }),
-    });
-    if (r.ok) {
+    }, log, 'toncenter');
+    if (r?.ok) {
       const d = await r.json();
       const v = d?.result?.stack?.[0]?.[1];      // BigInt ключа в hex
       if (v) return hexBytes(BigInt(v).toString(16).padStart(64, '0'));
+      log.toncenterExit = d?.result?.exit_code;
     }
   } catch { /* ключа нет — значит кошелёк не активирован */ }
   return null;
@@ -4920,12 +4939,17 @@ async function walletPublicKey(address) {
 
 // Активен ли кошелёк в блокчейне. У неактивированного (ни одной исходящей
 // транзакции) публичного ключа в сети нет — подпись проверить нечем.
-async function accountActive(address) {
+// null — спросить не удалось ни у одного источника.
+async function accountActive(address, log = {}) {
   try {
-    const r = await fetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}`);
-    if (!r.ok) return null;
-    return (await r.json()).status === 'active';
-  } catch { return null; }
+    const r = await tonFetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(address)}`, undefined, log, 'tonapiAcc');
+    if (r?.ok) return (await r.json()).status === 'active';
+  } catch { /* второй источник */ }
+  try {
+    const r = await tonFetch(`https://toncenter.com/api/v2/getAddressState?address=${encodeURIComponent(address)}`, undefined, log, 'toncenterAcc');
+    if (r?.ok) return (await r.json()).result === 'active';
+  } catch { /* не смогли узнать */ }
+  return null;
 }
 
 export async function ed25519Verify(pub, sig, data) {
