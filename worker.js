@@ -4830,7 +4830,13 @@ async function walletLink(request, env) {
   const digest = await tonProofDigest({ wc: parseInt(wcStr, 10), hashHex, domain, ts, payload: proof.payload });
 
   const tonLog = {};
-  const pub = await walletPublicKey(address, tonLog);
+  // Сначала ключ из walletStateInit (без сети), потом из блокчейна. wc 0: хэш StateInit
+  // не включает workchain, а кошельки живут в нулевом.
+  let pub = null;
+  if (body.stateInit && wcStr === '0') {
+    try { pub = await pubKeyFromStateInit(String(body.stateInit), hashHex); } catch (e) { tonLog.stateInit = String(e?.message || e).slice(0, 40); }
+  }
+  if (!pub) pub = await walletPublicKey(address, tonLog);
   if (!pub) {
     const active = await accountActive(address, tonLog);
     // Без этого лога «не удалось получить ключ» неотличимо: лимит API, сбой сети или кошелёк.
@@ -4950,6 +4956,67 @@ async function accountActive(address, log = {}) {
     if (r?.ok) return (await r.json()).result === 'active';
   } catch { /* не смогли узнать */ }
   return null;
+}
+
+// Ключ кошелька без похода в сеть: TON Connect отдаёт walletStateInit (код + данные
+// контракта). Адрес кошелька — это хэш StateInit, поэтому подделать его нельзя: если
+// хэш совпал с адресом, ключ в данных — настоящий. Так делают эталонные бэкенды TON
+// Connect; tonapi/toncenter остаются запасным путём (старые клиенты, незнакомый код).
+// Хэш кода → смещение ключа в битах данных: v4R2 seqno(32) wallet_id(32) key,
+// v5R1 is_signature_allowed(1) seqno(32) wallet_id(32) key. Оба хэша сверены
+// с живыми кошельками из базы (test_tonstateinit.mjs). Незнакомый код → null → сеть.
+const WALLET_KEY_OFFSET = {
+  'feb5ff6820e2ff0d9483e7e0d62c817d846789fb4ae580c878866d959dabd5c0': 64,  // v4R2
+  '20834b7b72b112147e1b2fb457b84e74d1a30f04f737d4f62a668e9552d2b72f': 65,  // v5R1
+};
+
+// Разбор BOC и хэши ячеек — ровно столько, сколько нужно для StateInit кошелька:
+// только обычные ячейки уровня 0 (экзотические — исключение, путь через сеть).
+export async function parseBoc(bytes) {
+  const b = bytes; let o = 0;
+  const u = (n) => { let v = 0; for (let i = 0; i < n; i++) v = v * 256 + b[o++]; return v; };
+  if (u(4) !== 0xb5ee9c72) throw new Error('boc magic');
+  const fl = b[o++], sz = fl & 7, offSz = b[o++];
+  const n = u(sz), nRoots = u(sz); u(sz); u(offSz);
+  const roots = []; for (let i = 0; i < nRoots; i++) roots.push(u(sz));
+  if (fl & 0x80) o += n * offSz;
+  const cells = [];
+  for (let i = 0; i < n; i++) {
+    const d1 = b[o++], d2 = b[o++];
+    if (d1 & 0xf8) throw new Error('boc exotic');          // exotic / с хэшами / уровень > 0
+    const len = Math.ceil(d2 / 2), data = b.slice(o, o + len); o += len;
+    const refs = []; for (let k = 0; k < (d1 & 7); k++) refs.push(u(sz));
+    if (refs.some((r) => r <= i || r >= n)) throw new Error('boc order');
+    cells.push({ d1, d2, data, refs });
+  }
+  for (let i = n - 1; i >= 0; i--) {                      // ссылки всегда вперёд — считаем с конца
+    const c = cells[i], kids = c.kids = c.refs.map((r) => cells[r]);
+    c.depth = kids.length ? Math.max(...kids.map((k) => k.depth)) + 1 : 0;
+    const repr = new Uint8Array(2 + c.data.length + kids.length * 34);
+    repr.set([c.d1, c.d2]); repr.set(c.data, 2);
+    let p = 2 + c.data.length;
+    for (const k of kids) { repr[p++] = k.depth >> 8; repr[p++] = k.depth & 255; }
+    for (const k of kids) { repr.set(k.hash, p); p += 32; }
+    c.hash = new Uint8Array(await crypto.subtle.digest('SHA-256', repr));
+  }
+  return roots.map((r) => cells[r]);
+}
+
+export async function pubKeyFromStateInit(b64, hashHex) {
+  const [root] = await parseBoc(b64Bytes(b64));
+  const hex = (a) => [...a].map((x) => x.toString(16).padStart(2, '0')).join('');
+  if (!root || hex(root.hash) !== hashHex) return null;
+  const bit = (c, i) => (c.data[i >> 3] >> (7 - (i & 7))) & 1;
+  let i = 0;                                              // StateInit: split_depth? special? code? data?
+  if (bit(root, i++)) i += 5;
+  if (bit(root, i++)) i += 2;
+  if (!bit(root, i++) || !bit(root, i++)) return null;
+  const [code, data] = root.kids;                         // ссылки по порядку: code, data, library
+  const off = WALLET_KEY_OFFSET[hex(code.hash)];
+  if (off == null || data.data.length * 8 < off + 256) return null;
+  const key = new Uint8Array(32);
+  for (let k = 0; k < 256; k++) if (bit(data, off + k)) key[k >> 3] |= 0x80 >> (k & 7);
+  return key;
 }
 
 export async function ed25519Verify(pub, sig, data) {

@@ -3837,7 +3837,7 @@ function connectTonWallet() {
           var un = _tcUi.onStatusChange(function(w) {
             if (!w || done) return;
             var pr = w.connectItems && w.connectItems.tonProof;
-            if (pr && pr.proof) { done = true; un(); resolve({ address: w.account.address, proof: pr.proof }); }
+            if (pr && pr.proof) { done = true; un(); resolve({ address: w.account.address, proof: pr.proof, stateInit: w.account.walletStateInit }); }
             else if (w.account) { done = true; un(); reject(new Error("noproof")); }
           });
           _tcUi.openModal();
@@ -3848,7 +3848,7 @@ function connectTonWallet() {
     .then(function(res) {
       return fetch(WORKER_URL + "/wallet/link", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: acc.token, address: res.address, proof: res.proof }),
+        body: JSON.stringify({ token: acc.token, address: res.address, proof: res.proof, stateInit: res.stateInit }),
       }).then(function(r){ return r.json(); });
     })
     .then(function(out) {
