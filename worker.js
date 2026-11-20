@@ -2211,7 +2211,7 @@ async function tgWebhook(request, env, ctx) {
       await tgApi(env, 'sendMessage', { chat_id: chat, text:
         'Как постить в канал с кнопкой:\n\n1) Пришли мне текст поста обычным сообщением\n'
         + '2) Ответь на него командой:\n/post Текст кнопки | https://ссылка\n\n'
-        + 'Например:\n/post 🏆 Участвовать | https://t.me/faceratepay_bot/giveaway' });
+        + `Например:\n/post 🏆 Участвовать | https://t.me/${env.BOT_USERNAME || 'faceratepay_bot'}/giveaway` });
       return new Response('ok');
     }
     const r = await tgApi(env, 'copyMessage', {
@@ -3007,12 +3007,12 @@ const SUP = {
     faq: '❓ Частые вопросы\n\n• Бесплатный анализ — подпишись на @wwwfacerateru (1 в неделю).\n• Платно — Telegram Stars или крипта в боте оплаты.\n• Не пришёл доступ после оплаты? Обнови facerate.ru; если не помогло — жми «Позвать оператора».\n• Оплатил, но анализ не делается? Обнови страницу и подожди пару минут.\n• Оплатил, а полного разбора нет? Обнови страницу и сделай анализ заново.\n• Выскочила ошибка? Попробуй другое фото или смени VPN.\n• Промокоды — кнопка в боте оплаты; коды бывают в розыгрышах канала.\n• Приватность — фото используется только для анализа и не публикуется.\n\nНе нашёл ответа? Просто напиши вопрос сюда.',
   },
 };
-function supMenuKb(L, isAdmin) {
+function supMenuKb(L, isAdmin, env) {
   const b = SUP[L];
   const rows = [
     [{ text: b.kbFaq, callback_data: 'faq' }],
     [{ text: b.human, callback_data: 'human' }],
-    [{ text: b.kbSite, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=support' }, { text: b.kbBuy, url: 'https://t.me/faceratepay_bot' }],
+    [{ text: b.kbSite, url: 'https://facerate.ru/?utm_source=telegram&utm_medium=support' }, { text: b.kbBuy, url: `https://t.me/${env?.BOT_USERNAME || 'faceratepay_bot'}` }],
     [{ text: b.kbLang, callback_data: L === 'en' ? 'lang:ru' : 'lang:en' }],
   ];
   if (isAdmin) rows.push([{ text: '⚙️ Admin', callback_data: 'admin' }]);
@@ -3957,7 +3957,7 @@ async function mediaWebhook(request, env) {
     await addOwnedPromo(env, tgid, code);
     await mediaApi(env, 'sendMessage', {
       chat_id: chat,
-      text: `✅ Промокод ${code} создан!\n\nОтдавай его своей аудитории — при вводе в главном боте (@faceratepay_bot → «🎁 Ввести промокод») он даст${wiz.discount ? ` скидку ${wiz.discount}%` : ''} покупателю, а тебе — ${pct}% с этой покупки.\n\n` + await myEarningsText(env, tgid),
+      text: `✅ Промокод ${code} создан!\n\nОтдавай его своей аудитории — при вводе в главном боте (@${env.BOT_USERNAME || 'faceratepay_bot'} → «🎁 Ввести промокод») он даст${wiz.discount ? ` скидку ${wiz.discount}%` : ''} покупателю, а тебе — ${pct}% с этой покупки.\n\n` + await myEarningsText(env, tgid),
       reply_markup: mediaMenuKb(isAdmin),
     });
     return new Response('ok');
@@ -4100,9 +4100,9 @@ async function supportWebhook(request, env) {
     if (data === 'lang:ru' || data === 'lang:en') {
       L = data.slice(5);
       await env.RATE_LIMIT.put(`lang:${fromId}`, L);
-      await reply(SUP[L].langSet, supMenuKb(L, isAdmin));
+      await reply(SUP[L].langSet, supMenuKb(L, isAdmin, env));
     } else if (data === 'menu') {
-      await reply(SUP[L].menu, supMenuKb(L, isAdmin));
+      await reply(SUP[L].menu, supMenuKb(L, isAdmin, env));
     } else if (data === 'faq') {
       await reply(SUP[L].faq, { inline_keyboard: [[{ text: SUP[L].human, callback_data: 'human' }], [{ text: SUP[L].kbBack, callback_data: 'menu' }]] });
     } else if (data === 'human') {
@@ -4469,7 +4469,7 @@ async function supportWebhook(request, env) {
   }
 
   if (text === '/start' || text === '/menu') {
-    await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: SUP[L].hello, reply_markup: supMenuKb(L, isAdmin) });
+    await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: SUP[L].hello, reply_markup: supMenuKb(L, isAdmin, env) });
     // Отдельным сообщением — постоянная кнопка «⚙️ Admin» внизу экрана (не пропадает, живёт независимо от инлайн-кнопок).
     if (isAdmin) await supportApi(env, 'sendMessage', { chat_id: msg.chat.id, text: '⌨️ Кнопка модератора закреплена внизу.', reply_markup: adminReplyKb() });
     return new Response('ok');
