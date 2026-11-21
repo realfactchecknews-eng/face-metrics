@@ -3162,3 +3162,10 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 .tone-slider { background: #1a1a1a; border-color: rgba(196,164,107,0.25); }
 .tone-slider::after { top: 3px; background: #8a7a5c; }
 
+
+/* Экран «Полный разбор этого фото» (21.11.2026): что откроется, главная кнопка и пятёрка рядом */
+.pw-tz-list { text-align: left; max-width: 360px; margin: 8px auto 4px; padding-left: 20px; }
+.pw-tz-list li { margin: 4px 0; }
+.pw-tz-offer { display: block; color: var(--accent); margin-top: 8px; }
+.pw-btn-second { background: none; border: 1px solid var(--accent); color: var(--text-bright); }
+.pw-tz-note { text-align: center; }

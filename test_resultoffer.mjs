@@ -22,6 +22,15 @@ assert.match(w.match(/^async function startResultOffer[\s\S]*?^\}/m)[0], /resoff
 assert.match(a, /showError\(t\("errNoFace"\), true\)/, '«лицо не найдено» снова без кнопки');
 // 14.11.2026: пейволл начинается с тарифов и цен, способ оплаты — вторым шагом.
 const pw = a.slice(a.indexOf('function showPaywall'), a.indexOf('function hidePaywall'));
-assert.match(pw, /fmStep\("pack_pick"\); showMethods\(id\)/, 'первым шагом снова выбор способа без цен');
+assert.match(pw, /picked\(\); showMethods\(id\)/, 'первым шагом снова выбор способа без цен');
+assert.match(pw, /function picked\(\) \{ fmStep\("pack_pick"\)/, 'выбор тарифа перестал считаться в воронке');
+// 21.11.2026: «Открыть полный разбор» ведёт на свой экран, а после оплаты разбор того же фото запускается сам.
+assert.match(a, /showPaywall\("pay", st, "teaser"\)/, 'кнопка на результате снова ведёт в общий список тарифов');
+assert.match(pw, /function renderTeaser\(\)/, 'нет экрана «Полный разбор этого фото»');
+assert.match(pw, /_pwMode === "teaser"\) \{ fmStep\("pw_teaser"\); pickStep = "tz_pick"; _afterGate = rerunFullReport; \}/, 'после оплаты с экрана разбора ничего не откроется');
+assert.match(a, /_lastAnalysis = p;\s*callAI/, 'не запоминаем последний анализ — перезапускать нечего');
+assert.match(a, /if \(frontImg && \(_pwMode === "teaser" \|\| _pendingAnalysis\)\) saveResumePhotos\(\);\s*window\.location\.href = d\.link/, 'уход на оплату картой снова теряет фото');
+assert.match(a, /if \(_pwMode === "teaser"\) \{ hidePaywall\(\); _afterGate = null;/, 'крестик на экране разбора снова уводит с результата');
+for (const st of ['pw_teaser', 'tz_pick', 'tz_rerun', 'pw_gate', 'gate_pick']) assert.ok(w.includes(`['${st}',`), 'воркер не считает шаг ' + st);
 assert.ok(!pw.includes('function showPacks'), 'старый шаг «сначала способ» вернулся');
 console.log('оффер результата: все проверки прошли');

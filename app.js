@@ -154,7 +154,10 @@ var I18N = {
     chipUnlim: "👑 Unlimited until ",
     gateHint: "After subscribing, come back and press “Analyze” again.",
     invoiceCreating: "Creating invoice…", invoiceOpening: "Opening Telegram…", invoiceErr: "Error, try again", netErr: "Network unavailable",
-    pwPickMethod: "Choose payment method", pwPickPack: "Choose a package", payStars: "⭐ Telegram Stars", payCard: "💳 Card (RUB)", paySbp: "📲 SBP (RUB)", payCrypto: "🪙 Crypto", pwBack: "← Back",
+    pwPickMethod: "Choose payment method", pwPickPack: "Choose a package",
+    tzTitle: "Full report for this photo", tzWhat: "What unlocks:", tzCats: "6 more categories: masculinity, symmetry, eyes, mouth, nose, ears — each with a score and an explanation",
+    tzRecs: "8–9 personal recommendations for your face", tzOpen: "Unlock report", tzFive: "5 reports", tzPer: "per report", tzOther: "Other plans →",
+    tzAfter: "After payment the full report for this photo opens by itself — no need to upload again.", payStars: "⭐ Telegram Stars", payCard: "💳 Card (RUB)", paySbp: "📲 SBP (RUB)", payCrypto: "🪙 Crypto", pwBack: "← Back",
     teaserTitle: "Full report locked", teaserBody: "This free report shows only 2 of 8 categories. Unlock the full breakdown (masculinity, symmetry, eyes, mouth, nose, ears) plus personal recommendations.", teaserBtn: "Unlock full report",
     histEmpty: "No scores yet. Upload a photo — the result will be saved here.",
     histAvg: "Average score: ", histCount: " · analyses: ",
@@ -293,7 +296,10 @@ var I18N = {
     chipUnlim: "👑 Безлимит до ",
     gateHint: "После подписки вернись и нажми «Анализировать» ещё раз.",
     invoiceCreating: "Создаю счёт…", invoiceOpening: "Открываю Telegram…", invoiceErr: "Ошибка, ещё раз", netErr: "Сеть недоступна",
-    pwPickMethod: "Выбери способ оплаты", pwPickPack: "Выбери пакет", payStars: "⭐ Telegram Stars", payCard: "💳 Картой (₽)", paySbp: "📲 СБП (₽)", payCrypto: "🪙 Криптой", pwBack: "← Назад",
+    pwPickMethod: "Выбери способ оплаты", pwPickPack: "Выбери пакет",
+    tzTitle: "Полный разбор этого фото", tzWhat: "Что откроется:", tzCats: "ещё 6 категорий: маскулинность, симметрия, глаза, рот, нос, уши — с оценкой и пояснением",
+    tzRecs: "8–9 персональных рекомендаций под твоё лицо", tzOpen: "Открыть разбор", tzFive: "5 разборов", tzPer: "за разбор", tzOther: "Другие тарифы →",
+    tzAfter: "После оплаты разбор этого фото откроется сам — фото заново не нужно.", payStars: "⭐ Telegram Stars", payCard: "💳 Картой (₽)", paySbp: "📲 СБП (₽)", payCrypto: "🪙 Криптой", pwBack: "← Назад",
     teaserTitle: "Полный разбор закрыт", teaserBody: "В бесплатном отчёте показаны только 2 категории из 8. Открой полный разбор (маскулинность, симметрия, глаза, рот, нос, уши) и персональные рекомендации.", teaserBtn: "Открыть полный разбор",
     histEmpty: "Пока нет оценок. Загрузите фото — результат сохранится здесь.",
     histAvg: "Средний балл: ", histCount: " · оценок: ",
@@ -2938,7 +2944,7 @@ function showTeaserUpsell() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: acc.token }),
     }).then(function(r){ return r.json(); }).then(function(st){
-      if (!st.error) showPaywall("pay", st);
+      if (!st.error) showPaywall("pay", st, "teaser");
     }).catch(function(){});
   });
 }
@@ -4173,6 +4179,9 @@ function buyPack(pack, btn, payMethod) {
     } else if (W) {
       if (/^https:\/\/t\.me\//.test(d.link)) W.openTelegramLink(d.link); else W.openLink(d.link);
     } else {
+      // Страница сейчас уйдёт на оплату. Фото сохраняем в этом браузере (как при входе через
+      // Telegram): вернётся в течение 30 минут — анализ того же фото запустится сам, уже платный.
+      if (frontImg && (_pwMode === "teaser" || _pendingAnalysis)) saveResumePhotos();
       window.location.href = d.link;
     }
     // Поллим баланс — после возврата из Telegram чип обновится сам.
@@ -4227,6 +4236,16 @@ function buyPack(pack, btn, payMethod) {
 /* ───────────────────  Гейт перед генерацией: пейволл  ─────────────────── */
 var _pendingAnalysis = null;   // {metrics, shapeInfo} — ждёт прохода гейта
 var _afterGate = null;         // что запустить после успешного гейта (анализ или сравнение)
+var _lastAnalysis = null;      // {metrics, shapeInfo} последнего запуска — для полного разбора после оплаты
+var _pwMode = null;            // "teaser" — пейволл открыт кнопкой «Открыть полный разбор» на результате
+// Купили с экрана результата — сразу полный разбор того же фото. Раньше после оплаты окно
+// закрывалось и ничего не происходило: ожидающий анализ уже был израсходован бесплатным,
+// и человек писал в поддержку «оплатил, а полного разбора нет».
+function rerunFullReport() {
+  if (!_lastAnalysis || !frontImg) return;
+  fmStep("tz_rerun");
+  callAI(_lastAnalysis.metrics, _lastAnalysis.shapeInfo);
+}
 var _gateBusy = false;
 
 function fetchStatus(fresh) {
@@ -4260,6 +4279,7 @@ function startAI() {
   if (!_pendingAnalysis) return;
   fmStep("ai_start");
   var p = _pendingAnalysis; _pendingAnalysis = null;
+  _lastAnalysis = p;
   callAI(p.metrics, p.shapeInfo);
 }
 
@@ -4319,8 +4339,9 @@ function renderGateGeo() {
 }
 
 var _pwSubSeen = false; // видел гейт подписки — значит подписка после него считается шагом sub_ok
-function showPaywall(state, st) {
+function showPaywall(state, st, mode) {
   if (state === "sub") _pwSubSeen = true;
+  _pwMode = state === "pay" ? (mode || null) : null;
   // Сбой украшения не должен закрывать путь к входу и оплате.
   try { renderGateGeo(); } catch (e) { console.error(e); }
   var pw = document.getElementById("paywall");
@@ -4355,6 +4376,12 @@ function showPaywall(state, st) {
     });
   } else { // pay
     fmStep("pw_open");
+    // Две аудитории с разным намерением: «открыть этот разбор» и «кончился бесплатный анализ».
+    // Раньше шли одним шагом, и 12% выбора тарифа было средним по ним.
+    var pickStep = null;
+    if (_pwMode === "teaser") { fmStep("pw_teaser"); pickStep = "tz_pick"; _afterGate = rerunFullReport; }
+    else if (_pendingAnalysis) { fmStep("pw_gate"); pickStep = "gate_pick"; }
+    function picked() { fmStep("pack_pick"); if (pickStep) fmStep(pickStep); }
     var packs = (st && st.packs) || {
       p1: { stars: 45, rub: 70, lavaRub: 70, oldStars: 39, oldRub: 62, oldLavaRub: 62 },
       p5: { stars: 99, rub: 149, lavaRub: 149, oldStars: 99, oldRub: 149, oldLavaRub: 149 },
@@ -4372,8 +4399,6 @@ function showPaywall(state, st) {
       var left = days > 0 ? (days + "д " + hours + "ч") : (hours + "ч " + Math.floor((ms % 3600000) / 60000) + "м");
       return "🔥 Цены недели! До повышения: " + left;
     }
-    title.textContent = t("pwPayTitle");
-    sub.textContent = offerPct ? ("🔥 −" + offerPct + t("offerLine") + " " + fmtLeft(st.offerEndsAt - Date.now())) : (saleCountdownText() || t("pwPaySub"));
     var methods = (st && st.methods) || ["stars"];
     // Сколько анализов в пакете — для подписи «цена за анализ». У одиночного она
     // совпадает с ценой, поэтому подписывается только пятёрка (как и в боте).
@@ -4401,13 +4426,13 @@ function showPaywall(state, st) {
       var p = packs[id]; if (!p) return;
       if (avail.length === 1) { buyPack(id, null, avail[0]); return; }
       actions.innerHTML = "";
-      title.textContent = packNames[id] || t("pwPickPack");
+      title.textContent = (home === renderTeaser && { p1: t("tzOpen"), p5: t("tzFive") }[id]) || packNames[id] || t("pwPickPack");
       sub.textContent = t("pwPickMethod");
       avail.forEach(function (m) {
         var was = payPrice(id, p, m) < rawPrice(p, m) ? " <s class='pw-was'>" + rawPrice(p, m) + unitOf(m) + "</s>" : "";
         btn(methodNames[m] + " — " + was + " " + payPrice(id, p, m) + unitOf(m), "pw-btn pw-btn-main", function (b) { buyPack(id, b, m); });
       });
-      btn(t("pwBack"), "pw-btn pw-btn-ghost", function(){ showPaywall("pay", st); });
+      btn(t("pwBack"), "pw-btn pw-btn-ghost", function(){ home(); });
     }
     // Шаг 1: тарифы с ценой в валюте витрины.
     function packBtn(id) {
@@ -4431,12 +4456,54 @@ function showPaywall(state, st) {
           top = " <i class='pw-hit'>×" + (Math.round(payPrice("p1", packs.p1, method) / one * 10) / 10) + " " + t("bestValue") + "</i>";
         }
       }
-      btn(packNames[id] + " — " + was + " " + price + per + top, "pw-btn pw-btn-main", function(){ fmStep("pack_pick"); showMethods(id); });
+      btn(packNames[id] + " — " + was + " " + price + per + top, "pw-btn pw-btn-main", function(){ picked(); showMethods(id); });
     }
-    packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1"); packBtn("gpdf");
-    btn(t("pwPaid"), "pw-btn pw-btn-ghost", function(b){
-      b.textContent = t("pwChecking"); pwRecheck();
-    });
+    function paidBtn() {
+      btn(t("pwPaid"), "pw-btn pw-btn-ghost", function(b){
+        b.textContent = t("pwChecking"); pwRecheck();
+      });
+    }
+    function renderList() {
+      actions.innerHTML = "";
+      // С экрана разбора сюда приходят не за «бесплатный кончился» — без этого заголовка и «возвращайся через неделю».
+      var fromTz = _pwMode === "teaser";
+      title.textContent = fromTz ? t("pwPickPack") : t("pwPayTitle");
+      sub.textContent = offerPct ? ("🔥 −" + offerPct + t("offerLine") + " " + fmtLeft(st.offerEndsAt - Date.now())) : (saleCountdownText() || (fromTz ? "" : t("pwPaySub")));
+      packBtn("p1"); packBtn("p5"); packBtn("h1"); packBtn("d1"); packBtn("m1"); packBtn("gpdf");
+      paidBtn();
+    }
+    // Экран «Полный разбор этого фото» (21.11.2026): человек нажал «Открыть полный разбор»,
+    // а видел «Бесплатный анализ использован», шесть пакетов и «возвращайся через неделю».
+    // Здесь одна главная кнопка на этот разбор, пятёрка рядом для сравнения, остальное — по ссылке.
+    function renderTeaser() {
+      actions.innerHTML = "";
+      title.textContent = t("tzTitle");
+      sub.innerHTML = "";
+      var what = document.createElement("span");
+      what.textContent = t("tzWhat");
+      var ul = document.createElement("ul");
+      ul.className = "pw-tz-list";
+      [t("tzCats"), t("tzRecs")].forEach(function (x) { var li = document.createElement("li"); li.textContent = x; ul.appendChild(li); });
+      sub.appendChild(what); sub.appendChild(ul);
+      if (offerPct) { var of = document.createElement("span"); of.className = "pw-tz-offer"; of.textContent = "🔥 −" + offerPct + t("offerLine") + " " + fmtLeft(st.offerEndsAt - Date.now()); sub.appendChild(of); }
+      var m = shown, u = unitOf(m);
+      function priced(id) {
+        var p = packs[id]; if (!p) return null;
+        var now = payPrice(id, p, m), raw = rawPrice(p, m);
+        return { now: now, was: now < raw ? " <s class='pw-was'>" + raw + u + "</s>" : "" };
+      }
+      var one = priced("p1"), five = priced("p5");
+      if (one) btn(t("tzOpen") + " — " + one.was + " " + one.now + u, "pw-btn pw-btn-main", function(){ picked(); showMethods("p1"); });
+      if (five) btn(t("tzFive") + " — " + five.was + " " + five.now + u + " <i class='pw-per'>" + Math.round(five.now / 5) + u + " " + t("tzPer") + "</i>",
+        "pw-btn pw-btn-main pw-btn-second", function(){ picked(); showMethods("p5"); });
+      btn(t("tzOther"), "pw-btn pw-btn-ghost", function(){ home = renderList; renderList(); });
+      var note = document.createElement("p");
+      note.className = "gate-hint pw-tz-note"; note.textContent = t("tzAfter");
+      actions.appendChild(note);
+      paidBtn();
+    }
+    var home = _pwMode === "teaser" ? renderTeaser : renderList;
+    home();
   }
 
   pw.classList.remove("hidden");
@@ -4464,7 +4531,7 @@ function pwRecheck(silent) {
       // После входа гейт подписки или оплаты тоже считаем: раньше их видели только те, кто пришёл уже залогиненным.
       var gs = !st.subscribed ? "sub" : "pay";
       if (_pendingAnalysis) fmStep("gate_" + gs);
-      showPaywall(gs, st);
+      showPaywall(gs, st, gs === "pay" ? _pwMode : null);
     }
   }).catch(function(){ _gateBusy = false; });
 }
@@ -4472,6 +4539,7 @@ function pwRecheck(silent) {
 (function initPaywall() {
   var x = document.getElementById("pwClose");
   if (x) x.addEventListener("click", function(){
+    if (_pwMode === "teaser") { hidePaywall(); _afterGate = null; _pwMode = null; return; }   // остаёмся на своём результате
     hidePaywall();
     _pendingAnalysis = null;
     clearResumePhotos();
