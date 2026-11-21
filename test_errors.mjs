@@ -5,9 +5,10 @@ import { readFileSync } from 'node:fs';
 
 const w = readFileSync(new URL('./worker.js', import.meta.url), 'utf8');
 const pick = (re) => { const m = w.match(re); assert.ok(m, 'не нашёл в worker.js: ' + re); return m[0]; };
-const { explainAiError, msgKind } = new Function(
-  pick(/^function explainAiError[\s\S]*?^\}/m) + '\n' + pick(/^function msgKind[\s\S]*?^\}/m)
-  + '\nreturn { explainAiError, msgKind };')();
+const { explainAiError, msgKind, isModerationError } = new Function(
+  pick(/^const MOD_WORDS = .*$/m) + '\n' + pick(/^function isModerationError.*$/m) + '\n'
+  + pick(/^function explainAiError[\s\S]*?^\}/m) + '\n' + pick(/^function msgKind[\s\S]*?^\}/m)
+  + '\nreturn { explainAiError, msgKind, isModerationError };')();
 
 const cases = [
   [200, 'Image rejected by moderation', 'E-MOD'],
@@ -77,3 +78,11 @@ assert.match(app, /\} catch \{ return pgShowProblem\('net'\); \}/, 'сбой с�
 assert.match(app, /if \(!d\.guide && !d\.tracking\) return pgShowLocked/, 'платный экран остался для реально неоплативших');
 assert.match(app, /покупка никуда не делась/, 'человеку сказано, что покупка на месте');
 console.log('ошибки и вложения: все проверки прошли');
+
+// Отказ фильтра ошибкой уводит на запасную модель (21.11.2026): решает тот же список слов,
+// что и код E-MOD. Обычные сбои на запасную не уводят — там нужен повтор, а не другая модель.
+for (const m of ['Image rejected by moderation', 'content_filter triggered', 'Request blocked by SAFETY settings', 'PROHIBITED_CONTENT'])
+  assert.ok(isModerationError(m), 'отказ фильтра: ' + m);
+for (const m of ['http 502', 'Rate limit exceeded', 'timeout', 'insufficient credits', null])
+  assert.ok(!isModerationError(m), 'не отказ фильтра: ' + m);
+

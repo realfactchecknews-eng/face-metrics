@@ -7,7 +7,8 @@ const w = readFileSync(new URL('./worker.js', import.meta.url), 'utf8');
 const pick = (re) => { const m = w.match(re); assert.ok(m, 'не нашёл: ' + re); return m[0]; };
 
 const buildBodySrc = pick(/  const buildBody = \(attempt\) => \{[\s\S]*?\n  \};/);
-const build = new Function('model', 'isTeaser', 'stable', 'sessionId', 'messages', `
+const build = new Function('model', 'isTeaser', 'stable', 'sessionId', 'messages', 'backupMessages = messages', `
+  const MODEL_BACKUP = 'x-ai/grok-4.3';
   ${buildBodySrc}
   return (attempt) => JSON.parse(buildBody(attempt));
 `);
@@ -32,5 +33,13 @@ assert.equal(gem(0).temperature, 0, 'температура 0');
 const duel = pick(/^async function rateFacesSeparately[\s\S]*?^\}/m);
 assert.match(duel, /google-ai-studio/, 'дуэль пинится так же');
 assert.match(w, /console\.log\('AI ok'[^)]*provider: data\.provider/, 'провайдер пишется в лог для разбора жалоб');
+
+// Проверка возраста (21.11.2026) уходит только в запасную модель. Основной промпт не меняется:
+// любая его правка двигает баллы, а без замера на 52 лицах её не выкатывают.
+const MAIN_MSG = [{ role: 'user', content: 'main' }], BACKUP_MSG = [{ role: 'user', content: 'guard+main' }];
+assert.deepEqual(build('google/gemini-3.7-flash', false, true, 's', MAIN_MSG, BACKUP_MSG)(0).messages, MAIN_MSG, 'основная модель — без проверки возраста');
+assert.deepEqual(build('x-ai/grok-4.3', false, true, 's', MAIN_MSG, BACKUP_MSG)(1).messages, BACKUP_MSG, 'запасная — с проверкой возраста');
+assert.match(w, /const AGE_GUARD = '[^']*under 18[^']*UNDERAGE/, 'проверка возраста на месте');
+assert.match(w, /usedBackup && \/\^\\W\*UNDERAGE/, 'ответ UNDERAGE превращается в отказ E-AGE');
 
 console.log('пин провайдера: все проверки прошли');

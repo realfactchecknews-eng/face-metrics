@@ -207,12 +207,16 @@ const REPORT_CACHE_VER = 'v2';
    запросов и настоящая недоступность. Человек видел одно и то же и писал в поддержку,
    а по скриншоту нельзя было понять, что случилось.
    Код в скобках оставляем: по нему видно причину прямо со скриншота. */
+// Слова, по которым ошибка провайдера — это отказ фильтра, а не сбой. Тот же список решает,
+// уходить ли на запасную модель (см. цикл запросов в анализе).
+const MOD_WORDS = ['moderation', 'flagged', 'safety', 'policy', 'content_filter', 'prohibited'];
+function isModerationError(msg) { const e = String(msg || '').toLowerCase(); return MOD_WORDS.some((x) => e.includes(x)); }
 function explainAiError(status, lastErr, L) {
   const e = String(lastErr || '').toLowerCase();
   const ru = L !== 'en';
   const has = (...w) => w.some((x) => e.includes(x));
   // Порядок важен: сначала то, что человек может исправить сам.
-  if (has('moderation', 'flagged', 'safety', 'policy', 'content_filter', 'prohibited')) {
+  if (isModerationError(e)) {
     return { code: 'E-MOD', text: ru
       ? 'Фото отклонено фильтром модели. Чаще всего так бывает с детскими и неоднозначными кадрами. Попробуйте другое фото: взрослое лицо, анфас, без посторонних.'
       : 'The model’s filter rejected this photo. This usually happens with pictures of minors or ambiguous shots. Try another one: an adult face, front view, nobody else in frame.' };
@@ -477,6 +481,18 @@ async function analyze(request, env) {
       ]}]
     : [{ role: 'user', content: promptText }];
 
+  // Запасная модель включается, когда основная отказалась, а Google чаще всего отказывает
+  // на детских фото. Своей защиты от разбора ребёнка у запасной нет, поэтому её просим
+  // сначала оценить возраст и при сомнении ответить одним словом. Основной промпт не
+  // трогаем: любая его правка двигает баллы (см. CLAUDE.md, «правку промпта мерить»).
+  const AGE_GUARD = 'BEFORE ANYTHING ELSE: if the person in the photo could plausibly be under 18, reply with exactly the single word UNDERAGE and nothing else -- no analysis, no scores. Otherwise ignore this line and follow the instructions below.\n\n';
+  const backupMessages = imgs.length
+    ? [{ role: 'user', content: [
+        ...imgs.map((b64) => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } })),
+        { type: 'text', text: AGE_GUARD + promptText },
+      ]}]
+    : messages;
+
   // session_id: xAI-кэш промптов чувствителен к server affinity — без стабильного ключа
   // одинаковые запросы могут разлетаться по разным бэкендам и кэш статичной части промпта
   // (~2500 токенов калибровки, идёт ДО картинок/метрик в тексте) не срабатывает. Бакет по
@@ -515,7 +531,7 @@ async function analyze(request, env) {
       // без них модель отвечает по шаблону, а отказ на негодном кадре не срабатывает.
       reasoning: { effort: 'low' },
       session_id: sessionId,
-      messages,
+      messages: model === MODEL_BACKUP ? backupMessages : messages,
     };
     // Пин провайдера. Без него OpenRouter раскидывает одинаковые запросы по разным
     // бэкендам модели, и seed на чужом бэкенде не соблюдается.
@@ -598,8 +614,28 @@ async function analyze(request, env) {
     if (status) lastStatus = status;
     if (eMsg) lastErr = eMsg;
     else if (status && status !== 200) lastErr = `http ${status}`;
+    // Фильтр провайдера отклонил запрос ошибкой (а не пустым ответом). Раньше тут шли ещё
+    // три повтора в ту же модель и затем E-MOD: 186 таких за неделю 15-21.11. Повтор того
+    // же кадра в тот же фильтр ничего не даёт — сразу на запасную, ровно один раз.
+    if (isModerationError(lastErr)) {
+      if (!usedBackup) {
+        usedBackup = true; model = MODEL_BACKUP;
+        console.log('AI switching to backup model', JSON.stringify({ from: MODEL_MAIN, to: MODEL_BACKUP, why: 'moderation error' }));
+        continue;
+      }
+      break;
+    }
 
     if (attempt < 3) await new Promise(r => setTimeout(r, 700));
+  }
+  // Запасная увидела на фото, возможно, несовершеннолетнего: разбора нет, ничего не списано.
+  if (usedBackup && /^\W*UNDERAGE\b/i.test(String(data?.choices?.[0]?.message?.content || '').trim())) {
+    if (earlyPaid) await env.RATE_LIMIT.put(`credits:${tgid}`, String(credits));
+    console.log('AI underage', JSON.stringify({ isTeaser }));
+    const ru = body.lang !== 'en';
+    return json({ error: 'model', code: 'E-AGE', text: ru
+      ? 'Похоже, на фото человек младше 18 лет. Такие фото мы не разбираем. Анализ не списан — пришлите фото взрослого.'
+      : 'The person in this photo may be under 18. We do not analyse such photos. Nothing was charged — please send a photo of an adult.' });
   }
   if (!data?.choices?.[0]?.message?.content) {
     // Кредит за досрочный замер списан ДО запроса (чтобы его не потратили параллельно),
