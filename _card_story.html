@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>Карточка — сторис</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&display=swap">
+<style>
+:root{--g:#c4a46b;--gh:#e8cf96;--dim:#8a7f6a;--txt:#e8e2d6}
+html,body{margin:0;background:#000}
+body{display:flex}
+.card{width:1080px;height:1920px;flex:none;position:relative;overflow:hidden;font-family:'Cormorant Garamond',Georgia,serif;color:var(--txt);background:#050505}
+.abs{position:absolute}
+.gold{background:linear-gradient(#f4ead2,#c9a868);-webkit-background-clip:text;color:transparent}
+.fp{position:absolute;border-radius:500px;filter:blur(9px)}
+.glow{left:0;right:0;top:0;height:900px;background:radial-gradient(ellipse 70% 60% at 50% 0,rgba(196,164,107,.13),transparent 70%)}
+.frame{left:28px;top:28px;right:28px;bottom:28px;border:1.5px solid rgba(196,164,107,.3);border-radius:34px}
+.head{left:0;right:0;top:86px;display:flex;align-items:center;justify-content:center;gap:26px}
+.pl{width:170px;height:76px;overflow:hidden;position:relative}.pl img{position:absolute;width:425px;height:177px;left:-127px;top:-50px}
+.head b{font-weight:400;font-size:84px;letter-spacing:9px;line-height:1}
+.sub{left:0;right:0;top:178px;text-align:center;font-size:22px;letter-spacing:11px;color:var(--dim)}
+.score b{font-weight:400;font-size:150px;line-height:1;background:linear-gradient(#f6e6b8,#b3924f);-webkit-background-clip:text;color:transparent}
+.score i{font-style:normal;font-size:52px;color:#8f866f}
+.lbl{font-size:22px;letter-spacing:9px;color:var(--g)}
+.tierp{border:2px solid var(--gh);border-radius:40px;padding:8px 40px;font-size:44px;letter-spacing:8px;color:var(--gh);text-shadow:0 0 18px var(--gh);background:rgba(5,5,5,.5)}
+.sum{box-sizing:border-box;border:1px solid rgba(196,164,107,.28);border-radius:20px;background:rgba(10,9,7,.9);display:flex;align-items:center;gap:26px;padding:0 24px 0 32px}
+.sum .t{font-size:20px;letter-spacing:6px;color:var(--g);margin-bottom:6px}
+.sum .x{font-size:26px;line-height:1.2;color:#bcb29f}
+.pot{flex:none;border:1.5px solid rgba(196,164,107,.6);border-radius:14px;padding:10px 26px;text-align:center}
+.pot .a{font-size:16px;letter-spacing:5px;color:var(--dim)}.pot .b{font-size:32px;letter-spacing:3px;color:var(--gh)}.pot .c{font-size:22px;color:var(--g)}
+.foot{left:0;right:0;text-align:center;font-size:44px;letter-spacing:2px}
+.foot2{left:0;right:0;text-align:center;font-size:18px;letter-spacing:7px;color:#6f6858}
+.hr{height:1.5px;background:linear-gradient(90deg,transparent,rgba(232,207,150,.9),transparent)}
+svg text{font-family:'Cormorant Garamond',Georgia,serif}
+</style></head><body>
+
+<!-- ВАРИАНТ 1: прямоугольное фото, балл и тир поверх низа фото -->
+<div class="card" id="c1">
+  <div class="abs glow"></div><div class="pills"></div>
+  <div class="abs frame"></div>
+  <div class="abs head"><div class="pl"><img src="assets/pill3d/pill.webp" alt=""></div><b class="gold">FACERATE</b></div>
+  <div class="abs sub">AI AESTHETIC ANALYSIS</div>
+  <div class="abs" style="left:96px;top:250px;width:888px;height:780px;border-radius:30px;overflow:hidden;border:1.5px solid rgba(196,164,107,.55)">
+    <img src="_story_face.jpg" style="width:100%;height:100%;object-fit:cover;object-position:50% 28%;filter:saturate(.85) contrast(1.05)">
+    <div class="abs" style="inset:0;background:linear-gradient(180deg,transparent 48%,rgba(5,5,5,.6) 72%,rgba(5,5,5,.97) 100%)"></div>
+  </div>
+  <div class="abs score" style="left:140px;top:846px;display:flex;align-items:baseline;gap:10px"><b>4.6</b><i>/8</i></div>
+  <div class="abs lbl" style="left:146px;top:982px">OVERALL PSL SCORE</div>
+  <div class="abs" style="right:140px;top:906px;text-align:center"><div class="tierp">HTN</div><div class="lbl" style="margin-top:12px;color:var(--dim);font-size:20px">PSL TIER</div></div>
+  <svg class="abs radar" style="left:0;top:1062px" width="1080" height="620" data-cy="318" data-r="200"></svg>
+  <div class="abs sum" style="left:96px;top:1690px;width:888px;height:128px"></div>
+  <div class="abs foot gold" style="top:1832px">facerate.ru</div>
+</div>
+
+<!-- ВАРИАНТ 2: фото в вертикальной капсуле-пилюле, балл отдельной строкой -->
+<div class="card" id="c2">
+  <div class="abs glow"></div><div class="pills"></div>
+  <div class="abs frame"></div>
+  <div class="abs head"><div class="pl"><img src="assets/pill3d/pill.webp" alt=""></div><b class="gold">FACERATE</b></div>
+  <div class="abs sub">AI AESTHETIC ANALYSIS</div>
+  <div class="abs" style="left:240px;top:250px;width:600px;height:800px;border-radius:300px;padding:10px;box-sizing:border-box;background:linear-gradient(160deg,#f1e2b6,#8a6c38 45%,#e8cf96 70%,#6b5228)">
+    <div style="width:100%;height:100%;border-radius:300px;overflow:hidden;background:#000"><img src="_story_face.jpg" style="width:100%;height:100%;object-fit:cover;object-position:50% 30%;filter:saturate(.85) contrast(1.05)"></div>
+  </div>
+  <div class="abs" style="left:0;right:0;top:1076px;display:flex;align-items:center;justify-content:center;gap:44px">
+    <div class="score" style="display:flex;align-items:baseline;gap:8px"><b style="font-size:128px">4.6</b><i>/8</i></div>
+    <div style="width:1.5px;height:110px;background:rgba(196,164,107,.4)"></div>
+    <div style="text-align:center"><div class="tierp">HTN</div><div class="lbl" style="margin-top:12px;font-size:19px">OVERALL PSL</div></div>
+  </div>
+  <div class="abs hr" style="left:240px;right:240px;top:1232px"></div>
+  <svg class="abs radar" style="left:0;top:1240px" width="1080" height="450" data-cy="228" data-r="150"></svg>
+  <div class="abs sum" style="left:96px;top:1700px;width:888px;height:124px"></div>
+  <div class="abs foot gold" style="top:1838px">facerate.ru</div>
+</div>
+
+<script>
+var CATS=[["Гармония",6.8],["Джоулайн и скулы",6.2],["Маскулинность",7.1],["Симметрия",7.4],["Глаза",6.5],["Рот и губы",5.9],["Нос",6.0],["Уши",5.5]];
+var SUM='<div style="flex:1"><div class="t">ANALYSIS SUMMARY</div><div class="x">Сильная средняя треть и чёткий контур челюсти; слабее — мягкие ткани под глазами.</div></div><div class="pot"><div class="a">POTENTIAL</div><div class="b">CHADLITE</div><div class="c">5.4/8</div></div>';
+// Размытые пилюли как на экране загрузки, позиции фиксированы
+var PILLS=[[6,8,140,-25,"#e8e8e8",.07],[82,18,110,30,"#c4a46b",.10],[90,47,170,-60,"#9a9a9a",.06],[-3,55,130,70,"#c4a46b",.08],[12,88,180,15,"#f0f0f0",.05],[74,90,120,-35,"#c4a46b",.09],[48,74,90,80,"#555",.12],[60,4,80,10,"#9a9a9a",.07]];
+document.querySelectorAll(".pills").forEach(function(f){
+  f.innerHTML=PILLS.map(function(p){return '<span class="fp" style="left:'+p[0]+'%;top:'+p[1]+'%;width:'+p[2]+'px;height:'+(p[2]*.42)+'px;background:'+p[4]+';opacity:'+p[5]+';transform:rotate('+p[3]+'deg)"></span>'}).join("");
+});
+document.querySelectorAll(".sum").forEach(function(e){e.innerHTML=SUM});
+document.querySelectorAll("svg.radar").forEach(function(svg){
+  var cx=540,cy=+svg.dataset.cy,R=+svg.dataset.r,n=8,big=R>170;
+  var pt=function(i,r){var a=-Math.PI/2+i*2*Math.PI/n;return [cx+r*Math.cos(a),cy+r*Math.sin(a)]};
+  var k=function(v){return Math.max(.08,Math.min(1,(v-3)/6))};
+  var s='<defs><radialGradient id="fg'+R+'"><stop offset="0" stop-color="#e8cf96" stop-opacity=".04"/><stop offset="1" stop-color="#e8cf96" stop-opacity=".26"/></radialGradient><filter id="gl'+R+'"><feGaussianBlur stdDeviation="5"/></filter></defs>';
+  [0.2,0.4,0.6,0.8,1].forEach(function(q){s+='<polygon points="'+CATS.map(function(_,i){return pt(i,R*q).join(",")}).join(" ")+'" fill="none" stroke="rgba(196,164,107,'+(q==1?.5:.14)+')" stroke-width="'+(q==1?2:1.2)+'"/>'});
+  CATS.forEach(function(_,i){var p=pt(i,R);s+='<line x1="'+cx+'" y1="'+cy+'" x2="'+p[0]+'" y2="'+p[1]+'" stroke="rgba(196,164,107,.14)" stroke-width="1.2"/>'});
+  var poly=CATS.map(function(c,i){return pt(i,R*k(c[1])).join(",")}).join(" ");
+  s+='<polygon points="'+poly+'" fill="none" stroke="#e8cf96" stroke-width="6" opacity=".5" filter="url(#gl'+R+')"/><polygon points="'+poly+'" fill="url(#fg'+R+')" stroke="#e8cf96" stroke-width="3"/>';
+  CATS.forEach(function(c,i){var p=pt(i,R*k(c[1]));s+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="6.5" fill="#f4e4b8"/>'});
+  var fs=big?31:28,fv=big?40:34,off=big?42:36;
+  CATS.forEach(function(c,i){
+    var p=pt(i,R+off),dx=p[0]-cx,dy=p[1]-cy,anc=Math.abs(dx)<5?"middle":(dx>0?"start":"end");
+    var y=Math.abs(dy)<5?p[1]-6:(dy<0?p[1]-24:p[1]+4);
+    if(Math.abs(dx)<5&&dy<0)y=p[1]-(big?40:34); if(Math.abs(dx)<5&&dy>0)y=p[1]+12;
+    if(!big&&Math.abs(dx)<5&&dy<0){ /* в компактном — верхняя подпись в одну строку */ s+='<text x="'+p[0]+'" y="'+(p[1]+2)+'" text-anchor="middle" font-size="'+fs+'" fill="#e8e2d6">'+c[0]+'  <tspan fill="#f0dca6" font-size="'+fv+'">'+c[1].toFixed(1)+'</tspan></text>';return}
+    if(!big&&Math.abs(dx)<5&&dy>0){ s+='<text x="'+p[0]+'" y="'+(p[1]+20)+'" text-anchor="middle" font-size="'+fs+'" fill="#e8e2d6">'+c[0]+'  <tspan fill="#f0dca6" font-size="'+fv+'">'+c[1].toFixed(1)+'</tspan></text>';return}
+    s+='<text x="'+p[0]+'" y="'+y+'" text-anchor="'+anc+'" font-size="'+fs+'" fill="#e8e2d6">'+c[0]+'</text><text x="'+p[0]+'" y="'+(y+fv)+'" text-anchor="'+anc+'" font-size="'+fv+'" fill="#f0dca6">'+c[1].toFixed(1)+'</text>';
+  });
+  svg.innerHTML=s;
+});
+</script>
+</body></html>

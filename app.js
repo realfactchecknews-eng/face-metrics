@@ -3106,7 +3106,7 @@ function esc(s) { return String(s).replace(/[&<>]/g, function(m){ return ({"&":"
   shareBtn.addEventListener("click", async function() {
     var blob = await buildShareCard();
     if (!blob) return;
-    var file = new File([blob], "facerate.png", { type: "image/png" });
+    var file = new File([blob], "facerate.jpg", { type: "image/jpeg" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: "FaceRate", text: t("shareText") });
@@ -3115,7 +3115,7 @@ function esc(s) { return String(s).replace(/[&<>]/g, function(m){ return ({"&":"
     }
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
-    a.href = url; a.download = "facerate.png"; a.click();
+    a.href = url; a.download = "facerate.jpg"; a.click();
     URL.revokeObjectURL(url);
   });
 })();
@@ -3171,122 +3171,127 @@ function drawBrandPill(g, cx, cy, w, h) {
   g.restore();
 }
 
-// Люкс-карточка результата 1080×1560: бренд, фото с сеткой и брекетами,
-// крупный балл, бары категорий, summary + POTENTIAL, facerate.ru.
+// Карточка результата 1080×1920 (формат сторис, 22.11.2026): фирменная пилюля,
+// крупное фото с баллом и тиром на затемнённом низу, восьмиугольник категорий,
+// сводка + потенциал. Цифры — Cinzel: у Georgia и Cormorant старостильные цифры,
+// «4» уходит под строку, и балл выглядел кривым. Макет — _card_story.html.
+var CARD_SERIF = "'Cormorant Garamond', Georgia, serif";
+var CARD_NUM = "Cinzel, Georgia, serif";
+var _cardPill = null;
+function loadCardAssets() {
+  var fonts = (document.fonts && document.fonts.load)
+    // Текст-образец обязателен: Google отдаёт кириллицу отдельным файлом, и без него
+    // грузится только латиница — первая карточка выходила со сводкой запасным шрифтом.
+    ? Promise.all(["400 40px Cinzel", "400 40px 'Cormorant Garamond'"].map(function (f) {
+        return document.fonts.load(f, "FACERATE Гармония 0123456789").catch(function () {});
+      }))
+    : Promise.resolve();
+  var pill = _cardPill ? Promise.resolve() : new Promise(function (res) {
+    var im = new Image();
+    im.onload = function () { _cardPill = im; res(); };
+    im.onerror = function () { res(); };            // без пилюли карточка всё равно собирается
+    im.src = "assets/pill3d/pill.webp?v=3";
+  });
+  // Шрифт может не прийти (офлайн, блокировка Google) — ждём не дольше 2.5 с и рисуем фолбэком.
+  return Promise.race([Promise.all([fonts, pill]), new Promise(function (r) { setTimeout(r, 2500); })]);
+}
+
 function buildShareCard() {
-  // Сначала дожидаемся иконок: без этого они не успевают загрузиться и
-  // не попадают в готовый PNG.
-  return loadCatIcons().then(function () { return _buildShareCard(); });
+  return loadCardAssets().then(function () { return _buildShareCard(); });
 }
 
 function _buildShareCard() {
   return new Promise(function(resolve) {
     var src = cleanImageCanvas || canvas;
     var parsed = window._fmParsed || { overall: null, overallDesc: "", categories: [] };
-    var W = 1080, H = 1680;
+    var W = 1080, H = 1920;
     var c = document.createElement("canvas");
     c.width = W; c.height = H;
     var g = c.getContext("2d");
     var GOLD = "#c4a46b", GOLD_HI = "#e8cf96", DIM = "#8a7f6a", TXT = "#e8e2d6";
-
     function ls(px) { try { g.letterSpacing = px + "px"; } catch (e) {} }
+    function goldText(y0, y1) {
+      var gr = g.createLinearGradient(0, y0, 0, y1);
+      gr.addColorStop(0, "#f4ead2"); gr.addColorStop(1, "#c9a868"); return gr;
+    }
 
-    // фон: почти чёрный + мягкое золотое свечение сверху
+    // ── Фон: чёрный, золотое свечение сверху, размытые пилюли как на экране загрузки ──
     g.fillStyle = "#050505"; g.fillRect(0, 0, W, H);
-    var glow = g.createRadialGradient(W / 2, 0, 80, W / 2, 0, 900);
-    glow.addColorStop(0, "rgba(196,164,107,0.10)"); glow.addColorStop(1, "rgba(196,164,107,0)");
+    var glow = g.createRadialGradient(W / 2, 0, 60, W / 2, 0, 760);
+    glow.addColorStop(0, "rgba(196,164,107,0.13)"); glow.addColorStop(1, "rgba(196,164,107,0)");
     g.fillStyle = glow; g.fillRect(0, 0, W, 900);
-    // внешняя золотая рамка
-    g.strokeStyle = "rgba(196,164,107,0.35)"; g.lineWidth = 2;
-    roundRect(g, 22, 22, W - 44, H - 44, 30); g.stroke();
+    // Размытие на канвасе есть не везде (Safari до 18) — там пилюль просто нет.
+    if ("filter" in g) {
+      g.save(); g.filter = "blur(9px)";
+      [[0.06, 0.08, 140, -25, "232,232,232", 0.07], [0.82, 0.18, 110, 30, "196,164,107", 0.10],
+       [0.90, 0.47, 170, -60, "154,154,154", 0.06], [-0.03, 0.55, 130, 70, "196,164,107", 0.08],
+       [0.12, 0.88, 180, 15, "240,240,240", 0.05], [0.74, 0.90, 120, -35, "196,164,107", 0.09],
+       [0.48, 0.74, 90, 80, "85,85,85", 0.12], [0.60, 0.04, 80, 10, "154,154,154", 0.07]].forEach(function (p) {
+        var w = p[2], h = w * 0.42;
+        g.save(); g.translate(p[0] * W + w / 2, p[1] * H + h / 2); g.rotate(p[3] * Math.PI / 180);
+        roundRect(g, -w / 2, -h / 2, w, h, h / 2); g.fillStyle = "rgba(" + p[4] + "," + p[5] + ")"; g.fill();
+        g.restore();
+      });
+      g.restore();
+    }
+    g.strokeStyle = "rgba(196,164,107,0.3)"; g.lineWidth = 1.5;
+    roundRect(g, 28, 28, W - 56, H - 56, 34); g.stroke();
 
-    // ── Шапка: пилюля + FACERATE ──
-    g.textAlign = "left"; g.textBaseline = "alphabetic";
-    g.font = "bold 66px Georgia, 'Times New Roman', serif"; ls(4);
+    // ── Шапка: золотая пилюля + FACERATE ──
+    g.textBaseline = "alphabetic";
+    g.font = "400 84px " + CARD_SERIF; ls(9);
     var brandW = g.measureText("FACERATE").width;
-    var pillW = 84, gap = 26;
-    var startX = (W - (pillW + gap + brandW)) / 2;
-    drawBrandPill(g, startX + pillW / 2, 96, pillW, 36);
-    var brandGrad = g.createLinearGradient(0, 60, 0, 115);
-    brandGrad.addColorStop(0, "#f4ead2"); brandGrad.addColorStop(1, "#cbb789");
-    g.fillStyle = brandGrad;
-    g.fillText("FACERATE", startX + pillW + gap, 118);
-    ls(0);
-    g.textAlign = "center";
-    g.font = "24px Georgia, serif"; ls(9);
-    g.fillStyle = DIM;
-    g.fillText("AI AESTHETIC ANALYSIS", W / 2, 158); ls(0);
+    var pW = _cardPill ? 170 : 0, gap = _cardPill ? 26 : 0;
+    var hx = (W - (pW + gap + brandW)) / 2;
+    // В pill.webp капсула занимает середину кадра — вырезаем её без прозрачных полей.
+    if (_cardPill) g.drawImage(_cardPill, 179, 71, 240, 107, hx, 86, pW, 76);
+    g.textAlign = "left"; g.fillStyle = goldText(90, 160);
+    g.fillText("FACERATE", hx + pW + gap, 152); ls(0);
+    g.textAlign = "center"; g.font = "22px " + CARD_SERIF; ls(11); g.fillStyle = DIM;
+    g.fillText("AI AESTHETIC ANALYSIS", W / 2, 200); ls(0);
 
-    // ── Фото со скруглением, сеткой точек и брекетами ──
-    // ph уменьшена с 500 до 400: подпись балла, плашка тира и строки категорий с
-    // иконками стали выше, и без этого блок сводки наезжал на футер.
-    var px = 120, py = 195, pw = W - 240, ph = 400, pr = 26;
+    // ── Фото: крупно, кроп по лицу, низ затемнён под балл ──
+    var px = 96, py = 250, pw = W - 192, ph = 780, pr = 30;
     g.save();
     roundRect(g, px, py, pw, ph, pr); g.clip();
-    // Кроп с привязкой к лицу (если рамка есть) — иначе cover по центру.
     var fb = window._fmFaceBox;
     if (fb && fb.w > 0 && fb.h > 0) {
       var boxAR = pw / ph;
-      // Центр лица чуть выше геометрического (акцент на глаза/скулы).
-      var fcx = fb.x + fb.w / 2, fcy = fb.y + fb.h * 0.42;
-      // Желаемая высота кропа: лицо + запас на волосы и шею. AR = как у окна.
-      var rh = fb.h * 2.15, rw = rh * boxAR;
-      // Не больше самого фото (сохраняем пропорцию, без искажений).
+      // Центр чуть выше середины лица; запас снизу больше — туда ложится балл.
+      var fcx = fb.x + fb.w / 2, fcy = fb.y + fb.h * 0.55;
+      var rh = fb.h * 2.3, rw = rh * boxAR;
       if (rw > src.width)  { rw = src.width;  rh = rw / boxAR; }
       if (rh > src.height) { rh = src.height; rw = rh * boxAR; }
-      // Центрируем на лице и держим в пределах изображения.
       var rx = Math.max(0, Math.min(fcx - rw / 2, src.width - rw));
       var ry = Math.max(0, Math.min(fcy - rh / 2, src.height - rh));
       g.drawImage(src, rx, ry, rw, rh, px, py, pw, ph);
     } else {
       var scale = Math.max(pw / src.width, ph / src.height);
       var dw = src.width * scale, dh = src.height * scale;
-      g.drawImage(src, px + (pw - dw) / 2, py + (ph - dh) * 0.35, dw, dh);
+      g.drawImage(src, px + (pw - dw) / 2, py + (ph - dh) * 0.3, dw, dh);
     }
-    // затемнение краёв
-    var vg = g.createRadialGradient(px + pw / 2, py + ph / 2, ph * 0.35, px + pw / 2, py + ph / 2, ph * 0.95);
-    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.55)");
-    g.fillStyle = vg; g.fillRect(px, py, pw, ph);
-    // сетка точек
-    g.fillStyle = "rgba(196,164,107,0.14)";
-    for (var gy = py + 22; gy < py + ph - 10; gy += 34) {
-      for (var gx = px + 22; gx < px + pw - 10; gx += 34) {
-        g.beginPath(); g.arc(gx, gy, 1.6, 0, Math.PI * 2); g.fill();
-      }
-    }
+    var shade = g.createLinearGradient(0, py, 0, py + ph);
+    shade.addColorStop(0.48, "rgba(5,5,5,0)"); shade.addColorStop(0.72, "rgba(5,5,5,0.6)");
+    shade.addColorStop(1, "rgba(5,5,5,0.97)");
+    g.fillStyle = shade; g.fillRect(px, py, pw, ph);
     g.restore();
-    g.strokeStyle = "rgba(196,164,107,0.4)"; g.lineWidth = 1.5;
+    g.strokeStyle = "rgba(196,164,107,0.55)"; g.lineWidth = 1.5;
     roundRect(g, px, py, pw, ph, pr); g.stroke();
-    // угловые брекеты
-    var bl = 38, bo = 14;
-    g.strokeStyle = "rgba(196,164,107,0.9)"; g.lineWidth = 3; g.lineCap = "round";
-    [[px - bo, py - bo, 1, 1], [px + pw + bo, py - bo, -1, 1], [px - bo, py + ph + bo, 1, -1], [px + pw + bo, py + ph + bo, -1, -1]].forEach(function(k) {
-      g.beginPath();
-      g.moveTo(k[0] + k[2] * bl, k[1]); g.lineTo(k[0], k[1]); g.lineTo(k[0], k[1] + k[3] * bl);
-      g.stroke();
-    });
 
-    // ── Общий балл ──
+    // ── Балл и тир на низу фото ──
     var score = parsed.overall !== null ? parsed.overall.toFixed(1) : (document.getElementById("overallScoreNum").textContent || "--");
-    var by = py + ph + 175;
+    var sBase = 950;
     g.textAlign = "left";
-    // 150px вместо 180: на 180 цифра перетягивала на себя всю карточку и
-    // оставляла мало воздуха между фото и плашкой тира.
-    var scoreFont = "124px Georgia, serif", denomFont = "44px Georgia, serif";
-    g.font = scoreFont; var wS = g.measureText(score).width;
-    g.font = denomFont; var wD = g.measureText("/8").width;
-    var sx = W / 2 - (wS + 14 + wD) / 2;
-    var sg = g.createLinearGradient(0, by - 140, 0, by);
-    sg.addColorStop(0, "#f0dfae"); sg.addColorStop(1, "#b3924f");
-    g.font = scoreFont; g.fillStyle = sg; g.fillText(score, sx, by);
-    g.font = denomFont; g.fillStyle = "#6f6858"; g.fillText("/8", sx + wS + 14, by - 8);
-    g.textAlign = "center";
-    g.font = "26px Georgia, serif"; ls(10); g.fillStyle = GOLD;
-    g.fillText("OVERALL PSL SCORE", W / 2, by + 48); ls(0);
+    g.font = "400 112px " + CARD_NUM; ls(2);
+    var wS = g.measureText(score).width;
+    var sg = g.createLinearGradient(0, sBase - 110, 0, sBase);
+    sg.addColorStop(0, "#f6e6b8"); sg.addColorStop(1, "#b3924f");
+    g.fillStyle = sg; g.fillText(score, 140, sBase); ls(0);
+    g.font = "400 40px " + CARD_NUM; g.fillStyle = "#8f866f";
+    g.fillText("/8", 140 + wS + 12, sBase);
+    g.font = "22px " + CARD_SERIF; ls(9); g.fillStyle = GOLD;
+    g.fillText("OVERALL PSL SCORE", 144, 1000); ls(0);
 
-    // ── Плашка тира ──
-    // Балл сам по себе мало что говорит; тир — это то, что человек несёт в чат.
-    // Верхние ступени светлее и со свечением, нижняя — приглушённо-красная.
     var tier = pslTier(parsed.overall !== null ? parsed.overall : 0);
     var TIER_COLOR = {
       trueadam: "#f7ecd2", adamlite: "#f2e4bd", chad: "#e8d4a0",
@@ -3294,137 +3299,92 @@ function _buildShareCard() {
     };
     var tCol = TIER_COLOR[tier.key] || GOLD;
     var tLabel = tier.label.toUpperCase();
-    g.font = "31px Georgia, serif"; ls(7);
-    var tW = g.measureText(tLabel).width + 68;
-    var tH = 54, tX = W / 2 - tW / 2, tY = by + 74;
-    var tGlow = g.createLinearGradient(tX, tY, tX + tW, tY + tH);
-    tGlow.addColorStop(0, "rgba(196,164,107,0.05)");
-    tGlow.addColorStop(0.5, "rgba(232,212,160,0.16)");
-    tGlow.addColorStop(1, "rgba(196,164,107,0.05)");
-    g.fillStyle = tGlow; roundRect(g, tX, tY, tW, tH, tH / 2); g.fill();
-    g.strokeStyle = tCol; g.lineWidth = 1.6;
-    roundRect(g, tX, tY, tW, tH, tH / 2); g.stroke();
-    g.save(); g.shadowColor = tCol; g.shadowBlur = 22;
-    g.fillStyle = tCol; g.textBaseline = "middle";
-    g.fillText(tLabel, W / 2, tY + tH / 2 + 2); g.restore(); ls(0);
-    g.textBaseline = "alphabetic";
+    g.font = "400 38px " + CARD_NUM; ls(6);
+    var tW = g.measureText(tLabel).width + 76, tH = 66;
+    var tX = W - 140 - tW, tY = 868;
+    g.fillStyle = "rgba(5,5,5,0.5)"; roundRect(g, tX, tY, tW, tH, tH / 2); g.fill();
+    g.strokeStyle = tCol; g.lineWidth = 2; roundRect(g, tX, tY, tW, tH, tH / 2); g.stroke();
+    g.save(); g.shadowColor = tCol; g.shadowBlur = 18;
+    g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = tCol;
+    g.fillText(tLabel, tX + tW / 2, tY + tH / 2 + 2); g.restore(); ls(0);
+    g.textBaseline = "alphabetic"; g.textAlign = "center";
+    g.font = "20px " + CARD_SERIF; ls(8); g.fillStyle = DIM;
+    g.fillText("PSL TIER", tX + tW / 2, 1000); ls(0);
 
-    // Под плашкой — либо подпись «PSL TIER», либо (на бесплатном тизере) замочек.
-    // Слот один и тот же, поэтому высота карточки в обоих режимах одинаковая.
+    // На бесплатном тизере — строка про полный разбор между фото и диаграммой.
     if (window._fmTeaser) {
-      g.font = "22px Georgia, serif"; ls(2); g.fillStyle = GOLD_HI;
-      g.fillText("🔒 " + (lang() === "ru" ? "ПОЛНЫЙ РАЗБОР НА FACERATE.RU" : "FULL REPORT ON FACERATE.RU"), W / 2, tY + tH + 34); ls(0);
-    } else {
-      g.font = "18px Georgia, serif"; ls(6); g.fillStyle = DIM;
-      g.fillText("PSL TIER", W / 2, tY + tH + 30); ls(0);
+      g.font = "21px " + CARD_SERIF; ls(3); g.fillStyle = GOLD_HI;
+      g.fillText("🔒 " + (lang() === "ru" ? "ПОЛНЫЙ РАЗБОР НА FACERATE.RU" : "FULL REPORT ON FACERATE.RU"), W / 2, 1060); ls(0);
     }
 
-    // Разделитель: тонкая линия с ярким горячим центром, как в макете.
-    var dy = tY + tH + 66;
-    var lg = g.createLinearGradient(W / 2 - 300, 0, W / 2 + 300, 0);
-    lg.addColorStop(0, "rgba(196,164,107,0)"); lg.addColorStop(0.5, "rgba(232,212,160,0.95)");
-    lg.addColorStop(1, "rgba(196,164,107,0)");
-    g.strokeStyle = lg; g.lineWidth = 1.4;
-    g.beginPath(); g.moveTo(W / 2 - 300, dy); g.lineTo(W / 2 + 300, dy); g.stroke();
-    // Свечение даём тенью на самой линии: заливка прямоугольником поверх чёрного
-    // читалась как серое пятно, а не как блик.
-    g.save(); g.shadowColor = "rgba(255,240,200,0.9)"; g.shadowBlur = 16;
-    g.beginPath(); g.moveTo(W / 2 - 70, dy); g.lineTo(W / 2 + 70, dy);
-    g.strokeStyle = "rgba(255,244,214,0.95)"; g.lineWidth = 1.4; g.stroke(); g.restore();
-
-    // ── Категории: 2 колонки, бары ──
-    // На тизере (бесплатный урезанный отчёт) parsed.categories содержит только 3 из 8 —
-    // остальные 5 рисуем как размытые/закрытые плашки с замочком вместо того, чтобы просто
-    // их не показывать (наглядно видно, что скрыто, а не просто "меньше строк").
+    // ── Восьмиугольник категорий ──
+    // На тизере parsed.categories — только 3 из 8; остальные лучи закрыты замком.
     var FULL_CAT_LABELS = SCORED_CATS.map(function(c){ return t(c.label); });
     var realCats = parsed.categories || [];
-    var cats = window._fmTeaser
-      ? FULL_CAT_LABELS.map(function(label){
-          var found = realCats.filter(function(c){ return c.label === label; })[0];
-          return found ? { label: label, score: found.score, locked: false } : { label: label, score: null, locked: true };
-        })
-      : realCats.slice(0, 8).map(function(c){ return { label: c.label, score: c.score, locked: false }; });
-    // Иконки идут в том же порядке, что и FULL_CAT_LABELS.
-    // Иконки в порядке SCORED_CATS, у каждой категории своя.
-    var CAT_ICONS = ["harmony", "jaw", "dimorphism", "sym", "eyes", "lips", "nose", "ears"];
-    var cy0 = dy + 62, rowH = 92, colW = 400;
-    // Колонки заполняются СТОЛБЦАМИ, а не строками: сначала все четыре строки
-    // левой колонки, потом правой — так же, как в макете.
-    var perCol = Math.ceil(cats.length / 2);
-    var cols = [{ x: 96 }, { x: W - 96 - colW }];
-    g.textBaseline = "alphabetic";
-
-    // Вертикальная нить между колонками с горячей точкой посередине.
-    var midX = W / 2, colTop = cy0 - 26, colBot = cy0 + perCol * rowH - 34;
-    var vg2 = g.createLinearGradient(0, colTop, 0, colBot);
-    vg2.addColorStop(0, "rgba(196,164,107,0)"); vg2.addColorStop(0.5, "rgba(196,164,107,0.5)");
-    vg2.addColorStop(1, "rgba(196,164,107,0)");
-    g.strokeStyle = vg2; g.lineWidth = 1;
-    g.beginPath(); g.moveTo(midX, colTop); g.lineTo(midX, colBot); g.stroke();
-
-    cats.forEach(function(cat, i) {
-      var col = cols[Math.floor(i / perCol)], row = i % perCol;
-      var x = col.x, y = cy0 + row * rowH;
-      var icon = CAT_ICONS[FULL_CAT_LABELS.indexOf(cat.label)] || "sym";
-      var iconR = 30, textX = x + 74, valW = 92;
-      var bw = colW - 74 - valW, bx = textX, byy = y + 20;
-
-      if (cat.locked) {
-        drawCatIcon(g, icon, x + iconR, y - 2, iconR * 1.9, "#4a4438");
-        g.save();
-        try { g.filter = "blur(3px)"; } catch (e) {}
-        g.textAlign = "left"; g.font = "25px Georgia, serif"; g.fillStyle = "#555";
-        g.fillText(cat.label, textX, y - 2);
-        g.fillStyle = "#242018"; roundRect(g, bx, byy, bw, 4, 2); g.fill();
-        g.textAlign = "right"; g.font = "30px Georgia, serif"; g.fillStyle = "#555";
-        g.fillText("6.5", x + colW, y + 8);
-        g.restore();
-        g.textAlign = "center"; g.font = "24px Georgia, serif"; g.fillStyle = GOLD_HI;
-        g.fillText("🔒", bx + bw / 2, y + 6);
-        return;
-      }
-
-      drawCatIcon(g, icon, x + iconR, y - 2, iconR * 1.9, GOLD);
-      // Название над полосой, балл — справа, крупно.
-      g.textAlign = "left"; g.font = "25px Georgia, serif"; g.fillStyle = TXT; ls(0.5);
-      g.fillText(cat.label.length > 19 ? cat.label.slice(0, 18) + "…" : cat.label, textX, y - 2); ls(0);
-      // Тонкая полоса: тёмная дорожка + золотая заливка по баллу.
-      g.fillStyle = "rgba(255,255,255,0.07)"; roundRect(g, bx, byy, bw, 3, 1.5); g.fill();
-      var fillW = Math.max(6, bw * Math.min(cat.score, 10) / 10);
-      var bg2 = g.createLinearGradient(bx, 0, bx + fillW, 0);
-      bg2.addColorStop(0, "rgba(138,108,56,0.85)"); bg2.addColorStop(1, GOLD_HI);
-      g.fillStyle = bg2; roundRect(g, bx, byy, fillW, 3, 1.5); g.fill();
-      g.save(); g.shadowColor = GOLD_HI; g.shadowBlur = 9;
-      g.beginPath(); g.arc(bx + fillW, byy + 1.5, 3.2, 0, Math.PI * 2);
-      g.fillStyle = GOLD_HI; g.fill(); g.restore();
-      g.textAlign = "right"; g.font = "29px Georgia, serif"; g.fillStyle = "#ecdaa8";
-      g.fillText(cat.score.toFixed(1), x + colW, y + 12);
+    var cats = FULL_CAT_LABELS.map(function(label){
+      var found = realCats.filter(function(c){ return c.label === label; })[0];
+      return found ? { label: label, score: found.score } : { label: label, score: null };
+    });
+    // Отчёт из кэша со старым набором категорий (кожа, средняя треть…): рисуем его подписи как есть.
+    if (!window._fmTeaser && realCats.length && cats.some(function(k){ return k.score === null; }))
+      cats = realCats.slice(0, 8).map(function(k){ return { label: k.label, score: k.score }; });
+    var cx = W / 2, cy = 1380, R = 200, n = 8;
+    function pt(i, r) { var a = -Math.PI / 2 + i * 2 * Math.PI / n; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; }
+    // Шкала луча 3–9, а не 0–10: почти все оценки лежат в 5–7, и на полной шкале у всех
+    // выходил один и тот же ровный восьмиугольник. Цифры в подписях — настоящие.
+    function rk(v) { return Math.max(0.08, Math.min(1, (v - 3) / 6)); }
+    function poly(rs) { g.beginPath(); rs.forEach(function (r, i) { var p = pt(i, r); i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.closePath(); }
+    [0.2, 0.4, 0.6, 0.8, 1].forEach(function (q) {
+      poly(cats.map(function () { return R * q; }));
+      g.strokeStyle = "rgba(196,164,107," + (q === 1 ? 0.5 : 0.14) + ")"; g.lineWidth = q === 1 ? 2 : 1.2; g.stroke();
+    });
+    g.strokeStyle = "rgba(196,164,107,0.14)"; g.lineWidth = 1.2;
+    cats.forEach(function (_, i) { var p = pt(i, R); g.beginPath(); g.moveTo(cx, cy); g.lineTo(p[0], p[1]); g.stroke(); });
+    var known = cats.every(function (k) { return k.score !== null; });
+    var radii = cats.map(function (k) { return R * (k.score !== null ? rk(k.score) : 0.5); });
+    if (known) {
+      var fill = g.createRadialGradient(cx, cy, 0, cx, cy, R);
+      fill.addColorStop(0, "rgba(232,207,150,0.04)"); fill.addColorStop(1, "rgba(232,207,150,0.26)");
+      poly(radii); g.fillStyle = fill; g.fill();
+      g.save(); g.shadowColor = "rgba(232,207,150,0.8)"; g.shadowBlur = 14;
+      poly(radii); g.strokeStyle = GOLD_HI; g.lineWidth = 3; g.stroke(); g.restore();
+    } else {
+      // Тизер: форма не известна — пунктир через середину закрытых лучей.
+      g.save(); g.setLineDash([8, 10]); poly(radii);
+      g.strokeStyle = "rgba(232,207,150,0.35)"; g.lineWidth = 2; g.stroke(); g.restore();
+    }
+    cats.forEach(function (k, i) {
+      if (k.score === null) return;
+      var p = pt(i, radii[i]); g.beginPath(); g.arc(p[0], p[1], 6.5, 0, Math.PI * 2);
+      g.fillStyle = "#f4e4b8"; g.fill();
+    });
+    cats.forEach(function (k, i) {
+      var p = pt(i, R + 42), dx = p[0] - cx, dy = p[1] - cy;
+      var mid = Math.abs(dx) < 5;
+      g.textAlign = mid ? "center" : (dx > 0 ? "left" : "right");
+      var y = Math.abs(dy) < 5 ? p[1] - 6 : (dy < 0 ? p[1] - 24 : p[1] + 4);
+      if (mid && dy < 0) y = p[1] - 40;
+      if (mid && dy > 0) y = p[1] + 12;
+      g.font = "31px " + CARD_SERIF; g.fillStyle = k.score === null ? "#5c564a" : TXT;
+      g.fillText(k.label, p[0], y);
+      if (k.score === null) { g.font = "30px serif"; g.fillStyle = GOLD_HI; g.fillText("🔒", p[0], y + 40); }
+      else { g.font = "400 34px " + CARD_NUM; g.fillStyle = "#f0dca6"; g.fillText(k.score.toFixed(1), p[0], y + 42); }
     });
 
-    // ── Summary + POTENTIAL ──
-    var sy = cy0 + perCol * rowH + 4;
-    var sh = 128;
-    g.fillStyle = "rgba(255,255,255,0.025)";
-    roundRect(g, 90, sy, W - 180, sh, 18); g.fill();
-    g.strokeStyle = "rgba(196,164,107,0.22)"; g.lineWidth = 1;
-    roundRect(g, 90, sy, W - 180, sh, 18); g.stroke();
-    // стрелка-глиф
-    g.strokeStyle = GOLD; g.lineWidth = 2.5; g.lineCap = "round";
-    g.beginPath(); g.moveTo(122, sy + 78); g.lineTo(142, sy + 58); g.lineTo(154, sy + 68); g.lineTo(176, sy + 44); g.stroke();
-    g.beginPath(); g.moveTo(176, sy + 44); g.lineTo(176, sy + 56); g.moveTo(176, sy + 44); g.lineTo(164, sy + 44); g.stroke();
-    // текст
-    g.textAlign = "left";
-    g.font = "22px Georgia, serif"; ls(6); g.fillStyle = GOLD;
-    g.fillText("ANALYSIS SUMMARY", 205, sy + 46); ls(0);
+    // ── Сводка + потенциал ──
+    var sx = 96, sy = 1690, sw = W - 192, sh = 128;
+    g.fillStyle = "rgba(10,9,7,0.9)"; roundRect(g, sx, sy, sw, sh, 20); g.fill();
+    g.strokeStyle = "rgba(196,164,107,0.28)"; g.lineWidth = 1; roundRect(g, sx, sy, sw, sh, 20); g.stroke();
     var ov = parsed.overall || 0;
     var pot = computePotential(parsed);
     var potTier = pot ? pslTier(pot.max).label : pslTier(ov).label;
     var potNum  = pot ? pot.max.toFixed(1) : (ov ? ov.toFixed(1) : "--");
+    var bwd = 210, bx2 = sx + sw - 24 - bwd, by2 = sy + 16, bh2 = sh - 32;
+    g.textAlign = "left"; g.font = "20px " + CARD_SERIF; ls(6); g.fillStyle = GOLD;
+    g.fillText("ANALYSIS SUMMARY", sx + 32, sy + 44); ls(0);
+    var textMaxW = bx2 - (sx + 32) - 24;
     var summary = (parsed.overallDesc || "").replace(/\s+/g, " ").trim();
-    // бейдж POTENTIAL — геометрия нужна заранее, чтобы текст summary не залезал под него
-    var bwd = 185, bx2 = W - 90 - 24 - bwd, by2 = sy + 24;
-    var textMaxW = bx2 - 205 - 24;
-    g.font = "23px Georgia, serif"; g.fillStyle = "#b6ac9a";
+    g.font = "26px " + CARD_SERIF; g.fillStyle = "#bcb29f";
     var words = summary.split(" "), sLines = [], line = "";
     for (var wi = 0; wi < words.length; wi++) {
       var test = line ? line + " " + words[wi] : words[wi];
@@ -3436,27 +3396,23 @@ function _buildShareCard() {
       while (g.measureText(last + "…").width > textMaxW && last.length > 1) last = last.slice(0, -1);
       sLines = [sLines[0], last + "…"];
     }
-    sLines.forEach(function(l, i) { g.fillText(l, 205, sy + 80 + i * 28); });
-    g.strokeStyle = "rgba(196,164,107,0.55)"; g.lineWidth = 1.5;
-    roundRect(g, bx2, by2, bwd, sh - 32, 12); g.stroke();
+    sLines.forEach(function(l, i) { g.fillText(l, sx + 32, sy + 80 + i * 31); });
+    g.strokeStyle = "rgba(196,164,107,0.6)"; g.lineWidth = 1.5;
+    roundRect(g, bx2, by2, bwd, bh2, 14); g.stroke();
     g.textAlign = "center";
-    g.font = "17px Georgia, serif"; ls(5); g.fillStyle = DIM;
+    g.font = "16px " + CARD_SERIF; ls(5); g.fillStyle = DIM;
     g.fillText(pot ? "POTENTIAL" : "APPEARANCE", bx2 + bwd / 2, by2 + 26); ls(0);
-    g.font = "30px Georgia, serif"; ls(3); g.fillStyle = GOLD_HI;
-    g.fillText(potTier, bx2 + bwd / 2, by2 + 60); ls(0);
-    g.font = "21px Georgia, serif"; ls(2); g.fillStyle = GOLD;
-    g.fillText(potNum + "/8", bx2 + bwd / 2, by2 + 86); ls(0);
+    g.font = "400 26px " + CARD_NUM; ls(2); g.fillStyle = GOLD_HI;
+    g.fillText(potTier.toUpperCase(), bx2 + bwd / 2, by2 + 60); ls(0);
+    g.font = "400 20px " + CARD_NUM; g.fillStyle = GOLD;
+    g.fillText(potNum + "/8", bx2 + bwd / 2, by2 + 86);
 
     // ── Футер ──
-    g.font = "46px Georgia, serif"; ls(2);
-    var fg = g.createLinearGradient(0, H - 100, 0, H - 55);
-    fg.addColorStop(0, "#eddcab"); fg.addColorStop(1, "#b3924f");
-    g.fillStyle = fg;
-    g.fillText("facerate.ru", W / 2, H - 66); ls(0);
-    g.font = "20px Georgia, serif"; ls(6); g.fillStyle = "#6f6858";
-    g.fillText("Ascend & Forget", W / 2, H - 34); ls(0);
+    g.font = "44px " + CARD_SERIF; ls(2); g.fillStyle = goldText(1835, 1875);
+    g.fillText("facerate.ru", W / 2, 1872); ls(0);
 
-    c.toBlob(function(b) { resolve(b); }, "image/png");
+    // JPEG, а не PNG: фото стало вдвое больше, и PNG вылезал за лимит /sendcard (~2 МБ).
+    c.toBlob(function(b) { resolve(b); }, "image/jpeg", 0.92);
   });
 }
 

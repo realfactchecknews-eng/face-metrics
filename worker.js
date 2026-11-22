@@ -1279,7 +1279,9 @@ async function sendCard(request, env) {
   const fd = new FormData();
   fd.append('chat_id', String(sess.id));
   fd.append('caption', L === 'ru' ? 'Твоя карточка FaceRate 🖤 facerate.ru' : 'Your FaceRate card 🖤 facerate.ru');
-  fd.append('photo', new Blob([bin], { type: 'image/png' }), 'facerate.png');
+  // С 22.11 сайт шлёт JPEG (карточка 1080×1920), старые вкладки — ещё PNG.
+  const jpg = bin[0] === 0xFF && bin[1] === 0xD8;
+  fd.append('photo', new Blob([bin], { type: jpg ? 'image/jpeg' : 'image/png' }), jpg ? 'facerate.jpg' : 'facerate.png');
   const r = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd })
     .then(x => x.json()).catch(e => ({ ok: false, description: e.message }));
   if (!r.ok) return json({ error: 'send', text: r.description || 'send failed' });

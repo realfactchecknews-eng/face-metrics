@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000;display:flex">
+<img id="a" width="1080" height="1920"><img id="b" width="1080" height="1920">
+<iframe id="f" src="index.html?lang=ru" style="position:absolute;left:-9999px;width:400px;height:800px"></iframe>
+<script>
+document.getElementById('f').onload = async function () {
+  const w = this.contentWindow; await new Promise(r => setTimeout(r, 300));
+  const r = await w.eval(`(async () => {
+    const im = new Image(); im.src = "_story_face.jpg"; await im.decode();
+    const cv = document.createElement("canvas"); cv.width = im.width; cv.height = im.height; cv.getContext("2d").drawImage(im,0,0);
+    cleanImageCanvas = cv; window._fmFaceBox = { x: 470, y: 180, w: 330, h: 450 };
+    const L = SCORED_CATS.map(c => t(c.label)), V=[6.8,6.2,7.1,7.4,6.5,5.9,6.0,5.5];
+    window._fmParsed = { overall: 4.6, overallDesc: "Сильная средняя треть и чёткий контур челюсти; слабее — мягкие ткани под глазами, общий баланс выше среднего.", categories: L.map((l,i)=>({label:l, score:V[i]})), pillars: {HARMONY:6.8,DIMORPHISM:7.1,ANGULARITY:6.2,SKIN:5,HAIR:5.5,MOUTH:5.9,EYES:6.5,SYMMETRY:7.4,NOSE:6,EARS:5.5} };
+    window._fmTeaser = false; const b1 = await buildShareCard();
+    window._fmTeaser = true; window._fmParsed.categories = window._fmParsed.categories.slice(0,3); const b2 = await buildShareCard();
+    return [URL.createObjectURL(b1), URL.createObjectURL(b2)];
+  })()`);
+  document.getElementById('a').src = r[0]; document.getElementById('b').src = r[1];
+};
+</script>
