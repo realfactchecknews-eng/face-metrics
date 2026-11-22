@@ -1031,6 +1031,7 @@ async function initFaceLandmarker() {
     "./vendor/mediapipe/wasm"
   );
   MESH3D_EDGES = vision.FaceLandmarker.FACE_LANDMARKS_TESSELATION.map(function (e) { return [e.start, e.end]; });
+  window._fmFL = vision.FaceLandmarker;   // контуры и овал лица для досье
   faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
     baseOptions: {
       modelAssetPath: "./vendor/mediapipe/face_landmarker.task",
@@ -4026,11 +4027,11 @@ function onLoginSuccess(st) {
   if (pw && !pw.classList.contains("hidden")) {
     // Страница жива и анализ ждёт за гейтом — сохранённая копия фото больше не нужна.
     if (_afterGate === startAI && _pendingAnalysis) clearResumePhotos();
-    fmStep("auth_ok");
+    fmStep("auth_ok"); if (dossierSeen()) fmStep("auth_ok_d");
     pwRecheck();
     return;
   }
-  if (resumeSavedAnalysis()) { fmStep("auth_ok"); return; }
+  if (resumeSavedAnalysis()) { fmStep("auth_ok"); if (dossierSeen()) fmStep("auth_ok_d"); return; }
   var lock = document.getElementById("pgLocked");
   if (lock && !lock.hidden && typeof pgLoad === "function") pgLoad();
 }
@@ -4220,8 +4221,12 @@ function gateThenAI(metrics, shapeInfo) {
   _pendingAnalysis = { metrics: metrics, shapeInfo: shapeInfo };
   _afterGate = startAI;
   fetchStatus(false).then(function(st) {
-    if (st.error === "auth") { fmStep("gate_auth"); showPaywall("auth"); return; }
-    if (st.error) { fmStep("gate_auth"); showPaywall("auth"); return; }
+    if (st.error) {
+      fmStep("gate_auth");
+      // Половине посетителей сначала досье (см. «ДОССЬЕ ДО ВХОДА»); не открылось — гейт как раньше.
+      if (dossierOn() && fmDossier.show()) { fmStep("gate_auth_d"); return; }
+      showPaywall("auth"); return;
+    }
     renderAccount(st);
     if ((st.unlimUntil && st.unlimUntil > Date.now()) || st.freeLeft > 0 || st.credits > 0) { hidePaywall(); runAfterGate(); }
     else if (!st.subscribed) { fmStep("gate_sub"); showPaywall("sub"); }
@@ -4229,7 +4234,7 @@ function gateThenAI(metrics, shapeInfo) {
   }).catch(function(){ runAfterGate(); }); // сеть легла — пусть решает воркер
 }
 
-function runAfterGate() { var f = _afterGate; _afterGate = null; (f || startAI)(); }
+function runAfterGate() { fmDossier.close(); var f = _afterGate; _afterGate = null; (f || startAI)(); }
 
 function startAI() {
   if (!_pendingAnalysis) return;
@@ -4273,7 +4278,8 @@ function renderGateGeo() {
   // Есть сетка — показываем её вместо строк пропорций. Перезапускаем только на новом скане:
   // гейт перерисовывается при каждой смене шага (вход, подписка, оплата).
   var meshHost = document.getElementById("pwMesh");
-  var mesh = !!(show && meshHost && MESH3D_EDGES && window._fmMetrics && window.cleanImageCanvas);
+  // Поверх досье своя сетка не нужна: слепок уже на экране, второй WebGL на телефоне — лишний.
+  var mesh = !!(show && meshHost && MESH3D_EDGES && window._fmMetrics && window.cleanImageCanvas && !fmDossier.isOpen());
   if (meshHost && (!mesh || meshHost._lm !== window._fmLandmarks)) {
     if (_meshGate) { _meshGate.stop(); _meshGate = null; }
     meshHost._lm = null; meshHost.innerHTML = "";
@@ -4496,11 +4502,377 @@ function pwRecheck(silent) {
   var x = document.getElementById("pwClose");
   if (x) x.addEventListener("click", function(){
     if (_pwMode === "teaser") { hidePaywall(); _afterGate = null; _pwMode = null; return; }   // остаёмся на своём результате
+    if (fmDossier.isOpen()) { hidePaywall(); return; }   // закрыли вход поверх досье — остаёмся в досье
     hidePaywall();
     _pendingAnalysis = null;
     clearResumePhotos();
     backToUploadTop();
   });
+})();
+
+/* ═══════════════════  ДОССЬЕ ДО ВХОДА (23.11.2026)  ═══════════════════
+   Перенос прототипа facerate-premium: лицо из точек фото, которое собирается в объёмный слепок,
+   восемь замеров, зеркальные половины, трети. Всё считается на устройстве и токенов не стоит,
+   поэтому отдаём до входа: 44% уходили с гейта, не увидев ни одной цифры. Балл и тир — только
+   после входа, от модели: из точек балл не считается (замер 01.11 и 23.11 на 52 лицах).
+   A/B: половина посетителей (DOSSIER_SHARE) видит досье, остальные — прежний гейт. Шаги воронки
+   gate_auth_d / dos_cta / auth_ok_d; контроль = общий шаг минус шаг с «_d».
+   Только сайт и только русский: в мини-аппе гейта входа нет, тексты досье пока не переведены. */
+var DOSSIER_SHARE = 0.5;
+function dossierOn() {
+  if (TG_MINI || lang() !== "ru") return false;
+  try {
+    var v = localStorage.getItem("fm-dossier");
+    if (v !== "1" && v !== "0") { v = Math.random() < DOSSIER_SHARE ? "1" : "0"; localStorage.setItem("fm-dossier", v); }
+    return v === "1";
+  } catch (e) { return false; }
+}
+function dossierSeen() { try { return sessionStorage.getItem("fm-dos-seen") === "1"; } catch (e) { return false; } }
+
+var fmDossier = (function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var clamp = function (x, a, b) { a = a === undefined ? 0 : a; b = b === undefined ? 1 : b; return Math.max(a, Math.min(b, x)); };
+  var ease = function (x) { x = clamp(x); return x * x * (3 - 2 * x); };
+  var mk = function (w, h) { var c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
+  // Поворот головы, после которого симметрия и ширины врут: у 90% размеченных лиц он меньше 0.06.
+  var POSE_MAX = 0.05;
+  // Слабое устройство: меньше точек и ниже чёткость. deviceMemory есть только в Chrome.
+  var LOW = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3;
+  var DPR_MAX = LOW ? 1.5 : 2;
+
+  // ── замеры: тот же код, что в прототипе; полосы — середина (25–75%) по 52 размеченным лицам ──
+  function sub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
+  function dot(a, b) { return a.x * b.x + a.y * b.y; }
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function measure(p) {
+    var O = { x: (p[10].x + p[152].x) / 2, y: (p[10].y + p[152].y) / 2 };
+    var L = dist(p[10], p[152]);
+    var d = { x: (p[152].x - p[10].x) / L, y: (p[152].y - p[10].y) / L }, u = { x: d.y, y: -d.x };
+    var along = function (a) { return dot(sub(a, O), d); }, across = function (a) { return dot(sub(a, O), u); };
+    var cheek = dist(p[234], p[454]), jaw = dist(p[172], p[397]), inter = dist(p[133], p[362]);
+    var tilt = function (inn, out) { return Math.atan2(along(p[inn]) - along(p[out]), Math.abs(across(p[out]) - across(p[inn]))) * 180 / Math.PI; };
+    var lid = (along(p[159]) + along(p[386])) / 2;
+    var mid = along(p[2]) - along(p[9]), low = along(p[152]) - along(p[2]);
+    var eyeW = (dist(p[33], p[133]) + dist(p[263], p[362])) / 2;
+    var lipUp = Math.abs(along(p[13]) - along(p[0])) || 1, lipLow = Math.abs(along(p[17]) - along(p[14]));
+    var pairs = [[33, 263], [133, 362], [61, 291], [234, 454], [172, 397], [70, 300], [105, 334], [129, 358], [159, 386], [145, 374]];
+    var dev = pairs.reduce(function (s, q) { return s + (Math.abs(across(p[q[0]]) + across(p[q[1]])) + Math.abs(along(p[q[0]]) - along(p[q[1]]))) / cheek; }, 0) / pairs.length;
+    var f2 = function (v) { return v.toFixed(2); };
+    var yawOff = Math.abs(across(p[1])) / cheek;
+    var m = [
+      { n: "Наклон глаз", raw: (tilt(133, 33) + tilt(362, 263)) / 2, f: function (v) { return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "°"; }, dp: 1, lo: 3.7, hi: 5.8, min: -4, max: 12 },
+      { n: "Ширина лица к высоте (fWHR)", raw: cheek / (along(p[13]) - lid), f: f2, lo: 1.79, hi: 1.97, min: 1.5, max: 2.3 },
+      { n: "Средняя треть к нижней", raw: mid / low, f: f2, lo: 0.91, hi: 1.03, min: 0.75, max: 1.2 },
+      { n: "Челюсть к скулам", raw: jaw / cheek, f: f2, lo: 0.79, hi: 0.82, min: 0.7, max: 0.92 },
+      { n: "Глаз к расстоянию между глазами", raw: eyeW / inter, f: f2, lo: 0.77, hi: 0.87, min: 0.65, max: 1.0 },
+      { n: "Нос к расстоянию между глазами", raw: dist(p[129], p[358]) / inter, f: f2, lo: 1.19, hi: 1.3, min: 1.0, max: 1.5 },
+      { n: "Губы: верхняя к нижней", raw: lipLow / lipUp, f: function (v) { return "1 : " + v.toFixed(2); }, lo: 1.47, hi: 1.81, min: 1.0, max: 2.5 },
+      // Симметрия по фото меряет прежде всего поворот головы, поэтому только анфас.
+      { n: "Симметрия", raw: clamp(100 - dev * 150, 60, 99.5), f: function (v) { return v.toFixed(1) + "%"; }, dp: 1, lo: 93.5, hi: 100, min: 80, max: 100, skip: yawOff >= POSE_MAX },
+    ];
+    m.forEach(function (x) {
+      var span = x.hi - x.lo, v = +x.raw.toFixed(x.dp === undefined ? 2 : x.dp);   // сравниваем с тем, что видно
+      x.txt = x.skip ? "—" : x.f(x.raw);
+      x.off = x.skip ? 0 : v < x.lo ? (x.lo - v) / span : v > x.hi ? (v - x.hi) / span : 0;
+      x.center = Math.abs(x.raw - (x.lo + x.hi) / 2) / span;
+      x.st = x.skip ? "голова повёрнута — не считаем" : x.off === 0 ? "как у большинства" : v < x.lo ? "ниже обычного" : "выше обычного";
+    });
+    return { m: m, O: O, d: d, L: L, yawOff: yawOff, mid: mid, low: low };
+  }
+  function tone(cv) {
+    var c = cv.getContext("2d"), im = c.getImageData(0, 0, cv.width, cv.height), a = im.data;
+    for (var i = 0; i < a.length; i += 4) { var g = Math.min(255, (a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11) * 1.06); a[i] = g; a[i + 1] = g * 0.95; a[i + 2] = g * 0.84; }
+    c.putImageData(im, 0, 0); return cv;
+  }
+
+  // ── WebGL без библиотек ──
+  function program(gl, vs, fs, attribs) {
+    var p = gl.createProgram();
+    [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].forEach(function (x) {
+      var sh = gl.createShader(x[0]); gl.shaderSource(sh, x[1]); gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+      gl.attachShader(p, sh);
+    });
+    attribs.forEach(function (a, i) { gl.bindAttribLocation(p, i, a); });
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    var u = {};
+    for (var i = 0, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i < n; i++) { var nm = gl.getActiveUniform(p, i).name; u[nm] = gl.getUniformLocation(p, nm); }
+    return { p: p, u: u };
+  }
+  var mat = {
+    mul: function (a, b) { var o = new Float32Array(16); for (var c = 0; c < 4; c++) for (var r = 0; r < 4; r++) { var s = 0; for (var k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; },
+    persp: function (fovy, asp, n, f) { var t = 1 / Math.tan(fovy / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); },
+    trans: function (x, y, z) { return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]); },
+    rotY: function (a) { var c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
+    rotX: function (a) { var c = Math.cos(a), s = Math.sin(a); return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]); },
+  };
+  var PTS_VS = "attribute vec3 aPos; attribute vec3 aAtt;\n" +
+    "uniform mat4 uMVP; uniform float uForm,uBurst,uTime,uSize,uWave,uDim,uD; varying float vB;\n" +
+    "void main(){ float s=aAtt.z; vec3 p=vec3(aPos.xy,aPos.z*uForm);\n" +
+    "  vec3 dir=normalize(vec3(sin(s*91.7),cos(s*37.3),sin(s*53.1)+.35));\n" +
+    "  p+=dir*uBurst*(.2+s*1.2);\n" +
+    "  p.xy+=.0035*vec2(sin(uTime*1.3+s*40.),cos(uTime*1.1+s*70.));\n" +
+    "  gl_Position=uMVP*vec4(p,1.);\n" +
+    "  float wave=exp(-pow((aPos.y-uWave)*7.,2.));\n" +
+    "  vB=(aAtt.x*uDim+wave*.55*uForm)*aAtt.y;\n" +
+    "  gl_PointSize=uSize*(.75+aAtt.x*.45+wave*.5)*(uD/gl_Position.w); }";
+  var PTS_FS = "precision mediump float; varying float vB;\n" +
+    "void main(){ float d=length(gl_PointCoord-.5); float a=smoothstep(.5,.08,d);\n" +
+    "  vec3 c=mix(vec3(.74,.55,.25),vec3(1.,.96,.86),clamp(vB*1.1,0.,1.));\n" +
+    "  gl_FragColor=vec4(c*vB*a*1.15,1.); }";
+  var LN_VS = "attribute vec3 aPos; uniform mat4 uMVP; uniform float uForm; void main(){ gl_Position=uMVP*vec4(aPos.xy,aPos.z*uForm,1.); gl_PointSize=3.; }";
+  var LN_FS = "precision mediump float; uniform vec4 uColor; void main(){ gl_FragColor=vec4(uColor.rgb*uColor.a,1.); }";
+
+  var G = { ready: false }, S = null, raf = 0, T0 = 0, stageOn = true, open = false;
+  var cur = { dim: 1, wire: 0, meas: 0 }, MODES = { portrait: { dim: 1, wire: 0, meas: 0 }, mesh: { dim: 0.16, wire: 1, meas: 0 }, measure: { dim: 0.5, wire: 0.1, meas: 1 } };
+  var mode = "portrait", user = { yaw: 0, pitch: 0, px: 0, py: 0, drag: null };
+
+  function initGL() {
+    if (G.ready) return;
+    var gl = $("dsGl").getContext("webgl", { antialias: true, alpha: false, powerPreference: "high-performance" });
+    if (!gl) throw new Error("webgl");
+    G.gl = gl; G.pts = program(gl, PTS_VS, PTS_FS, ["aPos", "aAtt"]); G.ln = program(gl, LN_VS, LN_FS, ["aPos"]);
+    ["bPts", "bWire", "bCont", "bMeas", "bLm"].forEach(function (k) { G[k] = gl.createBuffer(); });
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.disable(gl.DEPTH_TEST); gl.clearColor(0.016, 0.012, 0.008, 1);
+    G.ready = true;
+  }
+
+  // Сетка MediaPipe: треугольники идут тройками рёбер; глаза и рот закрываем веером, иначе провалы.
+  function fan(c, ring) { return ring.map(function (v, i) { return [c, v, ring[(i + 1) % ring.length]]; }); }
+  var HOLES = [].concat(
+    fan(468, [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]),
+    fan(473, [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466]),
+    fan(13, [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191]));
+
+  function buildScene(work, p) {
+    var FL = window._fmFL, W = work.width, H = work.height, i, j;
+    var TRIS = [];
+    for (i = 0; i + 2 < MESH3D_EDGES.length; i += 3) TRIS.push([MESH3D_EDGES[i][0], MESH3D_EDGES[i + 1][0], MESH3D_EDGES[i + 2][0]]);
+    var seen = {}, EDGES = [];
+    MESH3D_EDGES.forEach(function (e) { var k = Math.min(e[0], e[1]) * 1000 + Math.max(e[0], e[1]); if (!seen[k]) { seen[k] = 1; EDGES.push(e); } });
+    var CONTOURS = FL.FACE_LANDMARKS_CONTOURS.map(function (e) { return [e.start, e.end]; });
+    var M = measure(p);
+    var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    p.forEach(function (q) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); });
+    var fw = x1 - x0, fh = y1 - y0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, s = fh / 2;
+    var P = p.map(function (q) { return [(q.x - cx) / s, -(q.y - cy) / s, -(q.z || 0) / s]; });
+    // Вокруг лица — волосы и шея, чтобы слепок был портретом, а не маской.
+    var rx0 = Math.max(0, x0 - fw * 0.42), rx1 = Math.min(W, x1 + fw * 0.42), ry0 = Math.max(0, y0 - fh * 0.5), ry1 = Math.min(H, y1 + fh * 0.3);
+    var GW = LOW ? 190 : 270, step = (rx1 - rx0) / GW, GH = Math.round((ry1 - ry0) / step);
+    var small = mk(GW, GH); small.getContext("2d").drawImage(work, rx0, ry0, rx1 - rx0, ry1 - ry0, 0, 0, GW, GH);
+    var px = small.getContext("2d").getImageData(0, 0, GW, GH).data;
+    // Карта глубины: растеризуем треугольники сетки в ту же решётку.
+    var depth = new Float32Array(GW * GH).fill(NaN);
+    var g = p.map(function (q, k) { return [(q.x - rx0) / step, (q.y - ry0) / step, P[k][2]]; });
+    TRIS.concat(HOLES).forEach(function (t) {
+      var A = g[t[0]], B = g[t[1]], C = g[t[2]]; if (!A || !B || !C) return;
+      var den = (B[1] - C[1]) * (A[0] - C[0]) + (C[0] - B[0]) * (A[1] - C[1]); if (Math.abs(den) < 1e-9) return;
+      var ix0 = Math.max(0, Math.floor(Math.min(A[0], B[0], C[0]))), ix1 = Math.min(GW - 1, Math.ceil(Math.max(A[0], B[0], C[0])));
+      var iy0 = Math.max(0, Math.floor(Math.min(A[1], B[1], C[1]))), iy1 = Math.min(GH - 1, Math.ceil(Math.max(A[1], B[1], C[1])));
+      for (var jj = iy0; jj <= iy1; jj++) for (var ii = ix0; ii <= ix1; ii++) {
+        var X = ii + 0.5, Y = jj + 0.5;
+        var w0 = ((B[1] - C[1]) * (X - C[0]) + (C[0] - B[0]) * (Y - C[1])) / den, w1 = ((C[1] - A[1]) * (X - C[0]) + (A[0] - C[0]) * (Y - C[1])) / den, w2 = 1 - w0 - w1;
+        if (w0 < -0.02 || w1 < -0.02 || w2 < -0.02) continue;
+        var z = w0 * A[2] + w1 * B[2] + w2 * C[2], k = jj * GW + ii;
+        if (!(depth[k] >= z)) depth[k] = z;
+      }
+    });
+    var oval = FL.FACE_LANDMARKS_FACE_OVAL.map(function (e) { return e.start; });
+    var zRim = oval.reduce(function (a, k) { return a + P[k][2]; }, 0) / oval.length;
+    var gcx = (cx - rx0) / step, gcy = (cy - ry0) / step, grx = fw / 2 / step, gry = fh / 2 / step;
+    var out = [];
+    for (j = 0; j < GH; j++) for (i = 0; i < GW; i++) {
+      var k = j * GW + i, o = k * 4;
+      var lum = Math.pow((px[o] * 0.3 + px[o + 1] * 0.59 + px[o + 2] * 0.11) / 255, 1.55), z = depth[k], al = 1;
+      if (isNaN(z)) {   // вне сетки: волосы, уши, шея — уходят назад и гаснут к краю
+        var r = Math.hypot((i - gcx) / grx, (j - gcy) / (j < gcy ? gry * 1.45 : gry));
+        z = zRim - Math.max(0, r - 0.9) * 0.75; al = Math.pow(clamp(1 - (r - 1) / 0.8), 1.4);
+      }
+      if (lum * al < 0.03) continue;
+      var jx = (Math.random() - 0.5) * 0.7, jy = (Math.random() - 0.5) * 0.7;
+      out.push(((i + 0.5 + jx) * step + rx0 - cx) / s, -((j + 0.5 + jy) * step + ry0 - cy) / s, z, lum, al, Math.random());
+    }
+    var line = function (pairs) { var a = []; pairs.forEach(function (q) { a.push.apply(a, P[q[0]]); a.push.apply(a, P[q[1]]); }); return new Float32Array(a); };
+    var lmf = []; P.forEach(function (q) { lmf.push(q[0], q[1], q[2]); });
+    return { p: p, P: P, M: M, work: work, pts: new Float32Array(out), n: out.length / 6, wire: line(EDGES), cont: line(CONTOURS), lm: new Float32Array(lmf),
+      cell: step / s, offY: -(((ry0 + ry1) / 2 - cy) / s), spanY: (ry1 - ry0) / s };
+  }
+
+  var MEAS = [[234, 454, 1, "fWHR"], [172, 397, 3, "ЧЕЛЮСТЬ"], [362, 263, 0, "ГЛАЗА"], [133, 33, -1, ""], [9, 2, -1, ""], [2, 152, 2, "ТРЕТИ"]];
+  function uploadScene() {
+    var gl = G.gl, put = function (b, d) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, d, gl.DYNAMIC_DRAW); };
+    put(G.bPts, S.pts); put(G.bWire, S.wire); put(G.bCont, S.cont); put(G.bLm, S.lm); put(G.bMeas, new Float32Array(MEAS.length * 6));
+    $("dsLabels").innerHTML = MEAS.map(function (x, i) { return x[3] ? '<div class="ds-lbl" data-i="' + i + '" style="opacity:0">' + x[3] + " " + S.M.m[x[2]].txt + "</div>" : ""; }).join("");
+    $("dsPts").textContent = S.n.toLocaleString("ru-RU");
+  }
+
+  function frame(now) {
+    var gl = G.gl, cv = $("dsGl"), dpr = Math.min(window.devicePixelRatio || 1, DPR_MAX);
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    gl.viewport(0, 0, cv.width, cv.height);
+    var t = still ? 99 : (now - T0) / 1000, e = function (a, b) { return ease((t - a) / (b - a)); };
+    // Сценарий: плоское фото из точек → разлёт → сборка в рельеф → поворот в три четверти.
+    var form = e(0.7, 2.6), burst = Math.pow(Math.sin(Math.PI * clamp((t - 0.35) / 2.1)), 2) * 0.42, intro = e(0, 0.8);
+    var auto = t < 3.4 ? e(1.1, 3.4) * 0.44 : 0.44 * Math.cos((t - 3.4) * 0.42);
+    var dt = Math.min(0.1, (now - (G.last || now)) / 1000); G.last = now;
+    var kf = 1 - Math.exp(-dt * 4.5);
+    for (var k in cur) cur[k] += (MODES[mode][k] - cur[k]) * kf;
+    user.px += ((user.drag ? 0 : user.hx || 0) - user.px) * kf; user.py += ((user.drag ? 0 : user.hy || 0) - user.py) * kf;
+    var yaw = auto * (user.drag ? 0 : 1) + user.yaw + user.px * 0.12, pitch = user.pitch + user.py * 0.08 - 0.04;
+    var fov = 0.5, D = (S.spanY * 1.04) / (2 * Math.tan(fov / 2));
+    var MVP = mat.mul(mat.persp(fov, w / h, 0.1, 50), mat.mul(mat.trans(0, S.offY, -D), mat.mul(mat.rotX(pitch), mat.rotY(yaw))));
+    var wavePh = ((t - 3.6) % 6.5) / 1.7, uWave = t > 3.6 && wavePh < 1 ? 1.9 - wavePh * 3.8 : 99;
+
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(G.pts.p);
+    gl.bindBuffer(gl.ARRAY_BUFFER, G.bPts);
+    gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    var u = G.pts.u;
+    gl.uniformMatrix4fv(u.uMVP, false, MVP); gl.uniform1f(u.uForm, form); gl.uniform1f(u.uBurst, burst); gl.uniform1f(u.uTime, t);
+    gl.uniform1f(u.uSize, (cv.height / 2) / (Math.tan(fov / 2) * D) * S.cell * 1.2); gl.uniform1f(u.uWave, uWave); gl.uniform1f(u.uDim, intro * cur.dim); gl.uniform1f(u.uD, D);
+    gl.drawArrays(gl.POINTS, 0, S.n);
+
+    gl.disableVertexAttribArray(1);
+    gl.useProgram(G.ln.p); u = G.ln.u;
+    gl.uniformMatrix4fv(u.uMVP, false, MVP); gl.uniform1f(u.uForm, form);
+    var lines = function (buf, n, a, kind) { if (a < 0.01) return; gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0); gl.uniform4f(u.uColor, 0.86, 0.72, 0.42, a); gl.drawArrays(kind === undefined ? gl.LINES : kind, 0, n); };
+    lines(G.bWire, S.wire.length / 3, cur.wire * 0.34);
+    lines(G.bCont, S.cont.length / 3, cur.wire * 0.95);
+    lines(G.bLm, S.lm.length / 3, cur.wire * 0.9, gl.POINTS);
+    // Линии замеров рисуются от первой точки ко второй по мере включения режима.
+    var mp = clamp(cur.meas * 1.15), md = new Float32Array(MEAS.length * 6);
+    MEAS.forEach(function (x, i) { var A = S.P[x[0]], B = S.P[x[1]]; md.set([A[0], A[1], A[2] + 0.03, A[0] + (B[0] - A[0]) * mp, A[1] + (B[1] - A[1]) * mp, A[2] + 0.03 + (B[2] - A[2]) * mp], i * 6); });
+    gl.bindBuffer(gl.ARRAY_BUFFER, G.bMeas); gl.bufferSubData(gl.ARRAY_BUFFER, 0, md);
+    lines(G.bMeas, MEAS.length * 2, cur.meas * 1.6); lines(G.bMeas, MEAS.length * 2, cur.meas * 1.6, gl.POINTS);
+
+    var proj = function (v) { var x = v[0], y = v[1], z = v[2] * form, q = MVP[3] * x + MVP[7] * y + MVP[11] * z + MVP[15]; return [((MVP[0] * x + MVP[4] * y + MVP[8] * z + MVP[12]) / q * 0.5 + 0.5) * w, (1 - ((MVP[1] * x + MVP[5] * y + MVP[9] * z + MVP[13]) / q * 0.5 + 0.5)) * h]; };
+    var kids = $("dsLabels").children;
+    for (var li = 0; li < kids.length; li++) {
+      var el = kids[li], mm = MEAS[el.getAttribute("data-i")], A = proj(S.P[mm[0]]), B = proj(S.P[mm[1]]), vert = Math.abs(B[1] - A[1]) > Math.abs(B[0] - A[0]);
+      var x = vert ? Math.max(A[0], B[0]) + 10 : (A[0] + B[0]) / 2 - el.offsetWidth / 2, y = vert ? (A[1] + B[1]) / 2 - 9 : Math.min(A[1], B[1]) - 26;
+      el.style.transform = "translate(" + clamp(x, 6, w - el.offsetWidth - 6) + "px," + y + "px)"; el.style.opacity = clamp(cur.meas * 1.4 - 0.3);
+    }
+    var hide = mode === "portrait" ? 1 : 0.12;
+    $("dsScore").style.opacity = intro * hide; $("dsShade").style.opacity = hide;
+    if (open && stageOn && !document.hidden) raf = requestAnimationFrame(frame); else raf = 0;
+  }
+  // Пока слепок вне экрана или вкладка свёрнута — не рисуем: батарея и нагрев на телефоне.
+  function wake() { if (!raf && S && G.ready && open && stageOn && !document.hidden) { G.last = 0; raf = requestAnimationFrame(frame); } }
+
+  // ── плоские чертежи: зеркальные половины и трети ──
+  function drawFlats() {
+    var p = S.p, M = S.M, work = S.work, A = 520, sc = A / (M.L * 1.5), phi = Math.atan2(M.d.x, M.d.y);
+    var al = mk(A, A), c = al.getContext("2d");
+    c.translate(A / 2, A / 2); c.rotate(phi); c.scale(sc, sc); c.translate(-M.O.x, -M.O.y); c.drawImage(work, 0, 0); tone(al);
+    var at = function (q) { var x = q.x - M.O.x, y = q.y - M.O.y; return [A / 2 + (x * Math.cos(phi) - y * Math.sin(phi)) * sc, A / 2 + (x * Math.sin(phi) + y * Math.cos(phi)) * sc]; };
+    var half = function (id, right) {
+      var cv = $(id); cv.width = cv.height = A; var k = cv.getContext("2d"), sx = right ? A / 2 : 0;
+      k.drawImage(al, sx, 0, A / 2, A, sx, 0, A / 2, A); k.translate(A, 0); k.scale(-1, 1); k.drawImage(al, sx, 0, A / 2, A, sx, 0, A / 2, A);
+    };
+    half("dsSymR", false); half("dsSymL", true);
+    var cv = $("dsProp"); cv.width = cv.height = A; var k = cv.getContext("2d");
+    k.drawImage(al, 0, 0); k.fillStyle = "rgba(6,5,4,.4)"; k.fillRect(0, 0, A, A);
+    k.strokeStyle = "rgba(240,224,178,.9)"; k.lineWidth = 1; k.font = '500 13px "JetBrains Mono",monospace'; k.fillStyle = "#f0e0b2";
+    var ys = [9, 2, 152].map(function (i) { return at(p[i])[1]; }), xs = [33, 133, 362, 263].map(function (i) { return at(p[i])[0]; });
+    k.beginPath();
+    ys.forEach(function (y) { k.moveTo(40, y); k.lineTo(A - 40, y); });
+    xs.forEach(function (x) { k.moveTo(x, ys[0] - 60); k.lineTo(x, ys[2] + 10); });
+    k.stroke();
+    var pm = Math.round(M.mid / (M.mid + M.low) * 100);
+    k.fillText(pm + "%", 44, (ys[0] + ys[1]) / 2 + 4); k.fillText((100 - pm) + "%", 44, (ys[1] + ys[2]) / 2 + 4);
+    $("dsPropCap").textContent = "Средняя треть " + pm + "% · нижняя " + (100 - pm) + "%";
+  }
+
+  // ── числа, которые досчитываются при прокрутке ──
+  function count(el, to, fmt, dur, delay) {
+    if (still) { el.textContent = fmt(to); return; }
+    var t0 = performance.now() + delay;
+    var tick = function (now) { var x = clamp((now - t0) / dur), k = 1 - Math.pow(1 - x, 3); el.textContent = fmt(to * k); if (x < 1) requestAnimationFrame(tick); };
+    el.textContent = fmt(0); requestAnimationFrame(tick);
+  }
+  var io = "IntersectionObserver" in window ? new IntersectionObserver(function (es) {
+    es.forEach(function (en) {
+      if (!en.isIntersecting) return;
+      en.target.classList.add("in"); io.unobserve(en.target);
+      var x = en.target._m;
+      if (x && !x.skip) { en.target.querySelector(".ds-bar b").style.left = en.target._pos + "%"; count(en.target.querySelector(".v"), x.raw, x.f, 1300, 250); }
+    });
+  }, { threshold: 0.25 }) : null;
+
+  function fillResult() {
+    var M = S.M.m, pos = function (x, v) { return clamp((v - x.min) / (x.max - x.min)) * 100; };
+    $("dsPlates").innerHTML = M.map(function (x) {
+      return '<div class="ds-plate ds-rv"><div class="l">' + x.n + '</div><div class="v">' + (x.skip ? "—" : x.f(0)) + "</div>" +
+        '<div class="ds-bar"><i style="left:' + pos(x, x.lo) + "%;width:" + (pos(x, x.hi) - pos(x, x.lo)) + '%"></i>' + (x.skip ? "" : "<b></b>") + "</div>" +
+        '<div class="s ' + (x.off === 0 && !x.skip ? "ok" : "") + '">' + x.st + "</div></div>";
+    }).join("");
+    Array.prototype.forEach.call($("dsPlates").children, function (el, i) { el._m = M[i]; el._pos = pos(M[i], M[i].raw); el.style.transitionDelay = (i % 2) * 0.12 + "s"; });
+    var ok = M.filter(function (x) { return !x.skip; });
+    var best = ok.filter(function (x) { return x.off === 0; }).sort(function (a, b) { return a.center - b.center; })[0] || ok.slice().sort(function (a, b) { return a.off - b.off; })[0];
+    var worst = ok.slice().sort(function (a, b) { return (b.off - a.off) || (b.center - a.center); })[0];
+    $("dsBestN").textContent = best.n; $("dsBestV").textContent = best.txt;
+    $("dsWorstN").textContent = worst.n; $("dsWorstV").textContent = worst.txt + " · " + worst.st;
+    $("dsBestRow").hidden = best === worst;
+    $("dsPose").hidden = S.M.yawOff < POSE_MAX;
+    document.querySelectorAll("#dossier .ds-rv").forEach(function (el) { el.classList.remove("in"); if (io) io.observe(el); else el.classList.add("in"); });
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll("#dossier .ds-modes button").forEach(function (x) { x.setAttribute("aria-pressed", x.getAttribute("data-mode") === m); });
+  }
+
+  // Показать досье по последнему скану. false — не получилось (нет WebGL и т. п.), тогда гейт как раньше.
+  function show() {
+    var lm = window._fmLandmarks, work = window.cleanImageCanvas;
+    if (!lm || !work || !MESH3D_EDGES || !window._fmFL || !$("dossier")) return false;
+    try { initGL(); S = buildScene(work, lm); } catch (e) { console.warn("dossier", e); return false; }
+    var box = $("dossier");
+    box.classList.remove("hidden"); box.scrollTop = 0;
+    requestAnimationFrame(function () { box.classList.add("in"); });
+    document.documentElement.classList.add("ds-lock");
+    open = true;
+    try { sessionStorage.setItem("fm-dos-seen", "1"); } catch (e) {}
+    uploadScene(); fillResult(); drawFlats();
+    user.yaw = 0; user.pitch = 0; setMode("portrait");
+    T0 = performance.now(); cancelAnimationFrame(raf); G.last = 0; raf = requestAnimationFrame(frame);
+    return true;
+  }
+  function close() {
+    if (!open) return;
+    open = false; cancelAnimationFrame(raf); raf = 0;
+    var box = $("dossier"); box.classList.remove("in");
+    document.documentElement.classList.remove("ds-lock");
+    setTimeout(function () { box.classList.add("hidden"); }, 350);
+  }
+
+  (function wire() {
+    var box = $("dossier"); if (!box) return;
+    document.querySelectorAll("#dossier .ds-modes button").forEach(function (b) { b.onclick = function () { setMode(b.getAttribute("data-mode")); }; });
+    ["dsCta", "dsCta2"].forEach(function (id) {
+      $(id).onclick = function () { fmStep("dos_cta"); showPaywall("auth"); };
+    });
+    $("dsAgain").onclick = function () { close(); hidePaywall(); _pendingAnalysis = null; clearResumePhotos(); backToUploadTop(); };
+    var glc = $("dsGl");
+    glc.onpointerdown = function (e) { user.drag = { x: e.clientX, y: e.clientY, yaw: user.yaw, pitch: user.pitch }; glc.setPointerCapture(e.pointerId); };
+    glc.onpointermove = function (e) {
+      var r = glc.getBoundingClientRect(); user.hx = (e.clientX - r.left) / r.width * 2 - 1; user.hy = (e.clientY - r.top) / r.height * 2 - 1;
+      if (user.drag) { user.yaw = clamp(user.drag.yaw + (e.clientX - user.drag.x) * 0.009, -1, 1); user.pitch = clamp(user.drag.pitch + (e.clientY - user.drag.y) * 0.006, -0.4, 0.4); }
+    };
+    glc.onpointerup = glc.onpointercancel = function () { user.drag = null; user.yaw *= 0.35; user.pitch *= 0.35; };
+    glc.onpointerleave = function () { user.hx = user.hy = 0; };
+    if ("IntersectionObserver" in window) new IntersectionObserver(function (es) { stageOn = es[0].isIntersecting; wake(); }, { root: box }).observe($("dsStage"));
+    document.addEventListener("visibilitychange", wake);
+    // Мобильный браузер отбирает WebGL у фоновой вкладки — без этого вернёшься к чёрному квадрату.
+    glc.addEventListener("webglcontextlost", function (e) { e.preventDefault(); cancelAnimationFrame(raf); raf = 0; G.ready = false; });
+    glc.addEventListener("webglcontextrestored", function () { initGL(); if (S) { uploadScene(); wake(); } });
+  })();
+
+  return { show: show, close: close, isOpen: function () { return open; } };
 })();
 
 /* ═══════════════════  WHO MOGS: сравнение двух лиц  ═══════════════════ */

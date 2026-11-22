@@ -3169,3 +3169,94 @@ body.analyzing #mainFooter .footer-extra { display: none; }
 .pw-tz-offer { display: block; color: var(--accent); margin-top: 8px; }
 .pw-btn-second { background: none; border: 1px solid var(--accent); color: var(--text-bright); }
 .pw-tz-note { text-align: center; }
+
+/* ───── Досье до входа (23.11.2026, перенос прототипа facerate-premium) ─────
+   Всё под #dossier и с префиксом ds-: стили не должны утекать в остальной сайт. */
+#dossier{
+  --ds-bg:#060504; --ds-surface:#110f0c; --ds-raised:#191611; --ds-line:#2a241a;
+  --ds-fg:#f1ebde; --ds-muted:#978d79; --ds-gold:#c9a961; --ds-gold-hi:#f0e0b2; --ds-weak:#d4735b;
+  --ds-display:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --ds-ui:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --ds-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --ds-ease:cubic-bezier(.2,.7,.1,1);
+  position:fixed;inset:0;z-index:2200;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+  background:var(--ds-bg);color:var(--ds-fg);font:15px/1.5 var(--ds-ui);
+  padding:calc(18px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(56px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  opacity:0;transition:opacity .35s ease
+}
+#dossier.in{opacity:1}
+#dossier.hidden{display:none}
+html.ds-lock,html.ds-lock body{overflow:hidden}
+#dossier *{box-sizing:border-box}
+#dossier [hidden]{display:none!important}
+#dossier button{font:inherit;color:inherit;cursor:pointer}
+#dossier :focus-visible{outline:2px solid var(--ds-gold-hi);outline-offset:2px}
+#dossier h2{font-family:var(--ds-display);font-weight:500;margin:0;text-wrap:balance;color:var(--ds-fg)}
+#dossier p{margin:0}
+.ds-col{max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.ds-eyebrow{font:500 11px/1.3 var(--ds-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ds-muted)}
+.ds-gold{color:var(--ds-gold)}
+.ds-top{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding-bottom:10px;border-bottom:1px solid var(--ds-line)}
+.ds-top b{font:600 13px var(--ds-ui);letter-spacing:.34em}
+.ds-rv{opacity:0;transform:translateY(26px);transition:opacity .9s var(--ds-ease),transform .9s var(--ds-ease)}
+.ds-rv.in{opacity:1;transform:none}
+.ds-cta{position:relative;overflow:hidden;border:0;background:linear-gradient(180deg,var(--ds-gold-hi),var(--ds-gold));color:#17130a!important;font:700 15px var(--ds-ui)!important;letter-spacing:.02em;padding:17px 22px;width:100%;transition:transform .2s var(--ds-ease)}
+.ds-cta::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);animation:dsShine 3.4s ease-in-out infinite}
+@keyframes dsShine{0%,55%{left:-60%}100%{left:130%}}
+.ds-cta:active{transform:scale(.985)}
+.ds-ghost{background:transparent;border:1px solid var(--ds-line);padding:13px 16px;font-weight:600!important;font-size:13px!important;width:100%;transition:border-color .25s,color .25s}
+.ds-ghost:hover{border-color:var(--ds-gold);color:var(--ds-gold-hi)}
+.ds-frame{position:relative;aspect-ratio:1/1.22;background:#040302;overflow:hidden;margin:0 -16px}
+@media (min-width:500px){.ds-frame{margin:0;border:1px solid var(--ds-line)}}
+.ds-frame canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.ds-frame::before{content:"";position:absolute;width:22px;height:22px;border:1px solid var(--ds-gold);opacity:.7;z-index:3;pointer-events:none;left:14px;top:14px;border-right:0;border-bottom:0}
+.ds-hud{position:absolute;z-index:3;font:500 10px/1.5 var(--ds-mono);letter-spacing:.14em;color:var(--ds-muted);text-transform:uppercase;pointer-events:none}
+.ds-hud.tl{left:46px;top:14px}.ds-hud.tr{right:16px;top:14px;text-align:right}
+.ds-hud b{color:var(--ds-gold-hi);font-weight:500}
+#dsGl{touch-action:pan-y;cursor:grab}
+#dsGl:active{cursor:grabbing}
+.ds-lbl{position:absolute;z-index:3;left:0;top:0;padding:3px 7px;font:500 10px/1.4 var(--ds-mono);letter-spacing:.08em;color:var(--ds-gold-hi);background:rgba(6,5,4,.82);border:1px solid rgba(201,169,97,.6);white-space:nowrap;pointer-events:none;will-change:transform,opacity}
+.ds-shade{position:absolute;z-index:2;left:0;right:0;bottom:0;height:46%;background:linear-gradient(180deg,transparent,rgba(6,5,4,.92) 78%);pointer-events:none}
+.ds-score{position:absolute;z-index:3;left:16px;right:16px;bottom:14px;display:grid;grid-template-columns:auto 1fr;gap:0 16px;align-items:end;pointer-events:none}
+.ds-num{font:500 96px/.8 var(--ds-display);color:var(--ds-gold-hi);font-variant-numeric:lining-nums;letter-spacing:-.03em;text-shadow:0 0 40px rgba(201,169,97,.35);opacity:.55}
+.ds-num small{font-size:30px;color:var(--ds-muted);letter-spacing:0}
+.ds-verdict{padding-bottom:8px;min-width:0}
+#dossier .ds-verdict h2{font-size:25px;line-height:1.05}
+.ds-tag{display:inline-block;font:500 10px var(--ds-mono);letter-spacing:.08em;color:var(--ds-gold);border:1px solid var(--ds-gold);padding:1px 5px;margin-bottom:6px}
+.ds-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.ds-modes button{background:transparent;border:1px solid var(--ds-line);padding:10px 4px;font:500 11px var(--ds-mono)!important;letter-spacing:.12em;color:var(--ds-muted)!important;transition:all .25s}
+.ds-modes button[aria-pressed=true]{border-color:var(--ds-gold);color:var(--ds-gold-hi)!important;background:var(--ds-raised)}
+.ds-tiers{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}
+.ds-tiers span{font:500 10px/1 var(--ds-mono);letter-spacing:.04em;text-align:center;padding:8px 0;border:1px solid var(--ds-line);color:var(--ds-muted);filter:blur(.6px);opacity:.7}
+.ds-note{font-size:12.5px;color:var(--ds-muted)}
+.ds-warn{border-left:2px solid var(--ds-weak);padding:2px 0 2px 12px;color:var(--ds-muted);font-size:13px}
+.ds-sec{margin-top:18px}
+#dossier .ds-sec h2{font-size:34px;line-height:1.02;margin:8px 0 6px}
+.ds-sec p{color:var(--ds-muted);font-size:13.5px;max-width:42ch}
+.ds-plates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ds-plate{border:1px solid var(--ds-line);background:rgba(17,15,12,.86);padding:13px;min-width:0;display:flex;flex-direction:column;gap:7px}
+.ds-plate .l{font-size:12px;color:var(--ds-muted);line-height:1.3;min-height:2.6em}
+.ds-plate .v{font:500 34px/1 var(--ds-display);font-variant-numeric:tabular-nums lining-nums;color:var(--ds-gold-hi)}
+.ds-bar{position:relative;height:14px}
+.ds-bar::before{content:"";position:absolute;left:0;right:0;top:6px;height:2px;background:var(--ds-line)}
+.ds-bar i{position:absolute;top:5px;height:4px;background:var(--ds-gold);opacity:.55;transform:scaleX(0);transform-origin:left;transition:transform .9s var(--ds-ease) .2s}
+.ds-bar b{position:absolute;top:0;left:0;width:2px;height:14px;background:var(--ds-fg);box-shadow:0 0 8px var(--ds-fg);transition:left 1.3s var(--ds-ease) .35s}
+.ds-plate.in .ds-bar i{transform:none}
+.ds-plate .s{font:500 10px var(--ds-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ds-muted)}
+.ds-plate .s.ok{color:var(--ds-gold)}
+.ds-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#dossier figure{margin:0;border:1px solid var(--ds-line);background:#000;overflow:hidden}
+#dossier figure canvas{width:100%;display:block;transform:scale(1.08);transition:transform 1.6s var(--ds-ease)}
+#dossier figure.in canvas{transform:none}
+#dossier figcaption{position:relative;padding:8px 10px;font:500 10px var(--ds-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ds-muted);background:var(--ds-surface)}
+.ds-row{border:1px solid var(--ds-line);background:rgba(17,15,12,.86);padding:16px}
+#dossier .ds-row h2{font-size:26px;line-height:1.1;margin:6px 0 4px}
+.ds-row p{color:var(--ds-muted);font-size:14px}
+.ds-kv{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.ds-kv .v{font:500 13px var(--ds-mono);color:var(--ds-gold-hi);text-align:right}
+.ds-weak{border-color:#4d2b22;background:linear-gradient(180deg,rgba(32,17,13,.92),rgba(17,15,12,.9))}
+.ds-weak .v{color:var(--ds-weak)}
+.ds-blur{filter:blur(7px);user-select:none}
+.ds-lock{margin-top:12px;font-weight:600;font-size:13px}
+.ds-fade{transition:opacity .6s var(--ds-ease)}
+@media (prefers-reduced-motion:reduce){#dossier *,#dossier *::before,#dossier *::after{animation:none!important;transition:none!important}.ds-rv{opacity:1;transform:none}}

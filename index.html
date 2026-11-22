@@ -21,8 +21,8 @@
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="zen-verification" content="3OaMGH9M7VytOCY5pM7t4hjis97AQTIbLQ6TFWSDpoaOyhz5oCIbioCrn5yrwP9d" />
 
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400&family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=60" />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400&family=Cormorant+Garamond:wght@300;400;500&family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css?v=61" />
 
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
@@ -590,6 +590,71 @@
   </div>
 </div>
 
+<!-- ДОСЬЕ: до входа, половине посетителей (A/B, app.js «ДОССЬЕ ДО ВХОДА») -->
+<div id="dossier" class="dossier hidden" role="dialog" aria-label="Досье твоего лица">
+  <div class="ds-col">
+    <div class="ds-top"><b>FACERATE</b><span class="ds-eyebrow">Досье · скан завершён</span></div>
+    <div class="ds-frame" id="dsStage">
+      <canvas id="dsGl" aria-label="Объёмный слепок твоего лица из точек, его можно вращать"></canvas>
+      <div class="ds-hud tl">Слепок · <b id="dsPts">0</b> точек</div>
+      <div class="ds-hud tr">Тяни, чтобы<br>повернуть</div>
+      <div id="dsLabels"></div>
+      <div class="ds-shade ds-fade" id="dsShade"></div>
+      <div class="ds-score ds-fade" id="dsScore">
+        <div class="ds-num">?.?<small>/8</small></div>
+        <div class="ds-verdict"><span class="ds-tag">ЗАКРЫТО</span><h2>Балл и тир — после входа</h2></div>
+      </div>
+    </div>
+    <div class="ds-modes" role="group" aria-label="Вид слепка">
+      <button type="button" data-mode="portrait" aria-pressed="true">ПОРТРЕТ</button>
+      <button type="button" data-mode="mesh" aria-pressed="false">СЕТКА</button>
+      <button type="button" data-mode="measure" aria-pressed="false">ЗАМЕРЫ</button>
+    </div>
+    <div class="ds-tiers" aria-hidden="true"><span>SUB-3</span><span>LTN</span><span>MTN</span><span>HTN</span><span>CHADLITE</span><span>CHAD</span></div>
+    <button class="ds-cta" id="dsCta" type="button">Узнать свой балл</button>
+    <p class="ds-note">Вход через Telegram — в один тап. Балл, тир и разбор по восьми категориям посчитает нейросеть. Фото нигде не хранится.</p>
+    <p class="ds-warn" id="dsPose" hidden>Голова на фото повёрнута. Симметрия и ширины от этого занижаются — для точных цифр смотри прямо в камеру.</p>
+
+    <div class="ds-sec ds-rv">
+      <span class="ds-eyebrow ds-gold">Замеры по твоему фото</span>
+      <h2>Восемь пропорций</h2>
+      <p>Белая метка — ты. Золотая полоса — где лежит половина лиц из нашей выборки. Это не оценка: красивые лица бывают по обе стороны полосы.</p>
+    </div>
+    <div class="ds-plates" id="dsPlates"></div>
+
+    <div class="ds-sec ds-rv">
+      <span class="ds-eyebrow ds-gold">Симметрия</span>
+      <h2>Две половины одного лица</h2>
+      <p>Каждая сторона отражена зеркально. Чем сильнее отличаются два портрета, тем заметнее асимметрия.</p>
+    </div>
+    <div class="ds-pair">
+      <figure class="ds-rv"><canvas id="dsSymR"></canvas><figcaption>Правая сторона ×2</figcaption></figure>
+      <figure class="ds-rv"><canvas id="dsSymL"></canvas><figcaption>Левая сторона ×2</figcaption></figure>
+    </div>
+
+    <div class="ds-sec ds-rv">
+      <span class="ds-eyebrow ds-gold">Чертёж</span>
+      <h2>Трети и пятые</h2>
+      <p>Горизонтали делят лицо по бровям, основанию носа и подбородку. Вертикали — по уголкам глаз.</p>
+    </div>
+    <figure class="ds-rv"><canvas id="dsProp"></canvas><figcaption id="dsPropCap">Средняя и нижняя трети</figcaption></figure>
+
+    <section class="ds-row ds-rv" id="dsBestRow">
+      <div class="ds-kv"><span class="ds-eyebrow ds-gold">Самое обычное в твоём лице</span><span class="v" id="dsBestV"></span></div>
+      <h2 id="dsBestN"></h2>
+      <p>Этот замер у тебя ближе всего к середине: так устроено большинство лиц.</p>
+    </section>
+    <section class="ds-row ds-weak ds-rv">
+      <div class="ds-kv"><span class="ds-eyebrow" style="color:var(--ds-weak)">Самое заметное в твоём лице</span><span class="v" id="dsWorstV"></span></div>
+      <h2 id="dsWorstN"></h2>
+      <p class="ds-blur" aria-hidden="true">Плюс это или минус именно для твоего лица, насколько это видно со стороны и какие три шага дают наибольший сдвиг.</p>
+      <div class="ds-lock">Плюс это или минус и что с этим делать — после входа.</div>
+    </section>
+    <button class="ds-cta ds-rv" id="dsCta2" type="button">Узнать балл и что с этим делать</button>
+    <button class="ds-ghost" id="dsAgain" type="button">Загрузить другое фото</button>
+  </div>
+</div>
+
 <!-- PAYWALL: показывается после сканирования, перед генерацией отчёта -->
 <div id="paywall" class="paywall hidden">
   <div class="pw-box">
@@ -635,7 +700,7 @@
      Модель assets/pill3d/scene.gltf — "Pill (Capsule)" by jaromir.ternavskiy,
      CC-BY-4.0, оставлена как исходник для пересъёмки:
      https://sketchfab.com/3d-models/pill-capsule-93518f94ebd540c3b9da45ab67cf5590 -->
-<script src="app.js?v=162"></script>
+<script src="app.js?v=163"></script>
 <script src="sharevideo.js?v=6"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════
