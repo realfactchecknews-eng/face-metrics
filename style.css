@@ -3260,3 +3260,24 @@ html.ds-lock,html.ds-lock body{overflow:hidden}
 .ds-lock{margin-top:12px;font-weight:600;font-size:13px}
 .ds-fade{transition:opacity .6s var(--ds-ease)}
 @media (prefers-reduced-motion:reduce){#dossier *,#dossier *::before,#dossier *::after{animation:none!important;transition:none!important}.ds-rv{opacity:1;transform:none}}
+/* Кнопки досье — в стиле сайта (23.11.2026): золотая таблетка как «Анализировать»,
+   переключатели и тиры — таблетками, карточки скруглены. Шрифт кнопок — Cormorant, как на сайте. */
+#dossier .ds-cta{
+  display:block;border:none;border-radius:100px;padding:18px 32px;
+  background:linear-gradient(135deg,#e8d4a0,#c4a46b 58%,#9c7f4e);
+  color:#141008!important;font:600 1rem/1.2 var(--ds-display)!important;letter-spacing:.16em;text-transform:uppercase;
+  box-shadow:0 6px 26px rgba(196,164,107,.3);transition:transform .2s ease,box-shadow .2s ease
+}
+#dossier .ds-cta:hover{transform:translateY(-2px);box-shadow:0 10px 34px rgba(196,164,107,.45)}
+#dossier .ds-cta:active{transform:translateY(0)}
+#dossier .ds-cta::after{width:34%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:dsShine 5s ease-in-out infinite}
+#dossier .ds-ghost{border-radius:100px;border:1px solid rgba(196,164,107,.55);padding:14px 22px;
+  font:400 1rem var(--ds-display)!important;letter-spacing:.08em;color:var(--ds-fg)}
+#dossier .ds-ghost:hover{border-color:#c4a46b;color:#e8d4a0}
+#dossier .ds-modes{gap:4px;padding:4px;border:1px solid rgba(196,164,107,.3);border-radius:100px}
+#dossier .ds-modes button{border:0;border-radius:100px;padding:10px 4px;font:500 .95rem var(--ds-display)!important;letter-spacing:.14em}
+#dossier .ds-modes button[aria-pressed=true]{background:linear-gradient(135deg,#e8d4a0,#c4a46b 58%,#9c7f4e);color:#141008!important}
+#dossier .ds-tiers span{border-radius:100px;font:500 .72rem/1 var(--ds-display);letter-spacing:.06em;padding:8px 0}
+#dossier .ds-tag{border-radius:100px;padding:2px 9px}
+#dossier .ds-plate,#dossier .ds-row,#dossier figure{border-radius:14px}
+@media (min-width:500px){#dossier .ds-frame{border-radius:18px}}

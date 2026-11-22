@@ -4647,7 +4647,7 @@ var fmDossier = (function () {
     fan(13, [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191]));
 
   function buildScene(work, p) {
-    var FL = window._fmFL, W = work.width, H = work.height, i, j;
+    var FL = window._fmFL, W = work.width, H = work.height, i, j, k;
     var TRIS = [];
     for (i = 0; i + 2 < MESH3D_EDGES.length; i += 3) TRIS.push([MESH3D_EDGES[i][0], MESH3D_EDGES[i + 1][0], MESH3D_EDGES[i + 2][0]]);
     var seen = {}, EDGES = [];
@@ -4679,16 +4679,40 @@ var fmDossier = (function () {
         if (!(depth[k] >= z)) depth[k] = z;
       }
     });
-    var oval = FL.FACE_LANDMARKS_FACE_OVAL.map(function (e) { return e.start; });
-    var zRim = oval.reduce(function (a, k) { return a + P[k][2]; }, 0) / oval.length;
     var gcx = (cx - rx0) / step, gcy = (cy - ry0) / step, grx = fw / 2 / step, gry = fh / 2 / step;
+    // Вне сетки (волосы, уши, шея) глубина продолжается от БЛИЖАЙШЕЙ клетки лица и плавно уходит
+    // назад. Раньше всё вокруг стояло на одной средней глубине края овала, и на повороте лицо
+    // «отслаивалось» маской от волос — жалоба владельца 23.11 с телефона.
+    var N = GW * GH, nd = new Int16Array(N).fill(-1), qu = new Int32Array(N), qh = 0, qt = 0;
+    for (k = 0; k < N; k++) if (!isNaN(depth[k])) { nd[k] = 0; qu[qt++] = k; }
+    while (qh < qt) {
+      var c0 = qu[qh++], cx0 = c0 % GW, cy0 = (c0 - cx0) / GW;
+      var nb = [cx0 > 0 ? c0 - 1 : -1, cx0 < GW - 1 ? c0 + 1 : -1, cy0 > 0 ? c0 - GW : -1, cy0 < GH - 1 ? c0 + GW : -1];
+      for (var ni = 0; ni < 4; ni++) { var c1 = nb[ni]; if (c1 >= 0 && nd[c1] < 0) { nd[c1] = nd[c0] + 1; depth[c1] = depth[c0]; qu[qt++] = c1; } }
+    }
+    // Уход назад — по расстоянию от края лица; потом сглаживаем только внешнюю зону,
+    // чтобы «ближайшая клетка» не оставила гребней, а рельеф самого лица не размылся.
+    var zo = new Float32Array(N);
+    for (k = 0; k < N; k++) zo[k] = nd[k] < 0 ? 0 : nd[k] > 0 ? depth[k] - (nd[k] / grx) * 1.5 : depth[k];
+    for (var pass = 0; pass < 3; pass++) {
+      var zb = zo.slice();
+      for (j = 0; j < GH; j++) for (i = 0; i < GW; i++) {
+        k = j * GW + i; if (nd[k] <= 0) continue;
+        var sum = 0, cnt = 0;
+        for (var dj = -2; dj <= 2; dj++) for (var di = -2; di <= 2; di++) {
+          var ii2 = i + di, jj2 = j + dj; if (ii2 < 0 || jj2 < 0 || ii2 >= GW || jj2 >= GH) continue;
+          sum += zb[jj2 * GW + ii2]; cnt++;
+        }
+        zo[k] = sum / cnt;
+      }
+    }
     var out = [];
     for (j = 0; j < GH; j++) for (i = 0; i < GW; i++) {
       var k = j * GW + i, o = k * 4;
-      var lum = Math.pow((px[o] * 0.3 + px[o + 1] * 0.59 + px[o + 2] * 0.11) / 255, 1.55), z = depth[k], al = 1;
-      if (isNaN(z)) {   // вне сетки: волосы, уши, шея — уходят назад и гаснут к краю
+      var lum = Math.pow((px[o] * 0.3 + px[o + 1] * 0.59 + px[o + 2] * 0.11) / 255, 1.55), z = zo[k], al = 1;
+      if (nd[k] > 0) {   // вне сетки — гаснет к краю кадра
         var r = Math.hypot((i - gcx) / grx, (j - gcy) / (j < gcy ? gry * 1.45 : gry));
-        z = zRim - Math.max(0, r - 0.9) * 0.75; al = Math.pow(clamp(1 - (r - 1) / 0.8), 1.4);
+        al = Math.pow(clamp(1 - (r - 1) / 0.8), 1.4);
       }
       if (lum * al < 0.03) continue;
       var jx = (Math.random() - 0.5) * 0.7, jy = (Math.random() - 0.5) * 0.7;
