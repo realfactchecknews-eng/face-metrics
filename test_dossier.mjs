@@ -17,6 +17,11 @@ assert.match(app, /function dossierOn\(\) \{\s*if \(TG_MINI \|\| lang\(\) !== "r
 // Шаги A/B есть в воронке воркера — иначе /funnel их молча выбросит.
 for (const s of ['gate_auth_d', 'dos_cta', 'auth_ok_d']) assert.ok(worker.includes(`['${s}',`), `шаг ${s} в FUNNEL_STEPS`);
 assert.equal((app.match(/fmStep\("auth_ok"\); if \(dossierSeen\(\)\) fmStep\("auth_ok_d"\);/g) || []).length, 2, 'вход после досье считается в обоих путях входа');
+// Покупка с сайта несёт вариант досье, и воркер его не выбрасывает.
+assert.match(app, /: "site" \+ dossierTag\(\) \}\)/, 'метка варианта в src покупки');
+const re = new RegExp(worker.match(/put\(`buysrc:\$\{sess\.id\}`, \/(.+?)\/\.test/)[1]);
+for (const ok of ['site:d1', 'site:d0', 'mini', 'mini:ads_x1']) assert.ok(re.test(ok), `воркер принимает ${ok}`);
+for (const bad of ['site:d2', 'site:x', 'evil']) assert.ok(!re.test(bad), `воркер режет ${bad}`);
 // Разметка на месте.
 for (const id of ['dossier', 'dsGl', 'dsCta', 'dsCta2', 'dsAgain', 'dsPlates']) assert.ok(html.includes(`id="${id}"`), `#${id} в index.html`);
 

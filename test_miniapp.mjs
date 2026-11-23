@@ -29,7 +29,7 @@ const srcOf = (start) => new Function('TG_MINI', 'return ' + buy.match(/src: (TG
 assert.equal(srcOf('ads_ch'), 'mini:ads_ch', 'метка объявления не доходит до покупки');
 assert.equal(srcOf('analyze'), 'mini');
 assert.equal(srcOf(undefined), 'site');
-const okSrc = new RegExp(w.match(/\/(\^mini\(:ads_[^/]+)\/\.test\(body\.src/)[1]);
+const okSrc = new RegExp(w.match(/\/(\^\(?mini\(:ads_[^/]+)\/\.test\(body\.src/)[1]);
 assert.ok(okSrc.test('mini:ads_ch') && !okSrc.test('mini:<script>') && !okSrc.test('x'), 'воркер пропускает мусор в src');
 assert.match(w.match(/^async function buy\([\s\S]*?^\}/m)[0], /buysrc:\$\{sess\.id\}/, '/buy не запоминает источник счёта');
 assert.match(w.match(/^async function recordOrder[\s\S]*?^\}/m)[0], /buysrc:[\s\S]*src/, 'покупка не получает метку источника');

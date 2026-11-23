@@ -1237,10 +1237,11 @@ async function buy(request, env) {
   const L = body.lang === 'ru' ? 'ru' : 'en';
   const method = body.method || 'stars';
   // Откуда открыли счёт — recordOrder допишет это в покупку (src: mini | mini:ads_X — мини-апп из
-  // объявления t.me/faceratepay_bot/rate?startapp=ads_X | site; нет — купили в боте).
+  // объявления t.me/faceratepay_bot/rate?startapp=ads_X | site | site:d1 / site:d0 — сайт с вариантом
+  // A/B досье, 23.11; нет — купили в боте).
   // ponytail: метка на человека, а не на счёт: если за 6 ч он откроет счёт на сайте и купит
   // в боте, покупка уйдёт сайту. Точнее — нести src в payload каждого из трёх счетов.
-  await env.RATE_LIMIT.put(`buysrc:${sess.id}`, /^mini(:ads_\w{1,20})?$/.test(body.src || '') ? body.src : 'site', { expirationTtl: 6 * 3600 });
+  await env.RATE_LIMIT.put(`buysrc:${sess.id}`, /^(mini(:ads_\w{1,20})?|site:d[01])$/.test(body.src || '') ? body.src : 'site', { expirationTtl: 6 * 3600 });
 
   const discPct = await buyerDiscountPct(env, sess.id, body.pack);
   // Скидку НЕ гасим здесь: счёт ещё не оплачен. Её гасят вебхуки после реальной оплаты

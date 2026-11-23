@@ -4128,7 +4128,7 @@ function buyPack(pack, btn, payMethod) {
   if (btn) { btn.disabled = true; btn.textContent = t("invoiceCreating"); }
   fetch(WORKER_URL + "/buy", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang(), method: payMethod || "stars", src: TG_MINI ? "mini" + (/^ads_\w{1,20}$/.test(TG_MINI.start || "") ? ":" + TG_MINI.start : "") : "site" }),
+    body: JSON.stringify({ token: acc.token, pack: pack, lang: lang(), method: payMethod || "stars", src: TG_MINI ? "mini" + (/^ads_\w{1,20}$/.test(TG_MINI.start || "") ? ":" + TG_MINI.start : "") : "site" + dossierTag() }),
   }).then(function(r){ return r.json(); }).then(function(d){
     if (btn) btn.disabled = false;
     if (d.error || !d.link) { if (btn) btn.textContent = t("invoiceErr"); return; }
@@ -4551,6 +4551,9 @@ function dossierOn() {
     return v === "1";
   } catch (e) { return false; }
 }
+// Покупка с сайта помечается вариантом досье (site:d1 / site:d0): решать A/B по выручке, а не только
+// по входу. Вариант браузера, а не «видел в этой сессии»: покупают и позже, с другого захода.
+function dossierTag() { try { var v = localStorage.getItem("fm-dossier"); return v === "1" || v === "0" ? ":d" + v : ""; } catch (e) { return ""; } }
 function dossierSeen() { try { return sessionStorage.getItem("fm-dos-seen") === "1"; } catch (e) { return false; } }
 
 var fmDossier = (function () {
