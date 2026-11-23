@@ -1032,6 +1032,7 @@ async function initFaceLandmarker() {
   );
   MESH3D_EDGES = vision.FaceLandmarker.FACE_LANDMARKS_TESSELATION.map(function (e) { return [e.start, e.end]; });
   window._fmFL = vision.FaceLandmarker;   // контуры и овал лица для досье
+  window._fmVision = vision; window._fmFileset = fileset;   // отделение человека от фона в досье
   faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
     baseOptions: {
       modelAssetPath: "./vendor/mediapipe/face_landmarker.task",
@@ -1884,6 +1885,9 @@ async function processImage(img, sideImage) {
     var shapeInfo = classifyFaceShape(metrics);
     window._fmLandmarks = lm;          // карточка, блок пропорций и рендер видео
     window._fmMetrics   = metrics;
+    // Маска «человек / фон» для досье считается, пока идёт анимация скана: к гейту уже готова.
+    window._fmSeg = null;
+    if (dossierOn()) segPerson(cleanImageCanvas).then(function (m) { window._fmSeg = m; });
     runFaceAnimation(lm, metrics, function() {
       resultsDiv.classList.remove("hidden");
       gateThenAI(metrics, shapeInfo);
@@ -4519,6 +4523,26 @@ function pwRecheck(silent) {
    gate_auth_d / dos_cta / auth_ok_d; контроль = общий шаг минус шаг с «_d».
    Только сайт и только русский: в мини-аппе гейта входа нет, тексты досье пока не переведены. */
 var DOSSIER_SHARE = 0.5;
+// Маска человека (MediaPipe selfie_segmenter, 250 КБ в vendor/): без неё стена за спиной такая же
+// светлая, как лицо, слипается с головой, а причёску приходилось обрезать овалом. Считаем по копии
+// не больше 512 px — маска приходит в размер входа, на 12 Мп это 48 МБ. Не вышло — досье без маски.
+var _segmenter = null;
+function segPerson(src) {
+  var V = window._fmVision, FS = window._fmFileset;
+  if (!V || !FS || !V.ImageSegmenter) return Promise.resolve(null);
+  var k = Math.min(1, 512 / Math.max(src.width, src.height));
+  var c = document.createElement("canvas"); c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
+  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+  return (_segmenter ? Promise.resolve(_segmenter) : V.ImageSegmenter.createFromOptions(FS, {
+    baseOptions: { modelAssetPath: "./vendor/mediapipe/selfie_segmenter.tflite" },
+    runningMode: "IMAGE", outputConfidenceMasks: true, outputCategoryMask: false,
+  }).then(function (sg) { _segmenter = sg; return sg; })).then(function (sg) {
+    var r = sg.segment(c), m = r.confidenceMasks && r.confidenceMasks[0];
+    var out = m ? { data: m.getAsFloat32Array().slice(), w: m.width, h: m.height, src: src } : null;
+    if (r.close) r.close();
+    return out;
+  }).catch(function (e) { console.warn("segPerson", e); return null; });
+}
 function dossierOn() {
   if (TG_MINI || lang() !== "ru") return false;
   try {
@@ -4659,8 +4683,11 @@ var fmDossier = (function () {
     var fw = x1 - x0, fh = y1 - y0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, s = fh / 2;
     var P = p.map(function (q) { return [(q.x - cx) / s, -(q.y - cy) / s, -(q.z || 0) / s]; });
     // Вокруг лица — волосы и шея, чтобы слепок был портретом, а не маской.
-    var rx0 = Math.max(0, x0 - fw * 0.42), rx1 = Math.min(W, x1 + fw * 0.42), ry0 = Math.max(0, y0 - fh * 0.5), ry1 = Math.min(H, y1 + fh * 0.3);
-    var GW = LOW ? 190 : 270, step = (rx1 - rx0) / GW, GH = Math.round((ry1 - ry0) / step);
+    // С маской человека кадр шире: причёска целиком и плечи, фон отрежет маска. Без маски — как раньше.
+    var seg = window._fmSeg && window._fmSeg.src === work ? window._fmSeg : null;
+    var ex = seg ? 0.8 : 0.42, et = seg ? 0.9 : 0.5, eb = seg ? 0.45 : 0.3;
+    var rx0 = Math.max(0, x0 - fw * ex), rx1 = Math.min(W, x1 + fw * ex), ry0 = Math.max(0, y0 - fh * et), ry1 = Math.min(H, y1 + fh * eb);
+    var GW = (LOW ? 190 : 270) + (seg ? 40 : 0), step = (rx1 - rx0) / GW, GH = Math.round((ry1 - ry0) / step);
     var small = mk(GW, GH); small.getContext("2d").drawImage(work, rx0, ry0, rx1 - rx0, ry1 - ry0, 0, 0, GW, GH);
     var px = small.getContext("2d").getImageData(0, 0, GW, GH).data;
     // Карта глубины: растеризуем треугольники сетки в ту же решётку.
@@ -4706,22 +4733,32 @@ var fmDossier = (function () {
         zo[k] = sum / cnt;
       }
     }
-    var out = [];
+    var out = [], ymin = 1e9, ymax = -1e9;
     for (j = 0; j < GH; j++) for (i = 0; i < GW; i++) {
       var k = j * GW + i, o = k * 4;
       var lum = Math.pow((px[o] * 0.3 + px[o + 1] * 0.59 + px[o + 2] * 0.11) / 255, 1.55), z = zo[k], al = 1;
-      if (nd[k] > 0) {   // вне сетки — гаснет к краю кадра
+      if (nd[k] > 0 && seg) {   // вне сетки: держим только человека по маске, у краёв кадра гасим
+        var sx = Math.min(seg.w - 1, Math.floor(((i + 0.5) * step + rx0) / W * seg.w)), sy = Math.min(seg.h - 1, Math.floor(((j + 0.5) * step + ry0) / H * seg.h));
+        var mv = seg.data[sy * seg.w + sx], t0 = clamp((mv - 0.35) / 0.4);
+        al = t0 * t0 * (3 - 2 * t0) * clamp(Math.min(i, GW - 1 - i, j, GH - 1 - j) / 6);
+      } else if (nd[k] > 0) {   // без маски — гаснет к краю овала, как раньше
         var r = Math.hypot((i - gcx) / grx, (j - gcy) / (j < gcy ? gry * 1.45 : gry));
         al = Math.pow(clamp(1 - (r - 1) / 0.8), 1.4);
       }
+      // Тёмные волосы по яркости фото почти не дают точек — человеку по маске даём нижний порог,
+      // иначе от причёски остаётся дыра. Фон (маска ≈ 0) по-прежнему гаснет.
+      if (seg && nd[k] > 0) lum = Math.max(lum, 0.13);
       if (lum * al < 0.03) continue;
       var jx = (Math.random() - 0.5) * 0.7, jy = (Math.random() - 0.5) * 0.7;
-      out.push(((i + 0.5 + jx) * step + rx0 - cx) / s, -((j + 0.5 + jy) * step + ry0 - cy) / s, z, lum, al, Math.random());
+      var oy = -((j + 0.5 + jy) * step + ry0 - cy) / s;
+      if (al > 0.3) { ymin = Math.min(ymin, oy); ymax = Math.max(ymax, oy); }
+      out.push(((i + 0.5 + jx) * step + rx0 - cx) / s, oy, z, lum, al, Math.random());
     }
     var line = function (pairs) { var a = []; pairs.forEach(function (q) { a.push.apply(a, P[q[0]]); a.push.apply(a, P[q[1]]); }); return new Float32Array(a); };
     var lmf = []; P.forEach(function (q) { lmf.push(q[0], q[1], q[2]); });
     return { p: p, P: P, M: M, work: work, pts: new Float32Array(out), n: out.length / 6, wire: line(EDGES), cont: line(CONTOURS), lm: new Float32Array(lmf),
-      cell: step / s, offY: -(((ry0 + ry1) / 2 - cy) / s), spanY: (ry1 - ry0) / s };
+      // Кадр — по самому человеку (видимым точкам), а не по рамке вырезки: с маской рамка шире головы.
+      cell: step / s, offY: seg && ymax > ymin ? -(ymin + ymax) / 2 : -(((ry0 + ry1) / 2 - cy) / s), spanY: seg && ymax > ymin ? (ymax - ymin) * 1.04 : (ry1 - ry0) / s };
   }
 
   var MEAS = [[234, 454, 1, "fWHR"], [172, 397, 3, "ЧЕЛЮСТЬ"], [362, 263, 0, "ГЛАЗА"], [133, 33, -1, ""], [9, 2, -1, ""], [2, 152, 2, "ТРЕТИ"]];
