@@ -4643,9 +4643,9 @@ var fmDossier = (function () {
     "  vB=(aAtt.x*uDim+wave*.55*uForm)*aAtt.y;\n" +
     "  gl_PointSize=uSize*(.75+aAtt.x*.45+wave*.5)*(uD/gl_Position.w); }";
   var PTS_FS = "precision mediump float; varying float vB;\n" +
-    "void main(){ float d=length(gl_PointCoord-.5); float a=smoothstep(.5,.08,d);\n" +
+    "void main(){ float d=length(gl_PointCoord-.5); float a=smoothstep(.5,.08,d); if(a<.04) discard;\n" +
     "  vec3 c=mix(vec3(.74,.55,.25),vec3(1.,.96,.86),clamp(vB*1.1,0.,1.));\n" +
-    "  gl_FragColor=vec4(c*vB*a*1.15,1.); }";
+    "  gl_FragColor=vec4(c*vB*a*1.6,1.); }";
   var LN_VS = "attribute vec3 aPos; uniform mat4 uMVP; uniform float uForm; void main(){ gl_Position=uMVP*vec4(aPos.xy,aPos.z*uForm,1.); gl_PointSize=3.; }";
   var LN_FS = "precision mediump float; uniform vec4 uColor; void main(){ gl_FragColor=vec4(uColor.rgb*uColor.a,1.); }";
 
@@ -4659,7 +4659,7 @@ var fmDossier = (function () {
     if (!gl) throw new Error("webgl");
     G.gl = gl; G.pts = program(gl, PTS_VS, PTS_FS, ["aPos", "aAtt"]); G.ln = program(gl, LN_VS, LN_FS, ["aPos"]);
     ["bPts", "bWire", "bCont", "bMeas", "bLm"].forEach(function (k) { G[k] = gl.createBuffer(); });
-    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.disable(gl.DEPTH_TEST); gl.clearColor(0.016, 0.012, 0.008, 1);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthFunc(gl.LESS); gl.clearColor(0.016, 0.012, 0.008, 1);
     G.ready = true;
   }
 
@@ -4717,10 +4717,28 @@ var fmDossier = (function () {
       var nb = [cx0 > 0 ? c0 - 1 : -1, cx0 < GW - 1 ? c0 + 1 : -1, cy0 > 0 ? c0 - GW : -1, cy0 < GH - 1 ? c0 + GW : -1];
       for (var ni = 0; ni < 4; ni++) { var c1 = nb[ni]; if (c1 >= 0 && nd[c1] < 0) { nd[c1] = nd[c0] + 1; depth[c1] = depth[c0]; qu[qt++] = c1; } }
     }
-    // Уход назад — по расстоянию от края лица; потом сглаживаем только внешнюю зону,
-    // чтобы «ближайшая клетка» не оставила гребней, а рельеф самого лица не размылся.
-    var zo = new Float32Array(N);
-    for (k = 0; k < N; k++) zo[k] = nd[k] < 0 ? 0 : nd[k] > 0 ? depth[k] - (nd[k] / grx) * 1.5 : depth[k];
+    // Волосы, затылок, шея и плечи — на объёмную заготовку, а не продолжением края лица: иначе
+    // пышная причёска и плечи на повороте выходят плоскими плитами (жалоба владельца 23.11).
+    // Голова — эллипсоид по ширине лица, плечи — изогнутая плоскость за шеей; у края лица
+    // глубина плавно переходит от сетки к заготовке. Единицы — как у P: полувысота лица = 1.
+    var oval = FL.FACE_LANDMARKS_FACE_OVAL.map(function (e) { return e.start; });
+    var zRim = oval.reduce(function (a, q) { return a + P[q][2]; }, 0) / oval.length;
+    // zc ниже края лица: заготовка уходит назад ЗА край, а не стоит перед ним — иначе на стыке складка
+    // и яркая дуга (точки ложатся друг на друга).
+    var Rx = (fw / 2) / s * 1.18, Ry = 1.35, cyE = 0.12, Rz = Rx * 1.15, zc = zRim - 0.75 * Rz;
+    var band = Math.max(4, grx * 0.5), zo = new Float32Array(N);
+    for (j = 0; j < GH; j++) for (i = 0; i < GW; i++) {
+      k = j * GW + i;
+      if (nd[k] === 0) { zo[k] = depth[k]; continue; }
+      var X = ((i + 0.5) * step + rx0 - cx) / s, Y = -((j + 0.5) * step + ry0 - cy) / s;
+      var ex2 = (X / Rx) * (X / Rx) + ((Y - cyE) / Ry) * ((Y - cyE) / Ry);
+      var zh = ex2 < 1 ? zc + Rz * Math.sqrt(1 - ex2) : zc - (Math.sqrt(ex2) - 1) * Rz * 1.2;
+      var zb = zc + 0.25 * Rz - 0.5 * Rz * (X / (Rx * 2.2)) * (X / (Rx * 2.2));
+      var tb = clamp((-0.95 - Y) / 0.4), zp = zh + (zb - zh) * tb * tb * (3 - 2 * tb);
+      var tf = nd[k] < 0 ? 1 : clamp(nd[k] / band);
+      zo[k] = nd[k] < 0 ? zp : depth[k] + (zp - depth[k]) * tf * tf * (3 - 2 * tf);
+    }
+    // Сглаживаем только внешнюю зону, чтобы шов не оставил гребней, а рельеф лица не размылся.
     for (var pass = 0; pass < 3; pass++) {
       var zb = zo.slice();
       for (j = 0; j < GH; j++) for (i = 0; i < GW; i++) {
@@ -4754,9 +4772,14 @@ var fmDossier = (function () {
       if (al > 0.3) { ymin = Math.min(ymin, oy); ymax = Math.max(ymax, oy); }
       out.push(((i + 0.5 + jx) * step + rx0 - cx) / s, oy, z, lum, al, Math.random());
     }
+    // Спереди назад: ближние точки рисуются первыми и по проверке глубины закрывают дальние.
+    var nP = out.length / 6, ord = new Uint32Array(nP), srt = new Float32Array(out.length);
+    for (k = 0; k < nP; k++) ord[k] = k;
+    ord.sort(function (a, b) { return out[b * 6 + 2] - out[a * 6 + 2]; });
+    for (k = 0; k < nP; k++) for (var q6 = 0; q6 < 6; q6++) srt[k * 6 + q6] = out[ord[k] * 6 + q6];
     var line = function (pairs) { var a = []; pairs.forEach(function (q) { a.push.apply(a, P[q[0]]); a.push.apply(a, P[q[1]]); }); return new Float32Array(a); };
     var lmf = []; P.forEach(function (q) { lmf.push(q[0], q[1], q[2]); });
-    return { p: p, P: P, M: M, work: work, pts: new Float32Array(out), n: out.length / 6, wire: line(EDGES), cont: line(CONTOURS), lm: new Float32Array(lmf),
+    return { p: p, P: P, M: M, work: work, pts: srt, n: nP, wire: line(EDGES), cont: line(CONTOURS), lm: new Float32Array(lmf),
       // Кадр — по самому человеку (видимым точкам), а не по рамке вырезки: с маской рамка шире головы.
       cell: step / s, offY: seg && ymax > ymin ? -(ymin + ymax) / 2 : -(((ry0 + ry1) / 2 - cy) / s), spanY: seg && ymax > ymin ? (ymax - ymin) * 1.04 : (ry1 - ry0) / s };
   }
@@ -4787,7 +4810,11 @@ var fmDossier = (function () {
     var MVP = mat.mul(mat.persp(fov, w / h, 0.1, 50), mat.mul(mat.trans(0, S.offY, -D), mat.mul(mat.rotX(pitch), mat.rotY(yaw))));
     var wavePh = ((t - 3.6) % 6.5) / 1.7, uWave = t > 3.6 && wavePh < 1 ? 1.9 - wavePh * 3.8 : 99;
 
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    // Точки с проверкой глубины: иначе волосы за краем лица просвечивают сквозь кромку и при
+    // сложении яркостей рисуют золотую дугу. Буфер отсортирован спереди назад (buildScene), поэтому
+    // ближние точки пишутся первыми и закрывают дальние почти при любом повороте в пределах ±40°.
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
     gl.useProgram(G.pts.p);
     gl.bindBuffer(gl.ARRAY_BUFFER, G.bPts);
     gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1);
@@ -4796,6 +4823,7 @@ var fmDossier = (function () {
     gl.uniformMatrix4fv(u.uMVP, false, MVP); gl.uniform1f(u.uForm, form); gl.uniform1f(u.uBurst, burst); gl.uniform1f(u.uTime, t);
     gl.uniform1f(u.uSize, (cv.height / 2) / (Math.tan(fov / 2) * D) * S.cell * 1.2); gl.uniform1f(u.uWave, uWave); gl.uniform1f(u.uDim, intro * cur.dim); gl.uniform1f(u.uD, D);
     gl.drawArrays(gl.POINTS, 0, S.n);
+    gl.disable(gl.DEPTH_TEST);
 
     gl.disableVertexAttribArray(1);
     gl.useProgram(G.ln.p); u = G.ln.u;
@@ -4922,7 +4950,8 @@ var fmDossier = (function () {
     glc.onpointerdown = function (e) { user.drag = { x: e.clientX, y: e.clientY, yaw: user.yaw, pitch: user.pitch }; glc.setPointerCapture(e.pointerId); };
     glc.onpointermove = function (e) {
       var r = glc.getBoundingClientRect(); user.hx = (e.clientX - r.left) / r.width * 2 - 1; user.hy = (e.clientY - r.top) / r.height * 2 - 1;
-      if (user.drag) { user.yaw = clamp(user.drag.yaw + (e.clientX - user.drag.x) * 0.009, -1, 1); user.pitch = clamp(user.drag.pitch + (e.clientY - user.drag.y) * 0.006, -0.4, 0.4); }
+      // По одному фото затылка нет: дальше ~40° любой слепок разваливается, поэтому крутим в этих пределах.
+      if (user.drag) { user.yaw = clamp(user.drag.yaw + (e.clientX - user.drag.x) * 0.009, -0.7, 0.7); user.pitch = clamp(user.drag.pitch + (e.clientY - user.drag.y) * 0.006, -0.28, 0.28); }
     };
     glc.onpointerup = glc.onpointercancel = function () { user.drag = null; user.yaw *= 0.35; user.pitch *= 0.35; };
     glc.onpointerleave = function () { user.hx = user.hy = 0; };
@@ -4933,6 +4962,8 @@ var fmDossier = (function () {
     glc.addEventListener("webglcontextrestored", function () { initGL(); if (S) { uploadScene(); wake(); } });
   })();
 
+  // Для стенда поворотов: только на localhost, на проде ничего не выставляется.
+  if (location.hostname === "localhost") window._dsDebug = { user: user };
   return { show: show, close: close, isOpen: function () { return open; } };
 })();
 
