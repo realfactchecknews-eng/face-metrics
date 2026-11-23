@@ -4710,33 +4710,32 @@ var fmDossier = (function () {
     // Вне сетки (волосы, уши, шея) глубина продолжается от БЛИЖАЙШЕЙ клетки лица и плавно уходит
     // назад. Раньше всё вокруг стояло на одной средней глубине края овала, и на повороте лицо
     // «отслаивалось» маской от волос — жалоба владельца 23.11 с телефона.
-    var N = GW * GH, nd = new Int16Array(N).fill(-1), qu = new Int32Array(N), qh = 0, qt = 0;
-    for (k = 0; k < N; k++) if (!isNaN(depth[k])) { nd[k] = 0; qu[qt++] = k; }
+    var N = GW * GH, nd = new Int16Array(N).fill(-1), src = new Int32Array(N).fill(-1), qu = new Int32Array(N), qh = 0, qt = 0;
+    for (k = 0; k < N; k++) if (!isNaN(depth[k])) { nd[k] = 0; src[k] = k; qu[qt++] = k; }
     while (qh < qt) {
       var c0 = qu[qh++], cx0 = c0 % GW, cy0 = (c0 - cx0) / GW;
       var nb = [cx0 > 0 ? c0 - 1 : -1, cx0 < GW - 1 ? c0 + 1 : -1, cy0 > 0 ? c0 - GW : -1, cy0 < GH - 1 ? c0 + GW : -1];
-      for (var ni = 0; ni < 4; ni++) { var c1 = nb[ni]; if (c1 >= 0 && nd[c1] < 0) { nd[c1] = nd[c0] + 1; depth[c1] = depth[c0]; qu[qt++] = c1; } }
+      for (var ni = 0; ni < 4; ni++) { var c1 = nb[ni]; if (c1 >= 0 && nd[c1] < 0) { nd[c1] = nd[c0] + 1; depth[c1] = depth[c0]; src[c1] = src[c0]; qu[qt++] = c1; } }
     }
-    // Волосы, затылок, шея и плечи — на объёмную заготовку, а не продолжением края лица: иначе
-    // пышная причёска и плечи на повороте выходят плоскими плитами (жалоба владельца 23.11).
-    // Голова — эллипсоид по ширине лица, плечи — изогнутая плоскость за шеей; у края лица
-    // глубина плавно переходит от сетки к заготовке. Единицы — как у P: полувысота лица = 1.
+    // Волосы, затылок, шея и плечи. Волосы продолжают край лица без ступеньки и закругляются назад
+    // по сфере радиуса Rd: у лба причёска держится на уровне лба, вдали уходит к затылку, поэтому
+    // ни плоских «плит» на повороте (жалоба 23.11), ни оторванной от лба шапки (жалоба 24.11).
+    // Плечи — на изогнутой плоскости за шеей. Единицы — как у P: полувысота лица = 1.
     var oval = FL.FACE_LANDMARKS_FACE_OVAL.map(function (e) { return e.start; });
     var zRim = oval.reduce(function (a, q) { return a + P[q][2]; }, 0) / oval.length;
-    // zc ниже края лица: заготовка уходит назад ЗА край, а не стоит перед ним — иначе на стыке складка
-    // и яркая дуга (точки ложатся друг на друга).
-    var Rx = (fw / 2) / s * 1.18, Ry = 1.35, cyE = 0.12, Rz = Rx * 1.15, zc = zRim - 0.75 * Rz;
-    var band = Math.max(4, grx * 0.5), zo = new Float32Array(N);
+    var Rx = (fw / 2) / s * 1.18, Rz = Rx * 1.15, zc = zRim - 0.75 * Rz, Rd = 1.1, zo = new Float32Array(N);
     for (j = 0; j < GH; j++) for (i = 0; i < GW; i++) {
       k = j * GW + i;
       if (nd[k] === 0) { zo[k] = depth[k]; continue; }
+      if (nd[k] < 0) { zo[k] = zc; continue; }
+      var sc0 = src[k], sx0 = sc0 % GW, sy0 = (sc0 - sx0) / GW;
+      var dd = Math.hypot(i - sx0, j - sy0) * step / s;          // расстояние до края лица
+      var zh = dd < Rd ? depth[k] - Rd * (1 - Math.sqrt(1 - (dd / Rd) * (dd / Rd))) : depth[k] - Rd - (dd - Rd) * 2;
+      zh = Math.max(zh, zc - Rz);                                  // не дальше затылка
       var X = ((i + 0.5) * step + rx0 - cx) / s, Y = -((j + 0.5) * step + ry0 - cy) / s;
-      var ex2 = (X / Rx) * (X / Rx) + ((Y - cyE) / Ry) * ((Y - cyE) / Ry);
-      var zh = ex2 < 1 ? zc + Rz * Math.sqrt(1 - ex2) : zc - (Math.sqrt(ex2) - 1) * Rz * 1.2;
       var zb = zc + 0.25 * Rz - 0.5 * Rz * (X / (Rx * 2.2)) * (X / (Rx * 2.2));
-      var tb = clamp((-0.95 - Y) / 0.4), zp = zh + (zb - zh) * tb * tb * (3 - 2 * tb);
-      var tf = nd[k] < 0 ? 1 : clamp(nd[k] / band);
-      zo[k] = nd[k] < 0 ? zp : depth[k] + (zp - depth[k]) * tf * tf * (3 - 2 * tf);
+      var tb = clamp((-0.95 - Y) / 0.4);
+      zo[k] = zh + (zb - zh) * tb * tb * (3 - 2 * tb);
     }
     // Сглаживаем только внешнюю зону, чтобы шов не оставил гребней, а рельеф лица не размылся.
     for (var pass = 0; pass < 3; pass++) {
