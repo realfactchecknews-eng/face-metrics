@@ -1372,31 +1372,42 @@ function lavaOfferIds(env) {
 // gate.lava.top/docs/documentation.yaml, пример successful_purchase_webhook_payload).
 // LAVA_OFFER_IDS хранит ID ОФФЕРА (нужен для /invoice), поэтому напрямую их сравнивать нельзя —
 // раньше это тихо ломало начисление на каждой реальной оплате картой/СБП. Матчим через каталог.
+// Каталог Lava с одним повтором. 27.11 вечером он дважды не ответил на вебхук: тариф «не
+// сопоставился», админ выдал анализы руками, а через минуты Lava прислала тот же платёж
+// повторно и он начислился сам — люди получили вдвое. null = каталог недоступен.
+async function lavaCatalog(env) {
+  for (let i = 0; i < 2; i++) {
+    const r = await fetch('https://gate.lava.top/api/v2/products?feedVisibility=ALL', {
+      headers: { 'X-Api-Key': env.LAVA_API_KEY },
+    }).then(x => x.ok ? x.json() : null).catch(() => null);
+    if (r && Array.isArray(r.items)) return r.items;
+  }
+  return null;
+}
 async function lavaPackIdByProductId(env, productId) {
   if (!productId) return null;
-  const r = await fetch('https://gate.lava.top/api/v2/products?feedVisibility=ALL', {
-    headers: { 'X-Api-Key': env.LAVA_API_KEY },
-  }).then(x => x.json()).catch(() => null);
-  const item = (r?.items || []).find((i) => i.id === productId);
+  // Товар→тариф не меняется между платежами — держим найденное в KV и не зависим от их API.
+  const cached = await env.RATE_LIMIT.get(`lavaprod:${productId}`);
+  if (cached && PACKS[cached]) return cached;
+  const items = await lavaCatalog(env);
+  const item = (items || []).find((i) => i.id === productId);
   const offerIds = lavaOfferIds(env);
   // Товар может иметь несколько офферов (напр. под разные способы оплаты) — раньше брали
   // только offers[0], и если LAVA_OFFER_IDS указывал на другой оффер того же товара, матч
   // не находился и платёж терялся молча. Проверяем все офферы товара.
   for (const offer of item?.offers || []) {
     const packId = Object.keys(offerIds).find((k) => offerIds[k] === offer.id);
-    if (packId) return packId;
+    if (packId) { await env.RATE_LIMIT.put(`lavaprod:${productId}`, packId, { expirationTtl: 30 * 86400 }); return packId; }
   }
-  return null;
+  return items ? null : undefined;   // undefined — не знаем (каталог молчит), null — такого товара у нас нет
 }
 // Офферы с "ценой по запросу через API" (isDynamicPrice:true) требуют явный amount
 // в запросе на инвойс — но зато мы сами решаем, сколько это будет стоить, без правки
 // цены в личном кабинете Lava.top. На фикс-цену offer'ах amount передавать нельзя —
 // Lava.top отвечает "is not dynamic price".
 async function lavaOfferIsDynamic(env, offerId) {
-  const r = await fetch('https://gate.lava.top/api/v2/products?feedVisibility=ALL', {
-    headers: { 'X-Api-Key': env.LAVA_API_KEY },
-  }).then(x => x.json()).catch(() => null);
-  for (const item of r?.items || []) {
+  const items = await lavaCatalog(env);
+  for (const item of items || []) {
     for (const offer of item.offers || []) {
       if (offer.id === offerId) return !!item.isDynamicPrice;
     }
@@ -1456,8 +1467,14 @@ async function lavaWebhook(request, env) {
       // Раньше отсюда был молчаливый выход, и о потерянной оплате узнавали только когда
       // покупатель приносил чек. Теперь платёж всё так же не начисляется, но админ видит его сразу.
       console.log('lava unresolved', JSON.stringify({ contractId: upd.contractId, email: upd.buyer?.email, productId: upd.product?.id, amount: upd.amount, packId }));
+      // Запоминаем сбой: если Lava пришлёт этот платёж повторно и он начислится, админ узнает,
+      // что выдавать руками не нужно.
+      await env.RATE_LIMIT.put(`lavafail:${upd.contractId}`, '1', { expirationTtl: 7 * 86400 });
+      const why = !tgid ? 'Не распознан tgid из email'
+        : packId === undefined ? 'Каталог Lava не ответил — обычно Lava присылает платёж повторно и он начисляется сам. Подожди 10 минут: если начислится, я напишу «✅ начислено само». Не пришло — выдай вручную.'
+        : 'Товар не найден среди тарифов (offerId) — проверь LAVA_OFFER_IDS / /lavaproducts';
       for (const admin of adminIds(env)) {
-        await tgApi(env, 'sendMessage', { chat_id: admin, text: `\u26a0\ufe0f Оплата Lava не начислена\n\nemail: ${upd.buyer?.email || '—'}\nтовар: ${upd.product?.id || '—'}\nсумма: ${upd.amount} ${upd.currency || 'RUB'}\ncontractId: ${upd.contractId}\n\n${!tgid ? 'Не распознан tgid из email' : 'Не сопоставлен тариф (offerId)'}` });
+        await tgApi(env, 'sendMessage', { chat_id: admin, text: `\u26a0\ufe0f Оплата Lava не начислена\n\nemail: ${upd.buyer?.email || '—'}\nтовар: ${upd.product?.id || '—'}\nсумма: ${upd.amount} ${upd.currency || 'RUB'}\ncontractId: ${upd.contractId}\n\n${why}` });
       }
       return new Response('ok');
     }
@@ -1477,6 +1494,13 @@ async function lavaWebhook(request, env) {
     const gotBonus = isFirst && await grantFirstPurchaseBonus(env, tgid);
     const extra = [gotBonus ? BL[L].firstBuyBonus(FIRST_BUY_DISCOUNT_PCT) : '', isFirst && pack?.type !== 'guide' ? BL[L].trackingOpen : '', await m1UpsellText(env, tgid, pack, L)].filter(Boolean).join('\n\n');
     await tgApi(env, 'sendMessage', { chat_id: tgid, text: BL[L].payOk(note, orderId, extra), reply_markup: menuKb(L), parse_mode: 'HTML' });
+    // Этот платёж раньше уже вызвал тревогу «не начислена» — снимаем её, чтобы не выдали второй раз руками.
+    if (await env.RATE_LIMIT.get(`lavafail:${upd.contractId}`)) {
+      await env.RATE_LIMIT.delete(`lavafail:${upd.contractId}`);
+      for (const admin of adminIds(env)) {
+        await tgApi(env, 'sendMessage', { chat_id: admin, text: `\u2705 Оплата Lava начислена сама (повторное уведомление)\n\ncontractId: ${upd.contractId}\ntgid: ${tgid}, тариф: ${packId}\n\nВручную НЕ выдавай.` }).catch(() => {});
+      }
+    }
     await offerUpgrade(env, tgid, pack, L);
   } catch (e) {
     // Раньше ошибка глоталась молча, а платёж уже помечен обработанным — деньги взяты,
